@@ -10,19 +10,6 @@ public sealed class PolicyTools
 {
     private readonly ApiRuntimeConfig _cfg;
 
-    // Central “safe defaults” for the product
-    private static readonly ApiExecutionPolicy SafeDefaults = new()
-    {
-        DryRun = true,
-        AllowedMethods = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "GET" },
-        AllowedBaseUrls = new List<string>(),
-        BlockLocalhost = true,
-        BlockPrivateNetworks = true,
-        Timeout = TimeSpan.FromSeconds(10),
-        MaxRequestBodyBytes = 262_144,
-        MaxResponseBodyBytes = 524_288
-    };
-
     public PolicyTools(ApiRuntimeConfig cfg)
     {
         _cfg = cfg;
@@ -47,9 +34,29 @@ public sealed class PolicyTools
     [McpServerTool, Description("Reset the API execution policy to safe defaults (deny-by-default + dryRun).")]
     public object ApiResetPolicy()
     {
-        ApplyPolicy(SafeDefaults);
+        ApiPolicyDefaults.ApplySafeDefaults(_cfg.Policy);
         return new { ok = true, policy = ApiGetPolicy() };
+
     }
+  
+    
+    [McpServerTool, Description("Reset runtime state: clears base URL + auth + resets policy to safe defaults.")]
+    public object ApiResetRuntime()
+    {
+        _cfg.ClearBaseUrl();
+        _cfg.ClearAuth();
+
+        ApiPolicyDefaults.ApplySafeDefaults(_cfg.Policy);
+
+        return new
+        {
+            ok = true,
+            baseUrl = _cfg.BaseUrl,          // should be null
+            bearerToken = _cfg.BearerToken,  // should be null
+            policy = ApiGetPolicy()
+        };
+    }
+
 
     [McpServerTool, Description("Update the API execution policy. Pass policyJson as a JSON object string.")]
     public object ApiSetPolicy(string policyJson)
