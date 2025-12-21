@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using ApiTester.McpServer.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -13,10 +14,12 @@ builder.Logging.AddConsole(o =>
 });
 
 builder.Services.AddSingleton(AppConfig.Load());
+builder.Services.AddSingleton<OpenApiStore>();
 
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
     .WithToolsFromAssembly();
+
 
 await builder.Build().RunAsync();

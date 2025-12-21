@@ -1,9 +1,16 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36705.20 d17.14
+VisualStudioVersion = 17.14.36705.20
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.McpServer", "ApiTester.McpServer\ApiTester.McpServer.csproj", "{56B1F160-5418-4B85-821B-1DA9C5209370}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.McpClient", "ApiTester.McpClient\ApiTester.McpClient.csproj", "{D9D844FE-C4A5-4B27-AF9C-7DDF3A1F13ED}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +22,10 @@ Global
 		{56B1F160-5418-4B85-821B-1DA9C5209370}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{56B1F160-5418-4B85-821B-1DA9C5209370}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{56B1F160-5418-4B85-821B-1DA9C5209370}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9D844FE-C4A5-4B27-AF9C-7DDF3A1F13ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9D844FE-C4A5-4B27-AF9C-7DDF3A1F13ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9D844FE-C4A5-4B27-AF9C-7DDF3A1F13ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9D844FE-C4A5-4B27-AF9C-7DDF3A1F13ED}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
