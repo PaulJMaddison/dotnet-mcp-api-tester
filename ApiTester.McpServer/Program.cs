@@ -15,6 +15,8 @@ builder.Logging.AddConsole(o =>
 
 builder.Services.AddSingleton(AppConfig.Load());
 builder.Services.AddSingleton<OpenApiStore>();
+builder.Services.AddSingleton<ApiTester.McpServer.Services.ApiRuntimeConfig>();
+builder.Services.AddHttpClient();
 
 builder.Services
     .AddMcpServer()

@@ -12,6 +12,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.McpClient", "ApiTester.McpClient\ApiTester.McpClient.csproj", "{D9D844FE-C4A5-4B27-AF9C-7DDF3A1F13ED}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.SmokeApi", "ApiTester.SmokeApi\ApiTester.SmokeApi.csproj", "{92EAD82E-BE62-4EB8-BA24-7A3FD8FB8CC8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,6 +28,10 @@ Global
 		{D9D844FE-C4A5-4B27-AF9C-7DDF3A1F13ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D9D844FE-C4A5-4B27-AF9C-7DDF3A1F13ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D9D844FE-C4A5-4B27-AF9C-7DDF3A1F13ED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{92EAD82E-BE62-4EB8-BA24-7A3FD8FB8CC8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{92EAD82E-BE62-4EB8-BA24-7A3FD8FB8CC8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{92EAD82E-BE62-4EB8-BA24-7A3FD8FB8CC8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{92EAD82E-BE62-4EB8-BA24-7A3FD8FB8CC8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
