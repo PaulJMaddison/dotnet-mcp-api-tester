@@ -1,0 +1,74 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "httpbin minimal",
+    "version": "1.0.0",
+    "description": "Minimal OpenAPI 3.0 spec for a few reliable httpbin endpoints."
+  },
+  "servers": [
+    { "url": "https://httpbin.org" }
+  ],
+  "paths": {
+    "/get": {
+      "get": {
+        "operationId": "getGet",
+        "responses": {
+          "200": {
+            "description": "Returns request data",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          }
+        }
+      }
+    },
+    "/uuid": {
+      "get": {
+        "operationId": "getUuid",
+        "responses": {
+          "200": {
+            "description": "Returns a UUID",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          }
+        }
+      }
+    },
+    "/ip": {
+      "get": {
+        "operationId": "getIp",
+        "responses": {
+          "200": {
+            "description": "Returns origin IP",
+            "content": {
+              "application/json": { "schema": { "type": "object" } }
+            }
+          }
+        }
+      }
+    },
+    "/status/{code}": {
+      "get": {
+        "operationId": "getStatus",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "OK" },
+          "400": { "description": "Bad Request" },
+          "404": { "description": "Not Found" },
+          "500": { "description": "Server Error" }
+        }
+      }
+    }
+  }
+}

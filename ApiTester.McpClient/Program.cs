@@ -6,6 +6,10 @@ static async Task<int> Main()
     var serverProjectPath = Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory, "..", "..", "..", "..", "ApiTester.McpServer", "ApiTester.McpServer.csproj"));
 
+    // Local spec path (committed in repo)
+    var httpbinSpecPath = Path.GetFullPath(Path.Combine(
+        AppContext.BaseDirectory, "..", "..", "..", "Specs", "httpbin.openapi.json"));
+
     var psi = new ProcessStartInfo
     {
         FileName = "dotnet",
@@ -83,6 +87,13 @@ static async Task<int> Main()
         Console.WriteLine(response.RootElement);
     }
 
+    static bool ToolCallIsError(JsonDocument response)
+    {
+        return response.RootElement.TryGetProperty("result", out var r) &&
+               r.TryGetProperty("isError", out var isError) &&
+               isError.ValueKind == JsonValueKind.True;
+    }
+
     // 1) initialize
     id++;
     var initResponse = await SendAsync(new
@@ -126,29 +137,32 @@ static async Task<int> Main()
     Console.WriteLine("\ntools/list response:");
     Console.WriteLine(toolsList.RootElement);
 
-    // 3) tools/call: api_import_open_api (Petstore)
+    // 3) Import OpenAPI (local, valid OAS3)
     var import = await CallToolAsync("api_import_open_api", new
     {
-        specUrlOrPath = "https://petstore3.swagger.io/api/v3/openapi.json"
+        specUrlOrPath = httpbinSpecPath
     });
     PrintToolTextOrRaw("api_import_open_api response:", import);
 
-    // 4) tools/call: api_set_base_url (Petstore)
+    // STOP if OpenAPI import failed (prevents cascading errors)
+    if (ToolCallIsError(import))
+    {
+        Console.WriteLine("OpenAPI import failed, stopping client run.");
+        return 1;
+    }
+
+    // 4) Set base URL (httpbin is reliable)
     var setBaseUrl = await CallToolAsync("api_set_base_url", new
     {
-        baseUrl = "https://petstore3.swagger.io/api/v3"
+        baseUrl = "https://httpbin.org"
     });
     PrintToolTextOrRaw("api_set_base_url response:", setBaseUrl);
-
-    // -------------------------
-    // DAY 5 RUN CHECKS
-    // -------------------------
 
     // Helper: get policy (optional, but useful)
     var getPolicy0 = await CallToolAsync("api_get_policy", new { });
     PrintToolTextOrRaw("api_get_policy (initial) response:", getPolicy0);
 
-    // A) Deny-by-default should block
+    // A) Deny-by-default should block (allowedBaseUrls empty + dryRun=false)
     var policyJsonA = """
 {
   "dryRun": false,
@@ -162,16 +176,16 @@ static async Task<int> Main()
 
     var callA = await CallToolAsync("api_call_operation", new
     {
-        operationId = "getInventory"
+        operationId = "getUuid"
     });
     PrintToolTextOrRaw("A) api_call_operation (should be blocked) response:", callA);
 
-    // B) Allow Petstore explicitly (should attempt and return status, Petstore may be flaky)
+    // B) Allow httpbin explicitly (should succeed and return JSON)
     var policyJsonB = """
 {
   "dryRun": false,
   "allowedMethods": ["GET"],
-  "allowedBaseUrls": ["https://petstore3.swagger.io/api/v3"],
+  "allowedBaseUrls": ["https://httpbin.org"],
   "blockLocalhost": true,
   "blockPrivateNetworks": true,
   "timeoutSeconds": 10,
@@ -181,23 +195,29 @@ static async Task<int> Main()
 """;
 
     var setPolicyB = await CallToolAsync("api_set_policy", new { policyJson = policyJsonB });
-    PrintToolTextOrRaw("api_set_policy B (allow Petstore) response:", setPolicyB);
+    PrintToolTextOrRaw("api_set_policy B (allow httpbin) response:", setPolicyB);
 
     var callB1 = await CallToolAsync("api_call_operation", new
     {
-        operationId = "getInventory"
+        operationId = "getUuid"
     });
-    PrintToolTextOrRaw("B1) api_call_operation getInventory (Petstore may 500) response:", callB1);
+    PrintToolTextOrRaw("B1) api_call_operation getUuid response:", callB1);
 
     var callB2 = await CallToolAsync("api_call_operation", new
     {
-        operationId = "getOrderById",
-        pathParamsJson = "{\"orderId\":\"1\"}"
+        operationId = "getGet"
     });
-    PrintToolTextOrRaw("B2) api_call_operation getOrderById (Petstore may 500) response:", callB2);
+    PrintToolTextOrRaw("B2) api_call_operation getGet response:", callB2);
+
+    var callB3 = await CallToolAsync("api_call_operation", new
+    {
+        operationId = "getStatus",
+        pathParamsJson = "{\"code\":200}"
+    });
+    PrintToolTextOrRaw("B3) api_call_operation getStatus(200) response:", callB3);
 
     // C) Metadata/link-local SSRF block test.
-    // We deliberately allowlist the base URL to prove SSRF guard still blocks it.
+    // Deliberately allowlist the base URL to prove SSRF guard still blocks it.
     var setBaseUrlMeta = await CallToolAsync("api_set_base_url", new
     {
         baseUrl = "http://169.254.169.254"
@@ -217,30 +237,16 @@ static async Task<int> Main()
     var setPolicyC = await CallToolAsync("api_set_policy", new { policyJson = policyJsonC });
     PrintToolTextOrRaw("api_set_policy C (allowlist metadata, expect SSRF block) response:", setPolicyC);
 
-    // This operation will attempt to build a URL under the metadata base URL.
-    // Even if the path doesn't exist, SSRF guard should block before any request is sent.
+    // Any operation will do, we just want SSRF guard to block before request
     var callC = await CallToolAsync("api_call_operation", new
     {
-        operationId = "getInventory"
+        operationId = "getUuid"
     });
     PrintToolTextOrRaw("C) api_call_operation (should be blocked by SSRF guard) response:", callC);
 
-    // -------------------------
-    // DAY 6 STEP 4: reset tool sanity check
-    // -------------------------
-
-    // NEW: tidy demo state, set base URL back to Petstore so future runs don't "look dodgy"
-    var setBaseUrlBack = await CallToolAsync("api_set_base_url", new
-    {
-        baseUrl = "https://petstore3.swagger.io/api/v3"
-    });
-    PrintToolTextOrRaw("api_set_base_url (back to Petstore) response:", setBaseUrlBack);
-
-    var resetPolicy = await CallToolAsync("api_reset_policy", new { });
-    PrintToolTextOrRaw("api_reset_policy response:", resetPolicy);
-
-    var getPolicyFinal = await CallToolAsync("api_get_policy", new { });
-    PrintToolTextOrRaw("api_get_policy (after reset) response:", getPolicyFinal);
+    // Day 7 cleanup: one-shot reset (base url + auth + policy) so demos are tidy
+    var resetRuntime = await CallToolAsync("api_reset_runtime", new { });
+    PrintToolTextOrRaw("api_reset_runtime response:", resetRuntime);
 
     // Clean shutdown
     try { proc.Kill(entireProcessTree: true); } catch { /* ignore */ }
