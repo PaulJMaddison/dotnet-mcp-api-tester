@@ -15,12 +15,14 @@ public sealed class ExecuteTools
     private readonly OpenApiStore _store;
     private readonly ApiRuntimeConfig _runtime;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly SsrfGuard _ssrfGuard;
 
-    public ExecuteTools(OpenApiStore store, ApiRuntimeConfig runtime, IHttpClientFactory httpClientFactory)
+    public ExecuteTools(OpenApiStore store, ApiRuntimeConfig runtime, IHttpClientFactory httpClientFactory, SsrfGuard ssrfGuard)
     {
         _store = store;
         _runtime = runtime;
         _httpClientFactory = httpClientFactory;
+        _ssrfGuard = ssrfGuard;
     }
 
     [McpServerTool, Description("Execute an OpenAPI operation by operationId. Optional JSON: pathParamsJson, queryParamsJson, headersJson, bodyJson.")]
@@ -51,13 +53,36 @@ public sealed class ExecuteTools
             throw new InvalidOperationException($"Method not allowed by policy: {method}");
 
         // B) Base URL allowlist (simple prefix match for now, harden later)
-        // If AllowedBaseUrls is empty, treat as "no allowlist configured" and allow (you can change this later).
+        var normalisedBaseUrl = baseUrl.Trim().TrimEnd('/');
+
+        if (policy.AllowedBaseUrls.Count == 0 && !policy.DryRun)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                blocked = true,
+                reason = "No allowedBaseUrls configured, deny by default.",
+                operationId,
+                method,
+                baseUrl = normalisedBaseUrl,
+                url = (string?)null
+            }, new JsonSerializerOptions { WriteIndented = true });
+        }
+
         if (policy.AllowedBaseUrls.Count > 0 &&
             !policy.AllowedBaseUrls.Any(allowed =>
-                baseUrl.StartsWith(allowed.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase)))
+                normalisedBaseUrl.StartsWith(allowed.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase)))
         {
-            throw new InvalidOperationException($"Base URL not allowed by policy: {baseUrl}");
+            return JsonSerializer.Serialize(new
+            {
+                blocked = true,
+                reason = $"Base URL not allowed by policy: {normalisedBaseUrl}",
+                operationId,
+                method,
+                baseUrl = normalisedBaseUrl,
+                url = (string?)null
+            }, new JsonSerializerOptions { WriteIndented = true });
         }
+
         // -----------------------------------------
 
         var pathParams = ParseObject(pathParamsJson);
@@ -66,6 +91,26 @@ public sealed class ExecuteTools
 
         var path = ApplyPathParams(pathTemplate, pathParams);
         var url = BuildUrl(baseUrl, path, queryParams);
+        var uri = new Uri(url);
+
+        var (allowed, reason) = await _ssrfGuard.CheckAsync(
+            uri,
+            blockLocalhost: policy.BlockLocalhost,
+            blockPrivateNetworks: policy.BlockPrivateNetworks,
+            ct: CancellationToken.None);
+
+        if (!allowed && !policy.DryRun)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                blocked = true,
+                reason,
+                operationId,
+                method,
+                url
+            }, new JsonSerializerOptions { WriteIndented = true });
+        }
+
 
         using var request = new HttpRequestMessage(new HttpMethod(method), url);
 
@@ -117,7 +162,11 @@ public sealed class ExecuteTools
         using var response = await client.SendAsync(request);
         sw.Stop();
 
-        var responseBody = await response.Content.ReadAsStringAsync();
+        var (responseBody, truncated) = await ReadBodyCappedAsync(response.Content, policy.MaxResponseBodyBytes);
+
+        if (truncated)
+            responseBody += "\n... (truncated)";
+
 
         // Existing char cap kept, but also add byte cap aligned with policy
         // (simple approach: truncate string if UTF-8 byte length exceeds policy max)
@@ -153,6 +202,34 @@ public sealed class ExecuteTools
 
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     }
+
+    private static async Task<(string Text, bool Truncated)> ReadBodyCappedAsync(HttpContent content, int maxBytes)
+    {
+        await using var stream = await content.ReadAsStreamAsync();
+        using var ms = new MemoryStream();
+
+        var buffer = new byte[8192];
+        var total = 0;
+
+        while (true)
+        {
+            var read = await stream.ReadAsync(buffer, 0, buffer.Length);
+            if (read <= 0) break;
+
+            var remaining = maxBytes - total;
+            if (remaining <= 0) return (Encoding.UTF8.GetString(ms.ToArray()), true);
+
+            var toWrite = Math.Min(read, remaining);
+            ms.Write(buffer, 0, toWrite);
+            total += toWrite;
+
+            if (toWrite < read) // hit cap
+                return (Encoding.UTF8.GetString(ms.ToArray()), true);
+        }
+
+        return (Encoding.UTF8.GetString(ms.ToArray()), false);
+    }
+
 
     private static bool TryFindOperation(OpenApiDocument doc, string operationId, out string method, out string path)
     {
