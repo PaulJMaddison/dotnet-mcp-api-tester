@@ -43,6 +43,23 @@ public sealed class ExecuteTools
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new InvalidOperationException("No base URL available. Call api_set_base_url or ensure the spec contains servers[].");
 
+        // ---- Day 4 Step 5: Policy enforcement ----
+        var policy = _runtime.Policy;
+
+        // A) Method allowlist
+        if (!policy.AllowedMethods.Contains(method))
+            throw new InvalidOperationException($"Method not allowed by policy: {method}");
+
+        // B) Base URL allowlist (simple prefix match for now, harden later)
+        // If AllowedBaseUrls is empty, treat as "no allowlist configured" and allow (you can change this later).
+        if (policy.AllowedBaseUrls.Count > 0 &&
+            !policy.AllowedBaseUrls.Any(allowed =>
+                baseUrl.StartsWith(allowed.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException($"Base URL not allowed by policy: {baseUrl}");
+        }
+        // -----------------------------------------
+
         var pathParams = ParseObject(pathParamsJson);
         var queryParams = ParseObject(queryParamsJson);
         var headers = ParseObject(headersJson);
@@ -63,10 +80,38 @@ public sealed class ExecuteTools
         if (!string.IsNullOrWhiteSpace(bodyJson) &&
             (method is "POST" or "PUT" or "PATCH"))
         {
+            // Optional extra guard: basic request size limit
+            // (uses UTF-8 byte count, policy value is bytes)
+            var bodyBytes = Encoding.UTF8.GetByteCount(bodyJson);
+            if (bodyBytes > policy.MaxRequestBodyBytes)
+                throw new InvalidOperationException($"Request body exceeds MaxRequestBodyBytes ({policy.MaxRequestBodyBytes}).");
+
             request.Content = new StringContent(bodyJson, Encoding.UTF8, "application/json");
         }
 
+        // C) Dry run mode (build request, do not send)
+        if (policy.DryRun)
+        {
+            var dryRunResult = new
+            {
+                dryRun = true,
+                operationId,
+                method,
+                path = pathTemplate,
+                url,
+                // Helpful for debugging, shows what would be sent
+                requestHeaders = request.Headers.ToDictionary(h => h.Key, h => string.Join(", ", h.Value)),
+                hasBody = request.Content != null,
+                bodyPreview = request.Content == null
+                    ? null
+                    : (bodyJson!.Length > 2000 ? bodyJson[..2000] + "\n... (truncated)" : bodyJson)
+            };
+
+            return JsonSerializer.Serialize(dryRunResult, new JsonSerializerOptions { WriteIndented = true });
+        }
+
         var client = _httpClientFactory.CreateClient();
+        client.Timeout = policy.Timeout;
 
         var sw = Stopwatch.StartNew();
         using var response = await client.SendAsync(request);
@@ -74,9 +119,23 @@ public sealed class ExecuteTools
 
         var responseBody = await response.Content.ReadAsStringAsync();
 
-        const int maxBodyChars = 50_000;
-        if (responseBody.Length > maxBodyChars)
-            responseBody = responseBody[..maxBodyChars] + "\n... (truncated)";
+        // Existing char cap kept, but also add byte cap aligned with policy
+        // (simple approach: truncate string if UTF-8 byte length exceeds policy max)
+        var responseBytes = Encoding.UTF8.GetByteCount(responseBody);
+        if (responseBytes > policy.MaxResponseBodyBytes)
+        {
+            // crude truncation by chars; ok for now, harden later with stream reading
+            const int hardCharLimit = 50_000;
+            responseBody = responseBody.Length > hardCharLimit
+                ? responseBody[..hardCharLimit] + "\n... (truncated)"
+                : responseBody + "\n... (truncated)";
+        }
+        else
+        {
+            const int maxBodyChars = 50_000;
+            if (responseBody.Length > maxBodyChars)
+                responseBody = responseBody[..maxBodyChars] + "\n... (truncated)";
+        }
 
         var result = new
         {
