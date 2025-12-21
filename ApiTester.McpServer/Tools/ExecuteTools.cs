@@ -50,7 +50,18 @@ public sealed class ExecuteTools
 
         // A) Method allowlist
         if (!policy.AllowedMethods.Contains(method))
-            throw new InvalidOperationException($"Method not allowed by policy: {method}");
+        {
+            return JsonSerializer.Serialize(new
+            {
+                blocked = true,
+                reason = $"Method not allowed by policy: {method}",
+                operationId,
+                method,
+                baseUrl = baseUrl.Trim().TrimEnd('/'),
+                url = (string?)null
+            }, new JsonSerializerOptions { WriteIndented = true });
+        }
+
 
         // B) Base URL allowlist (simple prefix match for now, harden later)
         var normalisedBaseUrl = baseUrl.Trim().TrimEnd('/');

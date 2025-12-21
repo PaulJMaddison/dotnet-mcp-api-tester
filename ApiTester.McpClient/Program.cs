@@ -225,28 +225,22 @@ static async Task<int> Main()
     });
     PrintToolTextOrRaw("C) api_call_operation (should be blocked by SSRF guard) response:", callC);
 
-    // ---- RESET POLICY TO SAFE DEFAULTS ----
+    // -------------------------
+    // DAY 6 STEP 4: reset tool sanity check
+    // -------------------------
 
-    var resetPolicy = await CallToolAsync("api_set_policy", new
+    // NEW: tidy demo state, set base URL back to Petstore so future runs don't "look dodgy"
+    var setBaseUrlBack = await CallToolAsync("api_set_base_url", new
     {
-                policyJson = """
-        {
-          "dryRun": true,
-          "allowedBaseUrls": [],
-          "allowedMethods": ["GET"],
-          "timeoutSeconds": 10,
-          "maxRequestBodyBytes": 262144,
-          "maxResponseBodyBytes": 524288,
-          "blockLocalhost": true,
-          "blockPrivateNetworks": true
-        }
-        """
+        baseUrl = "https://petstore3.swagger.io/api/v3"
     });
+    PrintToolTextOrRaw("api_set_base_url (back to Petstore) response:", setBaseUrlBack);
 
-    PrintToolTextOrRaw("api_set_policy (reset to safe defaults) response:", resetPolicy);
+    var resetPolicy = await CallToolAsync("api_reset_policy", new { });
+    PrintToolTextOrRaw("api_reset_policy response:", resetPolicy);
+
     var getPolicyFinal = await CallToolAsync("api_get_policy", new { });
-    PrintToolTextOrRaw("api_get_policy (final) response:", getPolicyFinal);
-
+    PrintToolTextOrRaw("api_get_policy (after reset) response:", getPolicyFinal);
 
     // Clean shutdown
     try { proc.Kill(entireProcessTree: true); } catch { /* ignore */ }
