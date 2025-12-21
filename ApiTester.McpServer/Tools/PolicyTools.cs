@@ -43,20 +43,16 @@ public sealed class PolicyTools
     [McpServerTool, Description("Reset runtime state: clears base URL + auth + resets policy to safe defaults.")]
     public object ApiResetRuntime()
     {
-        _cfg.ClearBaseUrl();
-        _cfg.ClearAuth();
-
-        ApiPolicyDefaults.ApplySafeDefaults(_cfg.Policy);
+        _cfg.ResetRuntime(); // single call, single source of truth
 
         return new
         {
             ok = true,
-            baseUrl = _cfg.BaseUrl,          // should be null
-            bearerToken = _cfg.BearerToken,  // should be null
+            baseUrl = _cfg.BaseUrl,         // should be null
+            bearerToken = _cfg.BearerToken, // should be null
             policy = ApiGetPolicy()
         };
     }
-
 
     [McpServerTool, Description("Update the API execution policy. Pass policyJson as a JSON object string.")]
     public object ApiSetPolicy(string policyJson)

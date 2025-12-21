@@ -15,11 +15,10 @@ public sealed class ApiRuntimeConfig
 
     public void ResetRuntime()
     {
-        // Clear runtime state
         BaseUrl = null;
         BearerToken = null;
 
-        // Reset policy from one shared source of truth
         ApiPolicyDefaults.ApplySafeDefaults(Policy);
     }
+
 }

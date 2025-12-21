@@ -248,6 +248,23 @@ static async Task<int> Main()
     var resetRuntime = await CallToolAsync("api_reset_runtime", new { });
     PrintToolTextOrRaw("api_reset_runtime response:", resetRuntime);
 
+    // -------------------------
+    // DAY 8: assert reset_runtime worked
+    // -------------------------
+
+    var getPolicyAfterReset = await CallToolAsync("api_get_policy", new { });
+    PrintToolTextOrRaw("api_get_policy (after reset_runtime) response:", getPolicyAfterReset);
+
+    // Optional but good: prove we can re-apply policy cleanly after reset and calls work again
+    var setPolicyAfterReset = await CallToolAsync("api_set_policy", new { policyJson = policyJsonB });
+    PrintToolTextOrRaw("api_set_policy (after reset_runtime, allow httpbin) response:", setPolicyAfterReset);
+
+    var callAfterReset = await CallToolAsync("api_call_operation", new
+    {
+        operationId = "getUuid"
+    });
+    PrintToolTextOrRaw("api_call_operation (after reset_runtime + allow httpbin) response:", callAfterReset);
+
     // Clean shutdown
     try { proc.Kill(entireProcessTree: true); } catch { /* ignore */ }
 
