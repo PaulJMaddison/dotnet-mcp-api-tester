@@ -1,0 +1,6 @@
+@ApiTester.SmokeApi_HostAddress = http://localhost:5175
+
+GET {{ApiTester.SmokeApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

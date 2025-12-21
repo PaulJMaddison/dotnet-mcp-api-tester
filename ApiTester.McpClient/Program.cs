@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Text;
 using System.Text.Json;
 
 static async Task<int> Main()
@@ -51,6 +50,23 @@ static async Task<int> Main()
         return JsonDocument.Parse(line);
     }
 
+    static void PrintToolTextOrRaw(string label, JsonDocument response)
+    {
+        Console.WriteLine($"\n{label}");
+
+        if (response.RootElement.TryGetProperty("result", out var result) &&
+            result.TryGetProperty("content", out var content) &&
+            content.ValueKind == JsonValueKind.Array &&
+            content.GetArrayLength() > 0 &&
+            content[0].TryGetProperty("text", out var textEl))
+        {
+            Console.WriteLine(textEl.GetString());
+            return;
+        }
+
+        Console.WriteLine(response.RootElement);
+    }
+
     // 1) initialize
     id++;
     var initResponse = await SendAsync(new
@@ -80,8 +96,8 @@ static async Task<int> Main()
     });
 
     Console.WriteLine("\nTool names:");
-    if (toolsList.RootElement.TryGetProperty("result", out var result) &&
-        result.TryGetProperty("tools", out var toolsEl) &&
+    if (toolsList.RootElement.TryGetProperty("result", out var tlResult) &&
+        tlResult.TryGetProperty("tools", out var toolsEl) &&
         toolsEl.ValueKind == JsonValueKind.Array)
     {
         foreach (var t in toolsEl.EnumerateArray())
@@ -111,36 +127,68 @@ static async Task<int> Main()
         }
     });
 
-    Console.WriteLine("\napi_import_open_api response:");
-    Console.WriteLine(import.RootElement);Console.WriteLine(import.RootElement.GetProperty("result").GetProperty("content")[0].GetProperty("text").GetString());
+    PrintToolTextOrRaw("api_import_open_api response:", import);
 
-    // 4) tools/call: api_list_operations
+    // ----- DAY 3 STEP 5 STARTS HERE -----
+
+    // 4) tools/call: api_set_base_url (optional but keeps things explicit)
     id++;
-    var list = await SendAsync(new
+    var setBaseUrl = await SendAsync(new
     {
         jsonrpc = "2.0",
         id,
         method = "tools/call",
         @params = new
         {
-            name = "api_list_operations",
-            arguments = new { }
+            name = "api_set_base_url",
+            arguments = new
+            {
+                baseUrl = "https://petstore3.swagger.io/api/v3"
+            }
         }
     });
-    Console.WriteLine("\napi_list_operations response:");
 
-    if (list.RootElement.TryGetProperty("result", out var listResult) &&
-        listResult.TryGetProperty("content", out var listContent) &&
-        listContent.ValueKind == JsonValueKind.Array &&
-        listContent.GetArrayLength() > 0 &&
-        listContent[0].TryGetProperty("text", out var listText))
+    PrintToolTextOrRaw("api_set_base_url response:", setBaseUrl);
+
+    // 5) tools/call: api_call_operation (execute a real operation)
+    id++;
+    var call = await SendAsync(new
     {
-        Console.WriteLine(listText.GetString());
-    }
-    else
+        jsonrpc = "2.0",
+        id,
+        method = "tools/call",
+        @params = new
+        {
+            name = "api_call_operation",
+            arguments = new
+            {
+                operationId = "getInventory"
+            }
+        }
+    });
+
+    PrintToolTextOrRaw("api_call_operation response:", call);
+
+    // ----- DAY 3 STEP 5 ENDS HERE -----
+
+    // 6) tools/call: api_list_operations (keep this after the call if you still want the list output)
+    id++;
+    var call2 = await SendAsync(new
     {
-        Console.WriteLine(list.RootElement);
-    }
+        jsonrpc = "2.0",
+        id,
+        method = "tools/call",
+        @params = new
+        {
+            name = "api_call_operation",
+            arguments = new
+            {
+                operationId = "getOrderById",
+                pathParamsJson = "{\"orderId\":\"1\"}"
+            }
+        }
+    });
+    PrintToolTextOrRaw("api_call_operation (getOrderById) response:", call2);
 
 
     // Clean shutdown
@@ -150,4 +198,3 @@ static async Task<int> Main()
 }
 
 return await Main();
-
