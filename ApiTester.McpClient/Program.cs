@@ -50,6 +50,22 @@ static async Task<int> Main()
         return JsonDocument.Parse(line);
     }
 
+    async Task<JsonDocument> CallToolAsync(string name, object arguments)
+    {
+        id++;
+        return await SendAsync(new
+        {
+            jsonrpc = "2.0",
+            id,
+            method = "tools/call",
+            @params = new
+            {
+                name,
+                arguments
+            }
+        });
+    }
+
     static void PrintToolTextOrRaw(string label, JsonDocument response)
     {
         Console.WriteLine($"\n{label}");
@@ -110,85 +126,126 @@ static async Task<int> Main()
     Console.WriteLine("\ntools/list response:");
     Console.WriteLine(toolsList.RootElement);
 
-    // 3) tools/call: api_import_open_api
-    id++;
-    var import = await SendAsync(new
+    // 3) tools/call: api_import_open_api (Petstore)
+    var import = await CallToolAsync("api_import_open_api", new
     {
-        jsonrpc = "2.0",
-        id,
-        method = "tools/call",
-        @params = new
-        {
-            name = "api_import_open_api",
-            arguments = new
-            {
-                specUrlOrPath = "https://petstore3.swagger.io/api/v3/openapi.json"
-            }
-        }
+        specUrlOrPath = "https://petstore3.swagger.io/api/v3/openapi.json"
     });
-
     PrintToolTextOrRaw("api_import_open_api response:", import);
 
-    // ----- DAY 3 STEP 5 STARTS HERE -----
-
-    // 4) tools/call: api_set_base_url (optional but keeps things explicit)
-    id++;
-    var setBaseUrl = await SendAsync(new
+    // 4) tools/call: api_set_base_url (Petstore)
+    var setBaseUrl = await CallToolAsync("api_set_base_url", new
     {
-        jsonrpc = "2.0",
-        id,
-        method = "tools/call",
-        @params = new
-        {
-            name = "api_set_base_url",
-            arguments = new
-            {
-                baseUrl = "https://petstore3.swagger.io/api/v3"
-            }
-        }
+        baseUrl = "https://petstore3.swagger.io/api/v3"
     });
-
     PrintToolTextOrRaw("api_set_base_url response:", setBaseUrl);
 
-    // 5) tools/call: api_call_operation (execute a real operation)
-    id++;
-    var call = await SendAsync(new
+    // -------------------------
+    // DAY 5 RUN CHECKS
+    // -------------------------
+
+    // Helper: get policy (optional, but useful)
+    var getPolicy0 = await CallToolAsync("api_get_policy", new { });
+    PrintToolTextOrRaw("api_get_policy (initial) response:", getPolicy0);
+
+    // A) Deny-by-default should block
+    var policyJsonA = """
+{
+  "dryRun": false,
+  "allowedMethods": ["GET"],
+  "allowedBaseUrls": []
+}
+""";
+
+    var setPolicyA = await CallToolAsync("api_set_policy", new { policyJson = policyJsonA });
+    PrintToolTextOrRaw("api_set_policy A (deny-by-default) response:", setPolicyA);
+
+    var callA = await CallToolAsync("api_call_operation", new
     {
-        jsonrpc = "2.0",
-        id,
-        method = "tools/call",
-        @params = new
+        operationId = "getInventory"
+    });
+    PrintToolTextOrRaw("A) api_call_operation (should be blocked) response:", callA);
+
+    // B) Allow Petstore explicitly (should attempt and return status, Petstore may be flaky)
+    var policyJsonB = """
+{
+  "dryRun": false,
+  "allowedMethods": ["GET"],
+  "allowedBaseUrls": ["https://petstore3.swagger.io/api/v3"],
+  "blockLocalhost": true,
+  "blockPrivateNetworks": true,
+  "timeoutSeconds": 10,
+  "maxRequestBodyBytes": 262144,
+  "maxResponseBodyBytes": 524288
+}
+""";
+
+    var setPolicyB = await CallToolAsync("api_set_policy", new { policyJson = policyJsonB });
+    PrintToolTextOrRaw("api_set_policy B (allow Petstore) response:", setPolicyB);
+
+    var callB1 = await CallToolAsync("api_call_operation", new
+    {
+        operationId = "getInventory"
+    });
+    PrintToolTextOrRaw("B1) api_call_operation getInventory (Petstore may 500) response:", callB1);
+
+    var callB2 = await CallToolAsync("api_call_operation", new
+    {
+        operationId = "getOrderById",
+        pathParamsJson = "{\"orderId\":\"1\"}"
+    });
+    PrintToolTextOrRaw("B2) api_call_operation getOrderById (Petstore may 500) response:", callB2);
+
+    // C) Metadata/link-local SSRF block test.
+    // We deliberately allowlist the base URL to prove SSRF guard still blocks it.
+    var setBaseUrlMeta = await CallToolAsync("api_set_base_url", new
+    {
+        baseUrl = "http://169.254.169.254"
+    });
+    PrintToolTextOrRaw("api_set_base_url (metadata IP) response:", setBaseUrlMeta);
+
+    var policyJsonC = """
+{
+  "dryRun": false,
+  "allowedMethods": ["GET"],
+  "allowedBaseUrls": ["http://169.254.169.254"],
+  "blockLocalhost": true,
+  "blockPrivateNetworks": true
+}
+""";
+
+    var setPolicyC = await CallToolAsync("api_set_policy", new { policyJson = policyJsonC });
+    PrintToolTextOrRaw("api_set_policy C (allowlist metadata, expect SSRF block) response:", setPolicyC);
+
+    // This operation will attempt to build a URL under the metadata base URL.
+    // Even if the path doesn't exist, SSRF guard should block before any request is sent.
+    var callC = await CallToolAsync("api_call_operation", new
+    {
+        operationId = "getInventory"
+    });
+    PrintToolTextOrRaw("C) api_call_operation (should be blocked by SSRF guard) response:", callC);
+
+    // ---- RESET POLICY TO SAFE DEFAULTS ----
+
+    var resetPolicy = await CallToolAsync("api_set_policy", new
+    {
+                policyJson = """
         {
-            name = "api_call_operation",
-            arguments = new
-            {
-                operationId = "getInventory"
-            }
+          "dryRun": true,
+          "allowedBaseUrls": [],
+          "allowedMethods": ["GET"],
+          "timeoutSeconds": 10,
+          "maxRequestBodyBytes": 262144,
+          "maxResponseBodyBytes": 524288,
+          "blockLocalhost": true,
+          "blockPrivateNetworks": true
         }
+        """
     });
 
-    PrintToolTextOrRaw("api_call_operation response:", call);
-
-    // ----- DAY 3 STEP 5 ENDS HERE -----
-
-    // 6) tools/call: api_list_operations (keep this after the call if you still want the list output)
-    id++;
-    var call2 = await SendAsync(new
-    {
-        jsonrpc = "2.0",
-        id,
-        method = "tools/call",
-        @params = new
-        {
-            name = "api_call_operation",
-            arguments = new
-            {
-                operationId = "getOrderById",
-                pathParamsJson = "{\"orderId\":\"1\"}"
-            }
-        }
-    });
-    PrintToolTextOrRaw("api_call_operation (getOrderById) response:", call2);
+    PrintToolTextOrRaw("api_set_policy (reset to safe defaults) response:", resetPolicy);
+    var getPolicyFinal = await CallToolAsync("api_get_policy", new { });
+    PrintToolTextOrRaw("api_get_policy (final) response:", getPolicyFinal);
 
 
     // Clean shutdown
