@@ -151,6 +151,26 @@ static async Task<int> Main()
         return 1;
     }
 
+    // -------------------------
+    // DAY 9: describe operations (API introspection)
+    // -------------------------
+
+    var describeUuid = await CallToolAsync("api_describe_operation", new { operationId = "getUuid" });
+    PrintToolTextOrRaw("api_describe_operation getUuid response:", describeUuid);
+    if (ToolCallIsError(describeUuid))
+    {
+        Console.WriteLine("api_describe_operation failed, stopping client run.");
+        return 1;
+    }
+
+    var describeStatus = await CallToolAsync("api_describe_operation", new { operationId = "getStatus" });
+    PrintToolTextOrRaw("api_describe_operation getStatus response:", describeStatus);
+    if (ToolCallIsError(describeStatus))
+    {
+        Console.WriteLine("api_describe_operation failed, stopping client run.");
+        return 1;
+    }
+
     // 4) Set base URL (httpbin is reliable)
     var setBaseUrl = await CallToolAsync("api_set_base_url", new
     {
