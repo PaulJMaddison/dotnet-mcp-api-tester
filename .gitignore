@@ -1,0 +1,17 @@
+@"
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Build output
+bin/
+obj/
+
+# Rider / JetBrains
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+"@ | Out-File -Encoding utf8 .gitignore
