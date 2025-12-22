@@ -19,6 +19,7 @@ builder.Services.AddSingleton(AppConfig.Load());
 builder.Services.AddSingleton<OpenApiStore>();
 builder.Services.AddSingleton<ApiRuntimeConfig>();
 builder.Services.AddSingleton<SsrfGuard>();
+builder.Services.AddSingleton<ApiAssistTools>();
 
 // Day 4: policy + guardrails tools (DI registrations)
 builder.Services.AddSingleton<PolicyTools>();
