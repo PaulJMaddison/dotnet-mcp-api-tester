@@ -40,6 +40,28 @@ static async Task<int> Main()
 
     var id = 0;
 
+    var jsonPretty = new JsonSerializerOptions { WriteIndented = true };
+
+    static string TryPrettyJson(string? maybeJson, JsonSerializerOptions pretty)
+    {
+        if (string.IsNullOrWhiteSpace(maybeJson)) return maybeJson ?? "";
+
+        var s = maybeJson.Trim();
+        if (!(s.StartsWith("{") || s.StartsWith("["))) return maybeJson;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(s);
+            return JsonSerializer.Serialize(doc.RootElement, pretty);
+        }
+        catch
+        {
+            return maybeJson;
+        }
+    }
+
+    string Pretty(JsonElement el) => JsonSerializer.Serialize(el, jsonPretty);
+
     async Task<JsonDocument> SendAsync(object payload)
     {
         var json = JsonSerializer.Serialize(payload);
@@ -70,21 +92,33 @@ static async Task<int> Main()
         });
     }
 
-    static void PrintToolTextOrRaw(string label, JsonDocument response)
+    void PrintSection(string title)
     {
-        Console.WriteLine($"\n{label}");
+        Console.WriteLine();
+        Console.WriteLine(new string('=', 80));
+        Console.WriteLine(title);
+        Console.WriteLine(new string('=', 80));
+    }
 
+    void PrintToolTextOrRaw(string label, JsonDocument response)
+    {
+        Console.WriteLine();
+        Console.WriteLine(label);
+
+        // Prefer MCP "content[].text" if present (common for your tools)
         if (response.RootElement.TryGetProperty("result", out var result) &&
             result.TryGetProperty("content", out var content) &&
             content.ValueKind == JsonValueKind.Array &&
             content.GetArrayLength() > 0 &&
             content[0].TryGetProperty("text", out var textEl))
         {
-            Console.WriteLine(textEl.GetString());
+            var text = textEl.GetString();
+            Console.WriteLine(TryPrettyJson(text, jsonPretty));
             return;
         }
 
-        Console.WriteLine(response.RootElement);
+        // Otherwise pretty print full JSON-RPC response
+        Console.WriteLine(Pretty(response.RootElement));
     }
 
     static bool ToolCallIsError(JsonDocument response)
@@ -109,8 +143,9 @@ static async Task<int> Main()
         }
     });
 
+    PrintSection("INITIALIZE");
     Console.WriteLine("initialize response:");
-    Console.WriteLine(initResponse.RootElement);
+    Console.WriteLine(Pretty(initResponse.RootElement));
 
     // 2) tools/list
     id++;
@@ -122,22 +157,29 @@ static async Task<int> Main()
         @params = new { }
     });
 
-    Console.WriteLine("\nTool names:");
+    PrintSection("TOOLS/LIST");
+
+    var toolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    Console.WriteLine("Tool names:");
     if (toolsList.RootElement.TryGetProperty("result", out var tlResult) &&
         tlResult.TryGetProperty("tools", out var toolsEl) &&
         toolsEl.ValueKind == JsonValueKind.Array)
     {
         foreach (var t in toolsEl.EnumerateArray())
         {
-            var name = t.GetProperty("name").GetString();
+            var name = t.GetProperty("name").GetString() ?? "";
+            toolNames.Add(name);
             Console.WriteLine("- " + name);
         }
     }
 
-    Console.WriteLine("\ntools/list response:");
-    Console.WriteLine(toolsList.RootElement);
+    Console.WriteLine();
+    Console.WriteLine("tools/list response:");
+    Console.WriteLine(Pretty(toolsList.RootElement));
 
     // 3) Import OpenAPI (local, valid OAS3)
+    PrintSection("IMPORT OPENAPI");
     var import = await CallToolAsync("api_import_open_api", new
     {
         specUrlOrPath = httpbinSpecPath
@@ -154,6 +196,7 @@ static async Task<int> Main()
     // -------------------------
     // DAY 9: describe operations (API introspection)
     // -------------------------
+    PrintSection("DAY 9: DESCRIBE OPERATIONS");
 
     var describeUuid = await CallToolAsync("api_describe_operation", new { operationId = "getUuid" });
     PrintToolTextOrRaw("api_describe_operation getUuid response:", describeUuid);
@@ -174,6 +217,7 @@ static async Task<int> Main()
     // -------------------------
     // DAY 10: generate deterministic test plans (SaaS scaffolding)
     // -------------------------
+    PrintSection("DAY 10: GENERATE TEST PLANS");
 
     var planUuid = await CallToolAsync("api_generate_test_plan", new { operationId = "getUuid" });
     PrintToolTextOrRaw("api_generate_test_plan getUuid response:", planUuid);
@@ -191,7 +235,16 @@ static async Task<int> Main()
         return 1;
     }
 
+    // Prefer the actual tool name you have today.
+    // Keep the legacy/future alias too, so you can rename server tools later without changing the client.
+    var runToolName =
+        toolNames.Contains("api_run_test_plan") ? "api_run_test_plan" :
+        toolNames.Contains("api_execute_test_plan") ? "api_execute_test_plan" :
+        null;
+
     // 4) Set base URL (httpbin is reliable)
+    PrintSection("POLICY + CALLS");
+
     var setBaseUrl = await CallToolAsync("api_set_base_url", new
     {
         baseUrl = "https://httpbin.org"
@@ -237,6 +290,38 @@ static async Task<int> Main()
     var setPolicyB = await CallToolAsync("api_set_policy", new { policyJson = policyJsonB });
     PrintToolTextOrRaw("api_set_policy B (allow httpbin) response:", setPolicyB);
 
+    // -------------------------
+    // DAY 11: EXECUTE TEST PLAN (only after baseUrl + allow policy are set)
+    // -------------------------
+    PrintSection("DAY 11: EXECUTE TEST PLAN (if available)");
+
+    if (runToolName is not null)
+    {
+        Console.WriteLine($"Using tool: {runToolName}");
+
+        var runUuid = await CallToolAsync(runToolName, new { operationId = "getUuid" });
+        PrintToolTextOrRaw($"{runToolName} getUuid response:", runUuid);
+        if (ToolCallIsError(runUuid))
+        {
+            Console.WriteLine($"{runToolName} failed, stopping client run.");
+            return 1;
+        }
+
+        var runStatus = await CallToolAsync(runToolName, new { operationId = "getStatus" });
+        PrintToolTextOrRaw($"{runToolName} getStatus response:", runStatus);
+        if (ToolCallIsError(runStatus))
+        {
+            Console.WriteLine($"{runToolName} failed, stopping client run.");
+            return 1;
+        }
+    }
+    else
+    {
+        Console.WriteLine("No test execution tool present (expected one of: api_run_test_plan, api_execute_test_plan).");
+        Console.WriteLine("Skipping Day 11 execution step.");
+    }
+
+    // Now do the live calls under the allow policy
     var callB1 = await CallToolAsync("api_call_operation", new
     {
         operationId = "getUuid"
@@ -291,6 +376,7 @@ static async Task<int> Main()
     // -------------------------
     // DAY 8: assert reset_runtime worked
     // -------------------------
+    PrintSection("DAY 8: ASSERT RESET");
 
     var getPolicyAfterReset = await CallToolAsync("api_get_policy", new { });
     PrintToolTextOrRaw("api_get_policy (after reset_runtime) response:", getPolicyAfterReset);
@@ -312,4 +398,3 @@ static async Task<int> Main()
 }
 
 return await Main();
-
