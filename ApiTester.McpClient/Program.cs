@@ -39,6 +39,7 @@ static async Task<int> Main()
     using var output = proc.StandardOutput;
 
     var id = 0;
+    var exitCode = 0;
 
     var jsonPretty = new JsonSerializerOptions { WriteIndented = true };
 
@@ -61,36 +62,6 @@ static async Task<int> Main()
     }
 
     string Pretty(JsonElement el) => JsonSerializer.Serialize(el, jsonPretty);
-
-    async Task<JsonDocument> SendAsync(object payload)
-    {
-        var json = JsonSerializer.Serialize(payload);
-        await input.WriteLineAsync(json);
-        await input.FlushAsync();
-
-        // MCP stdio transport is line-delimited JSON
-        var line = await output.ReadLineAsync();
-        if (line is null)
-            throw new InvalidOperationException("Server closed stdout unexpectedly.");
-
-        return JsonDocument.Parse(line);
-    }
-
-    async Task<JsonDocument> CallToolAsync(string name, object arguments)
-    {
-        id++;
-        return await SendAsync(new
-        {
-            jsonrpc = "2.0",
-            id,
-            method = "tools/call",
-            @params = new
-            {
-                name,
-                arguments
-            }
-        });
-    }
 
     void PrintSection(string title)
     {
@@ -126,6 +97,148 @@ static async Task<int> Main()
         return response.RootElement.TryGetProperty("result", out var r) &&
                r.TryGetProperty("isError", out var isError) &&
                isError.ValueKind == JsonValueKind.True;
+    }
+
+    static bool IsExpectedBlocked(JsonElement resultItem)
+    {
+        if (!resultItem.TryGetProperty("blocked", out var blockedEl) || blockedEl.ValueKind != JsonValueKind.True)
+            return false;
+
+        if (!resultItem.TryGetProperty("blockReason", out var reasonEl) || reasonEl.ValueKind != JsonValueKind.String)
+            return false;
+
+        var reason = reasonEl.GetString() ?? "";
+        // Day 12 rule: input validation blocks are expected behaviour, not a failure
+        return reason.StartsWith("Missing required path param", StringComparison.OrdinalIgnoreCase) ||
+               reason.StartsWith("Missing required query param", StringComparison.OrdinalIgnoreCase) ||
+               reason.StartsWith("Missing required header", StringComparison.OrdinalIgnoreCase);
+    }
+
+    static bool IsHttpbinFlake(JsonElement resultItem)
+    {
+        // httpbin occasionally returns 502 via AWS ELB. Treat as flaky external dependency.
+        if (resultItem.TryGetProperty("statusCode", out var scEl) &&
+            scEl.ValueKind == JsonValueKind.Number &&
+            scEl.GetInt32() == 502)
+            return true;
+
+        if (resultItem.TryGetProperty("responseSnippet", out var snipEl) && snipEl.ValueKind == JsonValueKind.String)
+        {
+            var snip = snipEl.GetString() ?? "";
+            if (snip.Contains("502 Bad Gateway", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        if (resultItem.TryGetProperty("failureReason", out var failEl) && failEl.ValueKind == JsonValueKind.String)
+        {
+            var fail = failEl.GetString() ?? "";
+            if (fail.Contains("but got 502", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    void SummariseRunTestPlan(string operationId, JsonDocument response)
+    {
+        if (!response.RootElement.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Object)
+            return;
+
+        if (!result.TryGetProperty("results", out var resultsEl) || resultsEl.ValueKind != JsonValueKind.Array)
+            return;
+
+        var total = 0;
+        var pass = 0;
+        var fail = 0;
+        var blockedExpected = 0;
+        var blockedUnexpected = 0;
+        var flaky = 0;
+
+        foreach (var item in resultsEl.EnumerateArray())
+        {
+            total++;
+
+            if (IsExpectedBlocked(item))
+            {
+                blockedExpected++;
+                continue;
+            }
+
+            if (item.TryGetProperty("blocked", out var blockedEl) && blockedEl.ValueKind == JsonValueKind.True)
+            {
+                blockedUnexpected++;
+                continue;
+            }
+
+            var isPass = item.TryGetProperty("pass", out var passEl) && passEl.ValueKind == JsonValueKind.True;
+            if (isPass)
+            {
+                pass++;
+                continue;
+            }
+
+            if (IsHttpbinFlake(item))
+            {
+                flaky++;
+                continue;
+            }
+
+            fail++;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"Day 12 summary for '{operationId}':");
+        Console.WriteLine($"- total: {total}");
+        Console.WriteLine($"- pass: {pass}");
+        Console.WriteLine($"- expected blocks: {blockedExpected}");
+        Console.WriteLine($"- unexpected blocks: {blockedUnexpected}");
+        Console.WriteLine($"- flaky (httpbin 502): {flaky}");
+        Console.WriteLine($"- real fails: {fail}");
+
+        // CI friendly rule: only real fails or unexpected blocks should fail the run
+        if (fail > 0 || blockedUnexpected > 0)
+            exitCode = 1;
+    }
+
+    async Task<JsonDocument> SendAsync(object payload, int maxAttempts = 2)
+    {
+        var json = JsonSerializer.Serialize(payload);
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            await input.WriteLineAsync(json);
+            await input.FlushAsync();
+
+            // MCP stdio transport is line-delimited JSON
+            var line = await output.ReadLineAsync();
+            if (line is null)
+            {
+                if (attempt == maxAttempts)
+                    throw new InvalidOperationException("Server closed stdout unexpectedly.");
+                await Task.Delay(50);
+                continue;
+            }
+
+            return JsonDocument.Parse(line);
+        }
+
+        throw new InvalidOperationException("SendAsync failed unexpectedly.");
+    }
+
+    async Task<JsonDocument> CallToolAsync(string name, object arguments)
+    {
+        id++;
+        return await SendAsync(new
+        {
+            jsonrpc = "2.0",
+            id,
+            method = "tools/call",
+            @params = new
+            {
+                name,
+                arguments
+            }
+        });
     }
 
     // 1) initialize
@@ -186,7 +299,6 @@ static async Task<int> Main()
     });
     PrintToolTextOrRaw("api_import_open_api response:", import);
 
-    // STOP if OpenAPI import failed (prevents cascading errors)
     if (ToolCallIsError(import))
     {
         Console.WriteLine("OpenAPI import failed, stopping client run.");
@@ -200,62 +312,40 @@ static async Task<int> Main()
 
     var describeUuid = await CallToolAsync("api_describe_operation", new { operationId = "getUuid" });
     PrintToolTextOrRaw("api_describe_operation getUuid response:", describeUuid);
-    if (ToolCallIsError(describeUuid))
-    {
-        Console.WriteLine("api_describe_operation failed, stopping client run.");
-        return 1;
-    }
+    if (ToolCallIsError(describeUuid)) return 1;
 
     var describeStatus = await CallToolAsync("api_describe_operation", new { operationId = "getStatus" });
     PrintToolTextOrRaw("api_describe_operation getStatus response:", describeStatus);
-    if (ToolCallIsError(describeStatus))
-    {
-        Console.WriteLine("api_describe_operation failed, stopping client run.");
-        return 1;
-    }
+    if (ToolCallIsError(describeStatus)) return 1;
 
     // -------------------------
-    // DAY 10: generate deterministic test plans (SaaS scaffolding)
+    // DAY 10: generate deterministic test plans
     // -------------------------
     PrintSection("DAY 10: GENERATE TEST PLANS");
 
     var planUuid = await CallToolAsync("api_generate_test_plan", new { operationId = "getUuid" });
     PrintToolTextOrRaw("api_generate_test_plan getUuid response:", planUuid);
-    if (ToolCallIsError(planUuid))
-    {
-        Console.WriteLine("api_generate_test_plan failed, stopping client run.");
-        return 1;
-    }
+    if (ToolCallIsError(planUuid)) return 1;
 
     var planStatus = await CallToolAsync("api_generate_test_plan", new { operationId = "getStatus" });
     PrintToolTextOrRaw("api_generate_test_plan getStatus response:", planStatus);
-    if (ToolCallIsError(planStatus))
-    {
-        Console.WriteLine("api_generate_test_plan failed, stopping client run.");
-        return 1;
-    }
+    if (ToolCallIsError(planStatus)) return 1;
 
     // Prefer the actual tool name you have today.
-    // Keep the legacy/future alias too, so you can rename server tools later without changing the client.
     var runToolName =
         toolNames.Contains("api_run_test_plan") ? "api_run_test_plan" :
         toolNames.Contains("api_execute_test_plan") ? "api_execute_test_plan" :
         null;
 
-    // 4) Set base URL (httpbin is reliable)
+    // 4) Set base URL + allow policy first
     PrintSection("POLICY + CALLS");
 
-    var setBaseUrl = await CallToolAsync("api_set_base_url", new
-    {
-        baseUrl = "https://httpbin.org"
-    });
+    var setBaseUrl = await CallToolAsync("api_set_base_url", new { baseUrl = "https://httpbin.org" });
     PrintToolTextOrRaw("api_set_base_url response:", setBaseUrl);
 
-    // Helper: get policy (optional, but useful)
     var getPolicy0 = await CallToolAsync("api_get_policy", new { });
     PrintToolTextOrRaw("api_get_policy (initial) response:", getPolicy0);
 
-    // A) Deny-by-default should block (allowedBaseUrls empty + dryRun=false)
     var policyJsonA = """
 {
   "dryRun": false,
@@ -267,13 +357,9 @@ static async Task<int> Main()
     var setPolicyA = await CallToolAsync("api_set_policy", new { policyJson = policyJsonA });
     PrintToolTextOrRaw("api_set_policy A (deny-by-default) response:", setPolicyA);
 
-    var callA = await CallToolAsync("api_call_operation", new
-    {
-        operationId = "getUuid"
-    });
+    var callA = await CallToolAsync("api_call_operation", new { operationId = "getUuid" });
     PrintToolTextOrRaw("A) api_call_operation (should be blocked) response:", callA);
 
-    // B) Allow httpbin explicitly (should succeed and return JSON)
     var policyJsonB = """
 {
   "dryRun": false,
@@ -291,7 +377,7 @@ static async Task<int> Main()
     PrintToolTextOrRaw("api_set_policy B (allow httpbin) response:", setPolicyB);
 
     // -------------------------
-    // DAY 11: EXECUTE TEST PLAN (only after baseUrl + allow policy are set)
+    // DAY 11: EXECUTE TEST PLAN
     // -------------------------
     PrintSection("DAY 11: EXECUTE TEST PLAN (if available)");
 
@@ -301,19 +387,17 @@ static async Task<int> Main()
 
         var runUuid = await CallToolAsync(runToolName, new { operationId = "getUuid" });
         PrintToolTextOrRaw($"{runToolName} getUuid response:", runUuid);
-        if (ToolCallIsError(runUuid))
-        {
-            Console.WriteLine($"{runToolName} failed, stopping client run.");
-            return 1;
-        }
+        if (ToolCallIsError(runUuid)) return 1;
+
+        // Day 12: summary normalisation (expected blocks, flakes, real fails)
+        SummariseRunTestPlan("getUuid", runUuid);
 
         var runStatus = await CallToolAsync(runToolName, new { operationId = "getStatus" });
         PrintToolTextOrRaw($"{runToolName} getStatus response:", runStatus);
-        if (ToolCallIsError(runStatus))
-        {
-            Console.WriteLine($"{runToolName} failed, stopping client run.");
-            return 1;
-        }
+        if (ToolCallIsError(runStatus)) return 1;
+
+        // Day 12: summary normalisation (expected blocks, flakes, real fails)
+        SummariseRunTestPlan("getStatus", runStatus);
     }
     else
     {
@@ -321,32 +405,18 @@ static async Task<int> Main()
         Console.WriteLine("Skipping Day 11 execution step.");
     }
 
-    // Now do the live calls under the allow policy
-    var callB1 = await CallToolAsync("api_call_operation", new
-    {
-        operationId = "getUuid"
-    });
+    // Live calls under allow policy (demo)
+    var callB1 = await CallToolAsync("api_call_operation", new { operationId = "getUuid" });
     PrintToolTextOrRaw("B1) api_call_operation getUuid response:", callB1);
 
-    var callB2 = await CallToolAsync("api_call_operation", new
-    {
-        operationId = "getGet"
-    });
+    var callB2 = await CallToolAsync("api_call_operation", new { operationId = "getGet" });
     PrintToolTextOrRaw("B2) api_call_operation getGet response:", callB2);
 
-    var callB3 = await CallToolAsync("api_call_operation", new
-    {
-        operationId = "getStatus",
-        pathParamsJson = "{\"code\":200}"
-    });
+    var callB3 = await CallToolAsync("api_call_operation", new { operationId = "getStatus", pathParamsJson = "{\"code\":200}" });
     PrintToolTextOrRaw("B3) api_call_operation getStatus(200) response:", callB3);
 
-    // C) Metadata/link-local SSRF block test.
-    // Deliberately allowlist the base URL to prove SSRF guard still blocks it.
-    var setBaseUrlMeta = await CallToolAsync("api_set_base_url", new
-    {
-        baseUrl = "http://169.254.169.254"
-    });
+    // C) Metadata/link-local SSRF block test
+    var setBaseUrlMeta = await CallToolAsync("api_set_base_url", new { baseUrl = "http://169.254.169.254" });
     PrintToolTextOrRaw("api_set_base_url (metadata IP) response:", setBaseUrlMeta);
 
     var policyJsonC = """
@@ -362,39 +432,27 @@ static async Task<int> Main()
     var setPolicyC = await CallToolAsync("api_set_policy", new { policyJson = policyJsonC });
     PrintToolTextOrRaw("api_set_policy C (allowlist metadata, expect SSRF block) response:", setPolicyC);
 
-    // Any operation will do, we just want SSRF guard to block before request
-    var callC = await CallToolAsync("api_call_operation", new
-    {
-        operationId = "getUuid"
-    });
+    var callC = await CallToolAsync("api_call_operation", new { operationId = "getUuid" });
     PrintToolTextOrRaw("C) api_call_operation (should be blocked by SSRF guard) response:", callC);
 
-    // Day 7 cleanup: one-shot reset (base url + auth + policy) so demos are tidy
+    // Reset for tidy demo state
     var resetRuntime = await CallToolAsync("api_reset_runtime", new { });
     PrintToolTextOrRaw("api_reset_runtime response:", resetRuntime);
 
-    // -------------------------
-    // DAY 8: assert reset_runtime worked
-    // -------------------------
     PrintSection("DAY 8: ASSERT RESET");
 
     var getPolicyAfterReset = await CallToolAsync("api_get_policy", new { });
     PrintToolTextOrRaw("api_get_policy (after reset_runtime) response:", getPolicyAfterReset);
 
-    // Optional but good: prove we can re-apply policy cleanly after reset and calls work again
     var setPolicyAfterReset = await CallToolAsync("api_set_policy", new { policyJson = policyJsonB });
     PrintToolTextOrRaw("api_set_policy (after reset_runtime, allow httpbin) response:", setPolicyAfterReset);
 
-    var callAfterReset = await CallToolAsync("api_call_operation", new
-    {
-        operationId = "getUuid"
-    });
+    var callAfterReset = await CallToolAsync("api_call_operation", new { operationId = "getUuid" });
     PrintToolTextOrRaw("api_call_operation (after reset_runtime + allow httpbin) response:", callAfterReset);
 
-    // Clean shutdown
     try { proc.Kill(entireProcessTree: true); } catch { /* ignore */ }
 
-    return 0;
+    return exitCode;
 }
 
 return await Main();
