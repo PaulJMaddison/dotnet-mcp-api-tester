@@ -1,0 +1,28 @@
+{
+  "RunId": "2a62db61-511b-452a-bff7-5b22c4f32b95",
+  "OperationId": "getUuid",
+  "StartedUtc": "2025-12-22T08:27:05.6606213+00:00",
+  "CompletedUtc": "2025-12-22T08:27:06.2671186+00:00",
+  "Result": {
+    "OperationId": "getUuid",
+    "TotalCases": 1,
+    "Passed": 0,
+    "Failed": 1,
+    "Blocked": 0,
+    "TotalDurationMs": 600,
+    "Results": [
+      {
+        "Name": "Happy path",
+        "Blocked": false,
+        "BlockReason": null,
+        "Url": "https://httpbin.org/uuid",
+        "Method": "GET",
+        "StatusCode": 502,
+        "DurationMs": 587,
+        "Pass": false,
+        "FailureReason": "Expected [200] but got 502.",
+        "ResponseSnippet": "\u003Chtml\u003E\r\n\u003Chead\u003E\u003Ctitle\u003E502 Bad Gateway\u003C/title\u003E\u003C/head\u003E\r\n\u003Cbody\u003E\r\n\u003Ccenter\u003E\u003Ch1\u003E502 Bad Gateway\u003C/h1\u003E\u003C/center\u003E\r\n\u003C/body\u003E\r\n\u003C/html\u003E\r\n"
+      }
+    ]
+  }
+}

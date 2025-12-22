@@ -1,0 +1,76 @@
+{
+  "RunId": "991404e3-8f85-452e-9b46-f5238798e492",
+  "OperationId": "getStatus",
+  "StartedUtc": "2025-12-22T08:27:06.3323466+00:00",
+  "CompletedUtc": "2025-12-22T08:27:09.0582446+00:00",
+  "Result": {
+    "OperationId": "getStatus",
+    "TotalCases": 5,
+    "Passed": 2,
+    "Failed": 2,
+    "Blocked": 1,
+    "TotalDurationMs": 2724,
+    "Results": [
+      {
+        "Name": "Happy path",
+        "Blocked": false,
+        "BlockReason": null,
+        "Url": "https://httpbin.org/status/200",
+        "Method": "GET",
+        "StatusCode": 200,
+        "DurationMs": 417,
+        "Pass": true,
+        "FailureReason": null,
+        "ResponseSnippet": ""
+      },
+      {
+        "Name": "Missing required path param \u0027code\u0027",
+        "Blocked": true,
+        "BlockReason": "Missing required path param(s): code",
+        "Url": null,
+        "Method": "GET",
+        "StatusCode": null,
+        "DurationMs": 0,
+        "Pass": false,
+        "FailureReason": null,
+        "ResponseSnippet": null
+      },
+      {
+        "Name": "Invalid \u0027code\u0027 type",
+        "Blocked": false,
+        "BlockReason": null,
+        "Url": "https://httpbin.org/status/abc",
+        "Method": "GET",
+        "StatusCode": 400,
+        "DurationMs": 804,
+        "Pass": true,
+        "FailureReason": null,
+        "ResponseSnippet": "Invalid status code"
+      },
+      {
+        "Name": "Boundary \u0027code\u0027 = 0",
+        "Blocked": false,
+        "BlockReason": null,
+        "Url": "https://httpbin.org/status/0",
+        "Method": "GET",
+        "StatusCode": 502,
+        "DurationMs": 1418,
+        "Pass": false,
+        "FailureReason": "Expected [200, 400, 404, 500] but got 502.",
+        "ResponseSnippet": "\u003Chtml\u003E\r\n\u003Chead\u003E\u003Ctitle\u003E502 Bad Gateway\u003C/title\u003E\u003C/head\u003E\r\n\u003Cbody\u003E\r\n\u003Ccenter\u003E\u003Ch1\u003E502 Bad Gateway\u003C/h1\u003E\u003C/center\u003E\r\n\u003C/body\u003E\r\n\u003C/html\u003E\r\n"
+      },
+      {
+        "Name": "Boundary \u0027code\u0027 = -1",
+        "Blocked": false,
+        "BlockReason": null,
+        "Url": "https://httpbin.org/status/-1",
+        "Method": "GET",
+        "StatusCode": 502,
+        "DurationMs": 82,
+        "Pass": false,
+        "FailureReason": "Expected [400, 404] but got 502.",
+        "ResponseSnippet": "\u003Chtml\u003E\r\n\u003Chead\u003E\u003Ctitle\u003E502 Bad Gateway\u003C/title\u003E\u003C/head\u003E\r\n\u003Cbody\u003E\r\n\u003Ccenter\u003E\u003Ch1\u003E502 Bad Gateway\u003C/h1\u003E\u003C/center\u003E\r\n\u003C/body\u003E\r\n\u003C/html\u003E\r\n"
+      }
+    ]
+  }
+}
