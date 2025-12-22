@@ -12,18 +12,22 @@ public sealed class TestPlanRunner
     private readonly OpenApiStore _store;
     private readonly ApiRuntimeConfig _cfg;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ITestRunStore _runStore;
 
-    public TestPlanRunner(OpenApiStore store, ApiRuntimeConfig cfg, IHttpClientFactory httpClientFactory)
+    public TestPlanRunner(OpenApiStore store, ApiRuntimeConfig cfg, IHttpClientFactory httpClientFactory, ITestRunStore runStore)
     {
         _store = store;
         _cfg = cfg;
         _httpClientFactory = httpClientFactory;
+        _runStore = runStore;
     }
 
-    public async Task<TestRunResult> RunAsync(string operationId, CancellationToken ct = default)
+    public async Task<TestRunRecord> RunAsync(string operationId, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(operationId))
             throw new ArgumentException("operationId is required.", nameof(operationId));
+
+        var startedUtc = DateTimeOffset.UtcNow;
 
         var doc = _store.RequireDocument();
         var match = FindOperation(doc, operationId);
@@ -49,7 +53,9 @@ public sealed class TestPlanRunner
         var passed = results.Count(x => !x.Blocked && x.Pass);
         var failed = results.Count(x => !x.Blocked && !x.Pass);
 
-        return new TestRunResult
+        var completedUtc = DateTimeOffset.UtcNow;
+
+        var result = new TestRunResult
         {
             OperationId = operationId,
             TotalCases = results.Count,
@@ -59,6 +65,20 @@ public sealed class TestPlanRunner
             TotalDurationMs = swTotal.ElapsedMilliseconds,
             Results = results
         };
+
+        var record = new TestRunRecord
+        {
+            RunId = Guid.NewGuid(),
+            OperationId = operationId,
+            StartedUtc = startedUtc,
+            CompletedUtc = completedUtc,
+            Result = result
+        };
+
+        await _runStore.SaveAsync(record, ct);
+
+        return record;
+
     }
 
     private async Task<TestCaseResult> RunCaseAsync(TestPlan plan, TestCase tc, CancellationToken ct)

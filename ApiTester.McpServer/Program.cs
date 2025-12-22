@@ -21,6 +21,7 @@ builder.Services.AddSingleton<ApiRuntimeConfig>();
 builder.Services.AddSingleton<SsrfGuard>();
 builder.Services.AddSingleton<ApiAssistTools>();
 builder.Services.AddSingleton<TestPlanRunner>();
+builder.Services.AddSingleton<ITestRunStore, FileTestRunStore>();
 
 // Day 4: policy + guardrails tools (DI registrations)
 builder.Services.AddSingleton<PolicyTools>();
