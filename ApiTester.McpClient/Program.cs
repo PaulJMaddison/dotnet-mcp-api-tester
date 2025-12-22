@@ -171,6 +171,26 @@ static async Task<int> Main()
         return 1;
     }
 
+    // -------------------------
+    // DAY 10: generate deterministic test plans (SaaS scaffolding)
+    // -------------------------
+
+    var planUuid = await CallToolAsync("api_generate_test_plan", new { operationId = "getUuid" });
+    PrintToolTextOrRaw("api_generate_test_plan getUuid response:", planUuid);
+    if (ToolCallIsError(planUuid))
+    {
+        Console.WriteLine("api_generate_test_plan failed, stopping client run.");
+        return 1;
+    }
+
+    var planStatus = await CallToolAsync("api_generate_test_plan", new { operationId = "getStatus" });
+    PrintToolTextOrRaw("api_generate_test_plan getStatus response:", planStatus);
+    if (ToolCallIsError(planStatus))
+    {
+        Console.WriteLine("api_generate_test_plan failed, stopping client run.");
+        return 1;
+    }
+
     // 4) Set base URL (httpbin is reliable)
     var setBaseUrl = await CallToolAsync("api_set_base_url", new
     {
@@ -292,3 +312,4 @@ static async Task<int> Main()
 }
 
 return await Main();
+
