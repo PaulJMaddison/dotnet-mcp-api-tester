@@ -32,6 +32,17 @@ public sealed class ApiTesterDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<ProjectEntity>(b =>
+        {
+            b.HasKey(x => x.ProjectId);
+
+            b.Property(x => x.ProjectKey)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            b.HasIndex(x => x.ProjectKey).IsUnique();
+        });
+
         modelBuilder.Entity<TestCaseResultEntity>(b =>
         {
             b.HasKey(x => x.TestCaseResultId);

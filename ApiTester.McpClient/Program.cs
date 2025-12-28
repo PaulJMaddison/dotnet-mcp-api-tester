@@ -3,6 +3,9 @@ using System.Text.Json;
 
 static async Task<int> Main()
 {
+
+   
+
     var serverProjectPath = Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory, "..", "..", "..", "..", "ApiTester.McpServer", "ApiTester.McpServer.csproj"));
 

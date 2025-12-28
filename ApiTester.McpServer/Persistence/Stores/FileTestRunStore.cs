@@ -27,6 +27,7 @@ public sealed class FileTestRunStore : ITestRunStore
 
     public async Task SaveAsync(TestRunRecord record)
     {
+        Console.Error.WriteLine("[server] Saving to file store...");
         var projectKey = string.IsNullOrWhiteSpace(record.ProjectKey) ? "default" : record.ProjectKey.Trim();
 
         Directory.CreateDirectory(ProjectPath(projectKey));

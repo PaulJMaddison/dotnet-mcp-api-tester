@@ -15,6 +15,8 @@ public sealed class SqlRunStore : IRunStore
 
     public async Task SaveAsync(Guid projectId, Guid runId, string operationId, DateTime startedUtc, DateTime completedUtc, TestRunResult result, CancellationToken ct)
     {
+        Console.Error.WriteLine("[server] Saving to sql store...");
+
         var run = new TestRunEntity
         {
             RunId = runId,
