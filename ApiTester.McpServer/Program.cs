@@ -9,22 +9,25 @@ var builder = Host.CreateApplicationBuilder(args);
 
 builder.Logging.AddConsole(o =>
 {
-    // Critical: MCP stdio uses stdout for protocol messages.
-    // Send logs to stderr, or you will corrupt the JSON-RPC stream.
+    // MCP stdio uses stdout for protocol messages.
+    // Send logs to stderr or you'll corrupt the JSON-RPC stream.
     o.LogToStandardErrorThreshold = LogLevel.Information;
 });
 
+var appConfig = AppConfig.Load(builder.Configuration);
+
 // Core services
-builder.Services.AddSingleton(AppConfig.Load());
+builder.Services.AddSingleton(appConfig);
 builder.Services.AddSingleton<OpenApiStore>();
 builder.Services.AddSingleton<ApiRuntimeConfig>();
 builder.Services.AddSingleton<SsrfGuard>();
-builder.Services.AddSingleton<ApiAssistTools>();
 builder.Services.AddSingleton<TestPlanRunner>();
 builder.Services.AddSingleton<ITestRunStore, FileTestRunStore>();
 
-// Day 4: policy + guardrails tools (DI registrations)
-builder.Services.AddSingleton<PolicyTools>();
+// Tool registration is handled by WithToolsFromAssembly(), so you don't need these.
+// Keep them out unless a tool has a special factory/lifetime requirement.
+// builder.Services.AddSingleton<ApiAssistTools>();
+// builder.Services.AddSingleton<PolicyTools>();
 
 // HTTP execution
 builder.Services.AddHttpClient();
