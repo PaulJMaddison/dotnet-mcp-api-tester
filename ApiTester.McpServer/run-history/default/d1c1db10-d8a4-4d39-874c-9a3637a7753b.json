@@ -1,0 +1,29 @@
+{
+  "RunId": "d1c1db10-d8a4-4d39-874c-9a3637a7753b",
+  "OperationId": "getUuid",
+  "StartedUtc": "2025-12-28T16:57:09.8252547+00:00",
+  "CompletedUtc": "2025-12-28T16:57:10.4513692+00:00",
+  "Result": {
+    "OperationId": "getUuid",
+    "TotalCases": 1,
+    "Passed": 1,
+    "Failed": 0,
+    "Blocked": 0,
+    "TotalDurationMs": 620,
+    "Results": [
+      {
+        "Name": "Happy path",
+        "Blocked": false,
+        "BlockReason": null,
+        "Url": "https://httpbin.org/uuid",
+        "Method": "GET",
+        "StatusCode": 200,
+        "DurationMs": 607,
+        "Pass": true,
+        "FailureReason": null,
+        "ResponseSnippet": "{\n  \u0022uuid\u0022: \u002221d596d7-b854-4273-9152-1b0e10d6f5e6\u0022\n}\n"
+      }
+    ]
+  },
+  "ProjectKey": "default"
+}

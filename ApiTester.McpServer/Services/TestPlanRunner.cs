@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using ApiTester.McpServer.Models;
+using ApiTester.McpServer.Persistence.Stores;
 using Microsoft.OpenApi.Models;
 
 namespace ApiTester.McpServer.Services;
@@ -22,10 +23,17 @@ public sealed class TestPlanRunner
         _runStore = runStore;
     }
 
-    public async Task<TestRunRecord> RunAsync(string operationId, CancellationToken ct = default)
+    // Backwards compatible entry point
+    public Task<TestRunRecord> RunAsync(string operationId, CancellationToken ct = default)
+        => RunAsync(operationId, "default", ct);
+
+    // Day 14: SaaS scoping via projectKey
+    public async Task<TestRunRecord> RunAsync(string operationId, string projectKey, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(operationId))
             throw new ArgumentException("operationId is required.", nameof(operationId));
+
+        projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
 
         var startedUtc = DateTimeOffset.UtcNow;
 
@@ -44,6 +52,7 @@ public sealed class TestPlanRunner
 
         foreach (var tc in plan.Cases)
         {
+            ct.ThrowIfCancellationRequested();
             results.Add(await RunCaseAsync(plan, tc, ct));
         }
 
@@ -69,21 +78,21 @@ public sealed class TestPlanRunner
         var record = new TestRunRecord
         {
             RunId = Guid.NewGuid(),
+            ProjectKey = projectKey,
             OperationId = operationId,
             StartedUtc = startedUtc,
             CompletedUtc = completedUtc,
             Result = result
         };
 
-        await _runStore.SaveAsync(record, ct);
+        // Day 14 store interface: SaveAsync(record) (no CancellationToken)
+        await _runStore.SaveAsync(record);
 
         return record;
-
     }
 
     private async Task<TestCaseResult> RunCaseAsync(TestPlan plan, TestCase tc, CancellationToken ct)
     {
-        // If URL template has required params but tc didn’t supply them, mark blocked deterministically
         var missing = ExtractPathParamNames(plan.PathTemplate)
             .Where(p => !tc.PathParams.ContainsKey(p))
             .ToList();
@@ -100,7 +109,6 @@ public sealed class TestPlanRunner
             };
         }
 
-        // Build URL
         var baseUrl = (_cfg.BaseUrl ?? "").TrimEnd('/');
         if (string.IsNullOrWhiteSpace(baseUrl))
         {
@@ -136,7 +144,6 @@ public sealed class TestPlanRunner
             };
         }
 
-        // Policy checks
         var policyBlock = PolicyBlockReason(uri, plan.Method);
         if (policyBlock is not null)
         {
@@ -151,19 +158,15 @@ public sealed class TestPlanRunner
             };
         }
 
-        // Execute
         var client = _httpClientFactory.CreateClient();
         using var req = new HttpRequestMessage(new HttpMethod(plan.Method), uri);
 
-        // bearer
         if (!string.IsNullOrWhiteSpace(_cfg.BearerToken))
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _cfg.BearerToken);
 
-        // headers
         foreach (var h in tc.Headers)
             req.Headers.TryAddWithoutValidation(h.Key, h.Value);
 
-        // body (not used for GET but leaving here for later)
         if (!string.IsNullOrWhiteSpace(tc.BodyJson))
         {
             req.Content = new StringContent(tc.BodyJson, Encoding.UTF8, "application/json");
@@ -220,12 +223,10 @@ public sealed class TestPlanRunner
 
     private string? PolicyBlockReason(Uri uri, string method)
     {
-        // deny-by-default on baseUrl allow list
         var allow = _cfg.Policy.AllowedBaseUrls ?? new List<string>();
         if (allow.Count == 0 && !_cfg.Policy.DryRun)
             return "No allowedBaseUrls configured, deny by default.";
 
-        // method allow list
         if (_cfg.Policy.AllowedMethods is not null &&
             _cfg.Policy.AllowedMethods.Count > 0 &&
             !_cfg.Policy.AllowedMethods.Contains(method, StringComparer.OrdinalIgnoreCase))
@@ -233,7 +234,6 @@ public sealed class TestPlanRunner
             return $"HTTP method not allowed by policy: {method}";
         }
 
-        // base url allow list (when present)
         if (allow.Count > 0)
         {
             var u = uri.ToString().TrimEnd('/');
@@ -247,7 +247,6 @@ public sealed class TestPlanRunner
                 return $"Base URL not allowed by policy: {uri.GetLeftPart(UriPartial.Authority)}";
         }
 
-        // SSRF guards
         if (_cfg.Policy.BlockLocalhost || _cfg.Policy.BlockPrivateNetworks)
         {
             var ssrf = SsrfBlockReason(uri, _cfg.Policy.BlockLocalhost, _cfg.Policy.BlockPrivateNetworks);
@@ -260,7 +259,6 @@ public sealed class TestPlanRunner
 
     private static string? SsrfBlockReason(Uri uri, bool blockLocalhost, bool blockPrivate)
     {
-        // fast hostname checks
         var host = uri.Host;
 
         if (blockLocalhost)
@@ -275,14 +273,11 @@ public sealed class TestPlanRunner
                 return "Loopback IPv6 blocked";
         }
 
-        // If it’s an IP literal we can range-check without DNS
         if (IPAddress.TryParse(host, out var ip))
         {
             return IpBlockReason(ip, blockLocalhost, blockPrivate);
         }
 
-        // For now: no DNS resolution (keeps deterministic + avoids delays)
-        // If you want DNS resolution later, we can add it behind a policy flag.
         return null;
     }
 
@@ -299,18 +294,13 @@ public sealed class TestPlanRunner
             if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
             {
                 var b = ip.GetAddressBytes();
-                // 10.0.0.0/8
                 if (b[0] == 10) return "Private IPv4 (10.0.0.0/8)";
-                // 172.16.0.0/12
                 if (b[0] == 172 && b[1] >= 16 && b[1] <= 31) return "Private IPv4 (172.16.0.0/12)";
-                // 192.168.0.0/16
                 if (b[0] == 192 && b[1] == 168) return "Private IPv4 (192.168.0.0/16)";
-                // 169.254.0.0/16 link-local (metadata range)
                 if (b[0] == 169 && b[1] == 254) return "Link-local IPv4 (includes metadata endpoint range)";
             }
             else
             {
-                // IPv6 link-local fe80::/10
                 var b = ip.GetAddressBytes();
                 if (b.Length > 0 && b[0] == 0xFE && (b[1] & 0xC0) == 0x80)
                     return "Link-local IPv6 (fe80::/10)";
@@ -337,7 +327,6 @@ public sealed class TestPlanRunner
 
     private static IEnumerable<string> ExtractPathParamNames(string pathTemplate)
     {
-        // "/status/{code}" -> ["code"]
         var names = new List<string>();
         var i = 0;
         while (i < pathTemplate.Length)

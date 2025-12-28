@@ -12,4 +12,5 @@ public sealed class TestRunRecord
     public DateTimeOffset CompletedUtc { get; set; }
 
     public TestRunResult Result { get; set; }
+    public string ProjectKey { get; init; } = "default";
 }

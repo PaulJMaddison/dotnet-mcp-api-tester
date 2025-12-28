@@ -14,11 +14,22 @@ public sealed class TestPlanTools
         _runner = runner;
     }
 
-    [McpServerTool, Description("Run a deterministic test plan for an operationId and return pass/fail report.")]
-    public async Task<object> ApiRunTestPlan(string operationId)
+    [McpServerTool, Description("Run a deterministic test plan for an operationId and return a stored run record.")]
+    public async Task<object> ApiRunTestPlan(string operationId, string? projectKey = null)
     {
-        var record = await _runner.RunAsync(operationId);
-        return record;
-    }
+        projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
 
+        // Day 14: runner should persist with projectKey (file store folders today, SQL later)
+        var record = await _runner.RunAsync(operationId, projectKey);
+
+        return new
+        {
+            record.RunId,
+            record.ProjectKey,
+            record.OperationId,
+            record.StartedUtc,
+            record.CompletedUtc,
+            record.Result
+        };
+    }
 }
