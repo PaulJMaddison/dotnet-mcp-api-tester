@@ -4,21 +4,19 @@ using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Runtime;
 using ApiTester.McpServer.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.Server;
-using System.Diagnostics;
-
-
 
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Logging.AddConsole(o =>
 {
-    o.LogToStandardErrorThreshold = Microsoft.Extensions.Logging.LogLevel.Information;
+    // MCP stdio uses stdout for protocol messages.
+    // Send logs to stderr or you'll corrupt the JSON-RPC stream.
+    o.LogToStandardErrorThreshold = LogLevel.Information;
 });
 
 var appConfig = AppConfig.Load(builder.Configuration);
@@ -31,34 +29,59 @@ builder.Services.Configure<PersistenceOptions>(builder.Configuration.GetSection(
 builder.Services.AddSingleton<OpenApiStore>();
 builder.Services.AddSingleton<ApiRuntimeConfig>();
 builder.Services.AddSingleton<SsrfGuard>();
-builder.Services.AddSingleton<TestPlanRunner>();
 
-// HTTP execution
+// IMPORTANT: scoped because it uses ITestRunStore which may be SQL (DbContext scoped)
+builder.Services.AddScoped<TestPlanRunner>();
+
 builder.Services.AddHttpClient();
 
-// Always available file store fallback
+// Always register file store (safe fallback)
 builder.Services.AddSingleton<FileTestRunStore>();
 
-// Decide persistence
-var persistence = builder.Configuration.GetSection("Persistence").Get<PersistenceOptions>() ?? new PersistenceOptions();
-var provider = (persistence.Provider ?? "File").Trim();
-var cs = (persistence.ConnectionString ?? "").Trim();
-
-var sqlEnabled = provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(cs);
-
-if (sqlEnabled)
+// DbContext (only configured when SqlServer + cs is present)
+builder.Services.AddDbContext<ApiTesterDbContext>((sp, opt) =>
 {
-    builder.Services.AddDbContext<ApiTesterDbContext>(opt => opt.UseSqlServer(cs));
+    var p = sp.GetRequiredService<IOptions<PersistenceOptions>>().Value;
+    var provider = (p.Provider ?? "File").Trim();
+    var cs = (p.ConnectionString ?? "").Trim();
 
-    // SQL backed store for runs
-    builder.Services.AddScoped<SqlTestRunStore>();
-    builder.Services.AddScoped<ITestRunStore, SqlTestRunStore>();
-}
-else
+    if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(cs))
+        opt.UseSqlServer(cs);
+});
+
+// SQL stores (scoped)
+builder.Services.AddScoped<SqlTestRunStore>();
+builder.Services.AddScoped<SqlProjectStore>();
+
+builder.Services.AddSingleton<ProjectContext>();
+
+// Choose ITestRunStore (scoped)
+builder.Services.AddScoped<ITestRunStore>(sp =>
 {
-    // File backed store
-    builder.Services.AddSingleton<ITestRunStore>(sp => sp.GetRequiredService<FileTestRunStore>());
-}
+    var p = sp.GetRequiredService<IOptions<PersistenceOptions>>().Value;
+    var provider = (p.Provider ?? "File").Trim();
+    var cs = (p.ConnectionString ?? "").Trim();
+
+    if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(cs))
+        return sp.GetRequiredService<SqlTestRunStore>();
+
+    return sp.GetRequiredService<FileTestRunStore>();
+});
+
+// Choose IProjectStore (scoped)
+builder.Services.AddScoped<IProjectStore>(sp =>
+{
+    var p = sp.GetRequiredService<IOptions<PersistenceOptions>>().Value;
+    var provider = (p.Provider ?? "File").Trim();
+    var cs = (p.ConnectionString ?? "").Trim();
+
+    if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(cs))
+        return sp.GetRequiredService<SqlProjectStore>();
+
+    // If you don't have a FileProjectStore yet, do NOT expose project tools in File mode.
+    // For now, throw a clear error.
+    throw new InvalidOperationException("Project store is only available when Persistence.Provider=SqlServer and a ConnectionString is configured.");
+});
 
 builder.Services
     .AddMcpServer()

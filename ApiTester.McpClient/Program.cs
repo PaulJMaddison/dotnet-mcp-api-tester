@@ -3,9 +3,6 @@ using System.Text.Json;
 
 static async Task<int> Main()
 {
-
-   
-
     var serverProjectPath = Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory, "..", "..", "..", "..", "ApiTester.McpServer", "ApiTester.McpServer.csproj"));
 
@@ -24,9 +21,12 @@ static async Task<int> Main()
         WorkingDirectory = Path.GetDirectoryName(serverProjectPath)! // ensures server content root is stable
     };
 
+    // Force dev so appsettings.Development.json (SQL) is used when running via the client
+    psi.Environment["DOTNET_ENVIRONMENT"] = "Development";
+    psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+
     using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start MCP server process.");
 
-    // Pipe server stderr to client stderr to aid debugging.
     _ = Task.Run(async () =>
     {
         while (!proc.StandardError.EndOfStream)
@@ -78,7 +78,6 @@ static async Task<int> Main()
         Console.WriteLine();
         Console.WriteLine(label);
 
-        // Prefer MCP "content[].text" if present (common for these tools)
         if (response.RootElement.TryGetProperty("result", out var result) &&
             result.TryGetProperty("content", out var content) &&
             content.ValueKind == JsonValueKind.Array &&
@@ -110,7 +109,6 @@ static async Task<int> Main()
 
         var reason = reasonEl.GetString() ?? "";
 
-        // Input validation blocks are expected behaviour (bad/missing params), not a product failure.
         return reason.StartsWith("Missing required path param", StringComparison.OrdinalIgnoreCase) ||
                reason.StartsWith("Missing required query param", StringComparison.OrdinalIgnoreCase) ||
                reason.StartsWith("Missing required header", StringComparison.OrdinalIgnoreCase);
@@ -118,7 +116,6 @@ static async Task<int> Main()
 
     static bool IsHttpbinFlake(JsonElement resultItem)
     {
-        // httpbin occasionally returns 502 via upstream infra. Treat as a flaky external dependency.
         if (resultItem.TryGetProperty("statusCode", out var scEl) &&
             scEl.ValueKind == JsonValueKind.Number &&
             scEl.GetInt32() == 502)
@@ -146,9 +143,6 @@ static async Task<int> Main()
         if (!response.RootElement.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Object)
             return;
 
-        // Support both shapes:
-        // - direct result { results: [...] }
-        // - record { runId, ..., result: { results: [...] } }
         JsonElement resultsContainer = result;
         if (result.TryGetProperty("result", out var inner) && inner.ValueKind == JsonValueKind.Object)
             resultsContainer = inner;
@@ -204,14 +198,12 @@ static async Task<int> Main()
         Console.WriteLine($"- flaky (httpbin 502): {flaky}");
         Console.WriteLine($"- real fails: {fail}");
 
-        // CI rule: only real fails or unexpected blocks should fail the run.
         if (fail > 0 || blockedUnexpected > 0)
             exitCode = 1;
     }
 
     static string? ExtractRunId(JsonDocument toolResponse)
     {
-        // New shape: api_run_test_plan returns a record, with result.runId
         if (toolResponse.RootElement.TryGetProperty("result", out var result) &&
             result.ValueKind == JsonValueKind.Object &&
             result.TryGetProperty("runId", out var runIdEl) &&
@@ -220,7 +212,6 @@ static async Task<int> Main()
             return runIdEl.GetString();
         }
 
-        // Older shape compatibility: some implementations might return the runId nested differently
         if (toolResponse.RootElement.TryGetProperty("result", out var legacyResult) &&
             legacyResult.ValueKind == JsonValueKind.Object &&
             legacyResult.TryGetProperty("result", out var inner) &&
@@ -234,6 +225,19 @@ static async Task<int> Main()
         return null;
     }
 
+    static string? ExtractProjectId(JsonDocument toolResponse)
+    {
+        // expected: { result: { projectId: "..." } }
+        if (toolResponse.RootElement.TryGetProperty("result", out var result) &&
+            result.ValueKind == JsonValueKind.Object &&
+            result.TryGetProperty("projectId", out var pidEl) &&
+            pidEl.ValueKind == JsonValueKind.String)
+        {
+            return pidEl.GetString();
+        }
+        return null;
+    }
+
     async Task<JsonDocument> SendAsync(object payload, int maxAttempts = 2)
     {
         var json = JsonSerializer.Serialize(payload);
@@ -243,7 +247,6 @@ static async Task<int> Main()
             await input.WriteLineAsync(json);
             await input.FlushAsync();
 
-            // MCP stdio transport is line-delimited JSON.
             var line = await output.ReadLineAsync();
             if (line is null)
             {
@@ -276,6 +279,7 @@ static async Task<int> Main()
         });
     }
 
+    // Initialize
     id++;
     var initResponse = await SendAsync(new
     {
@@ -294,6 +298,7 @@ static async Task<int> Main()
     Console.WriteLine("initialize response:");
     Console.WriteLine(Pretty(initResponse.RootElement));
 
+    // tools/list
     id++;
     var toolsList = await SendAsync(new
     {
@@ -324,21 +329,51 @@ static async Task<int> Main()
     Console.WriteLine("tools/list response:");
     Console.WriteLine(Pretty(toolsList.RootElement));
 
-    PrintSection("IMPORT OPENAPI");
-    var import = await CallToolAsync("api_import_open_api", new
+    // Day 15: persistence status (only if present)
+    if (toolNames.Contains("api_persistence_status"))
     {
-        specUrlOrPath = httpbinSpecPath
-    });
-    PrintToolTextOrRaw("api_import_open_api response:", import);
-
-    if (ToolCallIsError(import))
-    {
-        Console.WriteLine("OpenAPI import failed, stopping client run.");
-        return 1;
+        var persistenceStatus = await CallToolAsync("api_persistence_status", new { });
+        PrintToolTextOrRaw("api_persistence_status response:", persistenceStatus);
+        if (ToolCallIsError(persistenceStatus)) return 1;
     }
 
-    PrintSection("DESCRIBE OPERATIONS");
+    // Day 15: Create + set a deterministic project (only if tools exist)
+    const string projectName = "local-dev";
+    string? currentProjectId = null;
 
+    if (toolNames.Contains("api_create_project"))
+    {
+        PrintSection("PROJECT");
+
+        var createProject = await CallToolAsync("api_create_project", new { name = projectName });
+        PrintToolTextOrRaw($"api_create_project ({projectName}) response:", createProject);
+        if (ToolCallIsError(createProject)) return 1;
+
+        currentProjectId = ExtractProjectId(createProject);
+
+        if (!string.IsNullOrWhiteSpace(currentProjectId) && toolNames.Contains("api_set_current_project"))
+        {
+            var setCurrent = await CallToolAsync("api_set_current_project", new { projectId = currentProjectId });
+            PrintToolTextOrRaw($"api_set_current_project ({currentProjectId}) response:", setCurrent);
+            if (ToolCallIsError(setCurrent)) return 1;
+        }
+
+        if (toolNames.Contains("api_get_current_project"))
+        {
+            var getCurrent = await CallToolAsync("api_get_current_project", new { });
+            PrintToolTextOrRaw("api_get_current_project response:", getCurrent);
+            if (ToolCallIsError(getCurrent)) return 1;
+        }
+    }
+
+    // Import OpenAPI
+    PrintSection("IMPORT OPENAPI");
+    var import = await CallToolAsync("api_import_open_api", new { specUrlOrPath = httpbinSpecPath });
+    PrintToolTextOrRaw("api_import_open_api response:", import);
+    if (ToolCallIsError(import)) return 1;
+
+    // Describe
+    PrintSection("DESCRIBE OPERATIONS");
     var describeUuid = await CallToolAsync("api_describe_operation", new { operationId = "getUuid" });
     PrintToolTextOrRaw("api_describe_operation getUuid response:", describeUuid);
     if (ToolCallIsError(describeUuid)) return 1;
@@ -347,8 +382,8 @@ static async Task<int> Main()
     PrintToolTextOrRaw("api_describe_operation getStatus response:", describeStatus);
     if (ToolCallIsError(describeStatus)) return 1;
 
+    // Plans
     PrintSection("GENERATE TEST PLANS");
-
     var planUuid = await CallToolAsync("api_generate_test_plan", new { operationId = "getUuid" });
     PrintToolTextOrRaw("api_generate_test_plan getUuid response:", planUuid);
     if (ToolCallIsError(planUuid)) return 1;
@@ -362,6 +397,7 @@ static async Task<int> Main()
         toolNames.Contains("api_execute_test_plan") ? "api_execute_test_plan" :
         null;
 
+    // Policy + calls
     PrintSection("POLICY + CALLS");
 
     var setBaseUrl = await CallToolAsync("api_set_base_url", new { baseUrl = "https://httpbin.org" });
@@ -400,6 +436,7 @@ static async Task<int> Main()
     var setPolicyB = await CallToolAsync("api_set_policy", new { policyJson = policyJsonB });
     PrintToolTextOrRaw("api_set_policy B (allow httpbin) response:", setPolicyB);
 
+    // Run plans (with projectKey if supported)
     PrintSection("RUN TEST PLANS");
 
     var capturedRunIds = new List<string>();
@@ -408,7 +445,17 @@ static async Task<int> Main()
     {
         Console.WriteLine($"Using tool: {runToolName}");
 
-        var runUuid = await CallToolAsync(runToolName, new { operationId = "getUuid" });
+        object RunArgs(string opId)
+        {
+            // api_run_test_plan input schema includes projectKey (optional) in your output
+            if (toolNames.Contains("api_run_test_plan"))
+            {
+                return new { operationId = opId, projectKey = projectName };
+            }
+            return new { operationId = opId };
+        }
+
+        var runUuid = await CallToolAsync(runToolName, RunArgs("getUuid"));
         PrintToolTextOrRaw($"{runToolName} getUuid response:", runUuid);
         if (ToolCallIsError(runUuid)) return 1;
 
@@ -426,7 +473,7 @@ static async Task<int> Main()
 
         SummariseRunTestPlan("getUuid", runUuid);
 
-        var runStatus = await CallToolAsync(runToolName, new { operationId = "getStatus" });
+        var runStatus = await CallToolAsync(runToolName, RunArgs("getStatus"));
         PrintToolTextOrRaw($"{runToolName} getStatus response:", runStatus);
         if (ToolCallIsError(runStatus)) return 1;
 
@@ -449,15 +496,18 @@ static async Task<int> Main()
         Console.WriteLine("No test execution tool present (expected one of: api_run_test_plan, api_execute_test_plan).");
     }
 
+    // Run history (with projectKey filter)
     if (toolNames.Contains("api_list_runs"))
     {
         PrintSection("RUN HISTORY");
 
-        var listRuns = await CallToolAsync("api_list_runs", new { take = 10 });
-        PrintToolTextOrRaw("api_list_runs response:", listRuns);
+        // your schema shows projectKey + operationId are optional
+        var listRuns = await CallToolAsync("api_list_runs", new { take = 10, projectKey = projectName });
+        PrintToolTextOrRaw($"api_list_runs (projectKey={projectName}) response:", listRuns);
         if (ToolCallIsError(listRuns)) return 1;
     }
 
+    // Other calls
     var callB1 = await CallToolAsync("api_call_operation", new { operationId = "getUuid" });
     PrintToolTextOrRaw("api_call_operation getUuid response:", callB1);
 
