@@ -18,9 +18,16 @@ public sealed class SqlProjectStore : IProjectStore
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Project name is required.", nameof(name));
 
+        var key = ToProjectKey(name);
+
+        var exists = await _db.Projects.AsNoTracking().AnyAsync(x => x.ProjectKey == key, ct);
+        if (exists)
+            throw new InvalidOperationException($"ProjectKey already exists: {key}");
+
         var entity = new ProjectEntity
         {
             ProjectId = Guid.NewGuid(),
+            ProjectKey = key,
             Name = name,
             CreatedUtc = DateTime.UtcNow
         };
@@ -29,6 +36,21 @@ public sealed class SqlProjectStore : IProjectStore
         await _db.SaveChangesAsync(ct);
 
         return entity.ProjectId;
+    }
+
+    private static string ToProjectKey(string name)
+    {
+        // Simple, deterministic slug
+        var s = name.Trim().ToLowerInvariant();
+        var chars = s.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray();
+        var key = new string(chars);
+
+        while (key.Contains("--", StringComparison.Ordinal))
+            key = key.Replace("--", "-", StringComparison.Ordinal);
+
+        key = key.Trim('-');
+
+        return string.IsNullOrWhiteSpace(key) ? "default" : key;
     }
 
     public async Task<object> ListAsync(int take, CancellationToken ct)
@@ -43,6 +65,7 @@ public sealed class SqlProjectStore : IProjectStore
             {
                 projectId = x.ProjectId,
                 name = x.Name,
+                projectKey = x.ProjectKey,
                 createdUtc = x.CreatedUtc
             })
             .ToListAsync(ct);

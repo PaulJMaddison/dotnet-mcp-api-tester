@@ -7,5 +7,5 @@ public sealed class ProjectEntity
     public DateTime CreatedUtc { get; set; }
 
     public List<TestRunEntity> Runs { get; set; } = new();   
-    public string ProjectKey { get; set; } = "default";
+    public string ProjectKey { get; set; } = "";
 }
