@@ -1,0 +1,87 @@
+body {
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: #1f2937;
+    background-color: #f8fafc;
+}
+
+.site-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.site-header .navbar-brand {
+    letter-spacing: 0.3px;
+}
+
+.hero-section .image-placeholder,
+.page-hero .image-placeholder,
+.image-placeholder {
+    background: linear-gradient(135deg, #dbeafe, #f1f5f9);
+    border: 1px dashed #94a3b8;
+    min-height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+    color: #475569;
+}
+
+.cta-section {
+    background: linear-gradient(120deg, #2563eb, #1d4ed8);
+}
+
+.feature-card,
+.stat-card,
+.doc-section,
+.contact-card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    height: 100%;
+}
+
+.pricing-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 12px;
+    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
+}
+
+.pricing-card.featured {
+    border: 2px solid #2563eb;
+    box-shadow: 0 20px 40px rgba(37, 99, 235, 0.2);
+}
+
+.pricing-card .badge {
+    font-size: 0.75rem;
+}
+
+.doc-list {
+    padding-left: 1.2rem;
+}
+
+.doc-sidebar {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.contact-form {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+.footer-link {
+    color: #e2e8f0;
+    text-decoration: none;
+}
+
+.footer-link:hover {
+    text-decoration: underline;
+}

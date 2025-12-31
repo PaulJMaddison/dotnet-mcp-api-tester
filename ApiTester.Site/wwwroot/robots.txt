@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://apitester.example.com/sitemap.xml
