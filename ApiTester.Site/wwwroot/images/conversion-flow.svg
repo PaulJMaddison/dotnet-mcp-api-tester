@@ -1,36 +1,54 @@
 <svg width="720" height="360" viewBox="0 0 720 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="flowGradient" x1="48" y1="128" x2="672" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E2E8F0" />
+      <stop offset="1" stop-color="#CBD5F5" />
+    </linearGradient>
+  </defs>
   <rect width="720" height="360" rx="28" fill="#F8FAFC" />
   <rect x="32" y="32" width="656" height="296" rx="20" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2" />
-  <text x="64" y="82" font-family="Inter, sans-serif" font-size="20" font-weight="700" fill="#0F172A">Conversion workflow</text>
-  <text x="64" y="112" font-family="Inter, sans-serif" font-size="14" fill="#475569">From first touch to launch-ready test plans.</text>
 
-  <g font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#0F172A">
-    <rect x="64" y="150" width="130" height="66" rx="14" fill="#EFF6FF" stroke="#93C5FD" stroke-width="2" />
-    <text x="82" y="188">Lead intake</text>
-
-    <rect x="230" y="150" width="130" height="66" rx="14" fill="#ECFDF3" stroke="#6EE7B7" stroke-width="2" />
-    <text x="252" y="188">API audit</text>
-
-    <rect x="396" y="150" width="130" height="66" rx="14" fill="#FEF3C7" stroke="#FCD34D" stroke-width="2" />
-    <text x="418" y="188">Test plan</text>
-
-    <rect x="562" y="150" width="130" height="66" rx="14" fill="#E0E7FF" stroke="#A5B4FC" stroke-width="2" />
-    <text x="592" y="188">Launch</text>
+  <g stroke="#E2E8F0" stroke-width="1">
+    <path d="M80 120H640" />
+    <path d="M80 250H640" />
+    <path d="M120 96V288" />
+    <path d="M600 96V288" />
   </g>
 
-  <g stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M196 183H224" />
-    <path d="M362 183H390" />
-    <path d="M528 183H556" />
-    <path d="M214 175L224 183L214 191" />
-    <path d="M380 175L390 183L380 191" />
-    <path d="M546 175L556 183L546 191" />
+  <text x="64" y="82" font-family="Inter, sans-serif" font-size="20" font-weight="700" fill="#0F172A">Conversion workflow</text>
+  <text x="64" y="112" font-family="Inter, sans-serif" font-size="14" fill="#475569">Wire your intake to a launch-ready test plan.</text>
+
+  <path d="M115 190H605" stroke="url(#flowGradient)" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 10" />
+
+  <g font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#0F172A">
+    <rect x="64" y="152" width="140" height="76" rx="16" fill="#F1F5F9" stroke="#94A3B8" stroke-width="2" />
+    <text x="86" y="188">Lead intake</text>
+    <text x="86" y="208" font-size="12" font-weight="500" fill="#64748B">Signal capture</text>
+
+    <rect x="228" y="152" width="140" height="76" rx="16" fill="#EEF2FF" stroke="#818CF8" stroke-width="2" />
+    <text x="256" y="188">API audit</text>
+    <text x="256" y="208" font-size="12" font-weight="500" fill="#6366F1">Risk scan</text>
+
+    <rect x="392" y="152" width="140" height="76" rx="16" fill="#ECFDF3" stroke="#34D399" stroke-width="2" />
+    <text x="418" y="188">Test plan</text>
+    <text x="418" y="208" font-size="12" font-weight="500" fill="#059669">Scenario map</text>
+
+    <rect x="556" y="152" width="120" height="76" rx="16" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2" />
+    <text x="578" y="188">Launch</text>
+    <text x="578" y="208" font-size="12" font-weight="500" fill="#B45309">Go-live</text>
+  </g>
+
+  <g fill="#94A3B8">
+    <circle cx="118" cy="190" r="6" />
+    <circle cx="298" cy="190" r="6" />
+    <circle cx="462" cy="190" r="6" />
+    <circle cx="616" cy="190" r="6" />
   </g>
 
   <g font-family="Inter, sans-serif" font-size="12" fill="#64748B">
-    <text x="74" y="242">Discovery call</text>
-    <text x="240" y="242">Risk review</text>
-    <text x="406" y="242">Scenario build</text>
-    <text x="572" y="242">Go-live</text>
+    <text x="74" y="268">Discovery call</text>
+    <text x="240" y="268">Environment audit</text>
+    <text x="404" y="268">Coverage goals</text>
+    <text x="570" y="268">Release gating</text>
   </g>
 </svg>
