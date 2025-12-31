@@ -1,4 +1,5 @@
 ﻿using ApiTester.McpServer.Models;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace ApiTester.McpServer.Persistence.Stores;
@@ -6,15 +7,17 @@ namespace ApiTester.McpServer.Persistence.Stores;
 public sealed class FileTestRunStore : ITestRunStore
 {
     private readonly AppConfig _cfg;
+    private readonly ILogger<FileTestRunStore> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true
     };
 
-    public FileTestRunStore(AppConfig cfg)
+    public FileTestRunStore(AppConfig cfg, ILogger<FileTestRunStore> logger)
     {
         _cfg = cfg;
+        _logger = logger;
     }
 
     private string RootPath => Path.Combine(_cfg.WorkingDirectory, "run-history");
@@ -30,13 +33,19 @@ public sealed class FileTestRunStore : ITestRunStore
 
     public async Task SaveAsync(TestRunRecord record)
     {
-        Console.Error.WriteLine("[server] Saving to file store...");
+        if (record is null) throw new ArgumentNullException(nameof(record));
         var ownerKey = string.IsNullOrWhiteSpace(record.OwnerKey) ? OwnerKeyDefaults.Default : record.OwnerKey.Trim();
         var projectKey = string.IsNullOrWhiteSpace(record.ProjectKey) ? "default" : record.ProjectKey.Trim();
 
         Directory.CreateDirectory(ProjectPath(ownerKey, projectKey));
 
         var path = RunFilePath(ownerKey, projectKey, record.RunId);
+        _logger.LogInformation(
+            "Saving run {RunId} for owner {OwnerKey} project {ProjectKey} to {Path}",
+            record.RunId,
+            ownerKey,
+            projectKey,
+            path);
         var json = JsonSerializer.Serialize(record, JsonOptions);
 
         await File.WriteAllTextAsync(path, json);
