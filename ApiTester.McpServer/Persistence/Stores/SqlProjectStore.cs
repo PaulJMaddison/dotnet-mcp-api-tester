@@ -21,9 +21,12 @@ public sealed class SqlProjectStore : IProjectStore
 
         var key = ProjectKeyGenerator.FromName(name);
 
-        var exists = await _db.Projects.AsNoTracking().AnyAsync(x => x.ProjectKey == key, ct);
-        if (exists)
-            throw new InvalidOperationException($"ProjectKey already exists: {key}");
+        var existing = await _db.Projects.AsNoTracking()
+            .Where(x => x.ProjectKey == key)
+            .Select(x => new ProjectRecord(x.ProjectId, x.Name, x.ProjectKey, x.CreatedUtc))
+            .FirstOrDefaultAsync(ct);
+        if (existing is not null)
+            return existing;
 
         var entity = new ProjectEntity
         {
@@ -34,9 +37,22 @@ public sealed class SqlProjectStore : IProjectStore
         };
 
         _db.Projects.Add(entity);
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+            return new ProjectRecord(entity.ProjectId, entity.Name, entity.ProjectKey, entity.CreatedUtc);
+        }
+        catch (DbUpdateException)
+        {
+            var fallback = await _db.Projects.AsNoTracking()
+                .Where(x => x.ProjectKey == key)
+                .Select(x => new ProjectRecord(x.ProjectId, x.Name, x.ProjectKey, x.CreatedUtc))
+                .FirstOrDefaultAsync(ct);
+            if (fallback is not null)
+                return fallback;
 
-        return new ProjectRecord(entity.ProjectId, entity.Name, entity.ProjectKey, entity.CreatedUtc);
+            throw;
+        }
     }
 
     public async Task<IReadOnlyList<ProjectRecord>> ListAsync(int take, CancellationToken ct)

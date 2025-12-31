@@ -3,7 +3,6 @@ using ApiTester.McpServer.Persistence.Stores;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace ApiTester.McpServer.Persistence;
 
@@ -11,47 +10,34 @@ public static class PersistenceServiceCollectionExtensions
 {
     public static IServiceCollection AddApiTesterPersistence(this IServiceCollection services, IConfiguration configuration)
     {
+        var options = configuration.GetSection("Persistence").Get<PersistenceOptions>() ?? new PersistenceOptions();
+        var selection = PersistenceProviderSelector.Select(options);
+
         services.Configure<PersistenceOptions>(configuration.GetSection("Persistence"));
 
         services.AddSingleton<FileTestRunStore>();
         services.AddSingleton<FileProjectStore>();
 
-        services.AddDbContext<ApiTesterDbContext>((sp, opt) =>
+        if (selection.UseSqlProvider)
         {
-            var p = sp.GetRequiredService<IOptions<PersistenceOptions>>().Value;
-            var provider = (p.Provider ?? "File").Trim();
-            var cs = (p.ConnectionString ?? "").Trim();
+            services.AddDbContext<ApiTesterDbContext>(opt =>
+            {
+                if (selection.Provider == PersistenceProvider.SqlServer)
+                    opt.UseSqlServer(selection.ConnectionString);
+                else if (selection.Provider == PersistenceProvider.Sqlite)
+                    opt.UseSqlite(selection.ConnectionString);
+            });
 
-            if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(cs))
-                opt.UseSqlServer(cs);
-        });
-
-        services.AddScoped<SqlTestRunStore>();
-        services.AddScoped<SqlProjectStore>();
-
-        services.AddScoped<ITestRunStore>(sp =>
+            services.AddScoped<SqlTestRunStore>();
+            services.AddScoped<SqlProjectStore>();
+            services.AddScoped<ITestRunStore>(sp => sp.GetRequiredService<SqlTestRunStore>());
+            services.AddScoped<IProjectStore>(sp => sp.GetRequiredService<SqlProjectStore>());
+        }
+        else
         {
-            var p = sp.GetRequiredService<IOptions<PersistenceOptions>>().Value;
-            var provider = (p.Provider ?? "File").Trim();
-            var cs = (p.ConnectionString ?? "").Trim();
-
-            if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(cs))
-                return sp.GetRequiredService<SqlTestRunStore>();
-
-            return sp.GetRequiredService<FileTestRunStore>();
-        });
-
-        services.AddScoped<IProjectStore>(sp =>
-        {
-            var p = sp.GetRequiredService<IOptions<PersistenceOptions>>().Value;
-            var provider = (p.Provider ?? "File").Trim();
-            var cs = (p.ConnectionString ?? "").Trim();
-
-            if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(cs))
-                return sp.GetRequiredService<SqlProjectStore>();
-
-            return sp.GetRequiredService<FileProjectStore>();
-        });
+            services.AddSingleton<ITestRunStore>(sp => sp.GetRequiredService<FileTestRunStore>());
+            services.AddSingleton<IProjectStore>(sp => sp.GetRequiredService<FileProjectStore>());
+        }
 
         return services;
     }
