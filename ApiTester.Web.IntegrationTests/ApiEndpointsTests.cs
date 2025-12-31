@@ -263,6 +263,65 @@ public class ApiEndpointsTests
     }
 
     [Fact]
+    public async Task ExecuteTestPlan_RunsAndStoresResult_WithHttpbinSpec()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "RunNow", "runnow");
+        var specJson = await File.ReadAllTextAsync(GetHttpbinSpecPath());
+        await SeedSpecAsync(factory, project, specJson);
+
+        var client = factory.CreateClient();
+        var response = await client.PostAsync($"/api/projects/{project.ProjectId}/runs/execute/getUuid", null);
+        var payload = await response.Content.ReadFromJsonAsync<RunDetailDto>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal("getUuid", payload!.OperationId);
+        Assert.NotEqual(Guid.Empty, payload.RunId);
+
+        var storedRun = await client.GetFromJsonAsync<RunDetailDto>($"/api/runs/{payload.RunId}");
+        Assert.NotNull(storedRun);
+
+        var storedPlan = await client.GetFromJsonAsync<TestPlanResponse>($"/api/projects/{project.ProjectId}/testplans/getUuid");
+        Assert.NotNull(storedPlan);
+
+        Assert.True(payload.Result.TryGetProperty("results", out var results));
+        Assert.Equal(JsonValueKind.Array, results.ValueKind);
+
+        var pass = 0;
+        var blocked = 0;
+        var flaky = 0;
+        var fail = 0;
+
+        foreach (var item in results.EnumerateArray())
+        {
+            if (item.TryGetProperty("blocked", out var blockedEl) && blockedEl.ValueKind == JsonValueKind.True)
+            {
+                blocked++;
+                continue;
+            }
+
+            if (item.TryGetProperty("pass", out var passEl) && passEl.ValueKind == JsonValueKind.True)
+            {
+                pass++;
+                continue;
+            }
+
+            if (IsHttpbinFlake(item))
+            {
+                flaky++;
+                continue;
+            }
+
+            fail++;
+        }
+
+        Assert.Equal(0, blocked);
+        Assert.Equal(0, fail);
+        Assert.True(pass + flaky > 0);
+    }
+
+    [Fact]
     public async Task GetProjects_PaginatesWithNextPageToken()
     {
         using var factory = new ApiTesterWebFactory();
@@ -433,6 +492,43 @@ public class ApiEndpointsTests
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         content.Add(fileContent, "file", "openapi.json");
         return content;
+    }
+
+    private static string GetHttpbinSpecPath()
+    {
+        return Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..",
+            "..",
+            "..",
+            "..",
+            "ApiTester.McpClient",
+            "Specs",
+            "httpbin.openapi.json"));
+    }
+
+    private static bool IsHttpbinFlake(JsonElement resultItem)
+    {
+        if (resultItem.TryGetProperty("statusCode", out var scEl) &&
+            scEl.ValueKind == JsonValueKind.Number &&
+            scEl.GetInt32() == 502)
+            return true;
+
+        if (resultItem.TryGetProperty("responseSnippet", out var snipEl) && snipEl.ValueKind == JsonValueKind.String)
+        {
+            var snip = snipEl.GetString() ?? "";
+            if (snip.Contains("502 Bad Gateway", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        if (resultItem.TryGetProperty("failureReason", out var failEl) && failEl.ValueKind == JsonValueKind.String)
+        {
+            var fail = failEl.GetString() ?? "";
+            if (fail.Contains("but got 502", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     private static string BuildSpecJson(string operationId)

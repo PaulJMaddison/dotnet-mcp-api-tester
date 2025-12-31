@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using ApiTester.McpServer.Models;
@@ -14,13 +13,20 @@ public sealed class TestPlanRunner
     private readonly ApiRuntimeConfig _cfg;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITestRunStore _runStore;
+    private readonly SsrfGuard _ssrfGuard;
 
-    public TestPlanRunner(OpenApiStore store, ApiRuntimeConfig cfg, IHttpClientFactory httpClientFactory, ITestRunStore runStore)
+    public TestPlanRunner(
+        OpenApiStore store,
+        ApiRuntimeConfig cfg,
+        IHttpClientFactory httpClientFactory,
+        ITestRunStore runStore,
+        SsrfGuard ssrfGuard)
     {
         _store = store;
         _cfg = cfg;
         _httpClientFactory = httpClientFactory;
         _runStore = runStore;
+        _ssrfGuard = ssrfGuard;
     }
 
     // Backwards compatible entry point
@@ -35,8 +41,6 @@ public sealed class TestPlanRunner
 
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
 
-        var startedUtc = DateTimeOffset.UtcNow;
-
         var doc = _store.RequireDocument();
         var match = FindOperation(doc, operationId);
 
@@ -46,6 +50,20 @@ public sealed class TestPlanRunner
         var (path, method, op) = match.Value;
 
         var plan = TestPlanFactory.Create(op, method, path, operationId);
+        return await RunPlanAsync(plan, projectKey, ct);
+    }
+
+    public async Task<TestRunRecord> RunPlanAsync(TestPlan plan, string projectKey, CancellationToken ct = default)
+    {
+        if (plan is null)
+            throw new ArgumentNullException(nameof(plan));
+
+        if (string.IsNullOrWhiteSpace(plan.OperationId))
+            throw new InvalidOperationException("Test plan missing operationId.");
+
+        projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
+
+        var startedUtc = DateTimeOffset.UtcNow;
 
         var swTotal = Stopwatch.StartNew();
         var results = new List<TestCaseResult>();
@@ -66,7 +84,7 @@ public sealed class TestPlanRunner
 
         var result = new TestRunResult
         {
-            OperationId = operationId,
+            OperationId = plan.OperationId.Trim(),
             TotalCases = results.Count,
             Passed = passed,
             Failed = failed,
@@ -79,7 +97,7 @@ public sealed class TestPlanRunner
         {
             RunId = Guid.NewGuid(),
             ProjectKey = projectKey,
-            OperationId = operationId,
+            OperationId = plan.OperationId.Trim(),
             StartedUtc = startedUtc,
             CompletedUtc = completedUtc,
             Result = result
@@ -144,7 +162,7 @@ public sealed class TestPlanRunner
             };
         }
 
-        var policyBlock = PolicyBlockReason(uri, plan.Method);
+        var policyBlock = await PolicyBlockReasonAsync(uri, plan.Method, baseUrl, ct);
         if (policyBlock is not null)
         {
             return new TestCaseResult
@@ -159,6 +177,7 @@ public sealed class TestPlanRunner
         }
 
         var client = _httpClientFactory.CreateClient();
+        client.Timeout = _cfg.Policy.Timeout;
         using var req = new HttpRequestMessage(new HttpMethod(plan.Method), uri);
 
         if (!string.IsNullOrWhiteSpace(_cfg.BearerToken))
@@ -221,7 +240,7 @@ public sealed class TestPlanRunner
         }
     }
 
-    private string? PolicyBlockReason(Uri uri, string method)
+    private async Task<string?> PolicyBlockReasonAsync(Uri uri, string method, string baseUrl, CancellationToken ct)
     {
         var allow = _cfg.Policy.AllowedBaseUrls ?? new List<string>();
         if (allow.Count == 0 && !_cfg.Policy.DryRun)
@@ -236,7 +255,7 @@ public sealed class TestPlanRunner
 
         if (allow.Count > 0)
         {
-            var u = uri.ToString().TrimEnd('/');
+            var u = baseUrl.Trim().TrimEnd('/');
             var ok = allow.Any(a =>
             {
                 var aa = (a ?? "").Trim().TrimEnd('/');
@@ -244,67 +263,19 @@ public sealed class TestPlanRunner
             });
 
             if (!ok)
-                return $"Base URL not allowed by policy: {uri.GetLeftPart(UriPartial.Authority)}";
+                return $"Base URL not allowed by policy: {u}";
         }
 
         if (_cfg.Policy.BlockLocalhost || _cfg.Policy.BlockPrivateNetworks)
         {
-            var ssrf = SsrfBlockReason(uri, _cfg.Policy.BlockLocalhost, _cfg.Policy.BlockPrivateNetworks);
-            if (ssrf is not null)
-                return ssrf;
-        }
+            var (allowed, reason) = await _ssrfGuard.CheckAsync(
+                uri,
+                _cfg.Policy.BlockLocalhost,
+                _cfg.Policy.BlockPrivateNetworks,
+                ct);
 
-        return null;
-    }
-
-    private static string? SsrfBlockReason(Uri uri, bool blockLocalhost, bool blockPrivate)
-    {
-        var host = uri.Host;
-
-        if (blockLocalhost)
-        {
-            if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
-                return "Localhost blocked";
-
-            if (string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase))
-                return "Loopback IPv4 blocked";
-
-            if (string.Equals(host, "::1", StringComparison.OrdinalIgnoreCase))
-                return "Loopback IPv6 blocked";
-        }
-
-        if (IPAddress.TryParse(host, out var ip))
-        {
-            return IpBlockReason(ip, blockLocalhost, blockPrivate);
-        }
-
-        return null;
-    }
-
-    private static string? IpBlockReason(IPAddress ip, bool blockLocalhost, bool blockPrivate)
-    {
-        if (blockLocalhost)
-        {
-            if (IPAddress.IsLoopback(ip))
-                return "Loopback IP blocked";
-        }
-
-        if (blockPrivate)
-        {
-            if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-            {
-                var b = ip.GetAddressBytes();
-                if (b[0] == 10) return "Private IPv4 (10.0.0.0/8)";
-                if (b[0] == 172 && b[1] >= 16 && b[1] <= 31) return "Private IPv4 (172.16.0.0/12)";
-                if (b[0] == 192 && b[1] == 168) return "Private IPv4 (192.168.0.0/16)";
-                if (b[0] == 169 && b[1] == 254) return "Link-local IPv4 (includes metadata endpoint range)";
-            }
-            else
-            {
-                var b = ip.GetAddressBytes();
-                if (b.Length > 0 && b[0] == 0xFE && (b[1] & 0xC0) == 0x80)
-                    return "Link-local IPv6 (fe80::/10)";
-            }
+            if (!allowed && !_cfg.Policy.DryRun)
+                return reason ?? "Blocked by SSRF policy.";
         }
 
         return null;
