@@ -26,6 +26,22 @@ public class ProjectRunsPageTests
     }
 
     [Fact]
+    public async Task GetProjectRuns_RendersTopNavigation()
+    {
+        var projectId = Guid.NewGuid();
+        var handler = new FakeHttpMessageHandler(request => BuildResponse(request, projectId));
+
+        await using var factory = CreateFactory(handler);
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/projects/{projectId}");
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("<a href=\"/\">Projects</a>", content);
+    }
+
+    [Fact]
     public async Task GetProjectRuns_WithOperationIdFilter_UsesOperationIdQuery()
     {
         var projectId = Guid.NewGuid();

@@ -27,6 +27,22 @@ public class RunDetailsPageTests
     }
 
     [Fact]
+    public async Task GetRunDetails_RendersTopNavigation()
+    {
+        var runId = Guid.NewGuid();
+        var handler = new FakeHttpMessageHandler(request => BuildResponse(request, runId));
+
+        await using var factory = CreateFactory(handler);
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/runs/{runId}");
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("<a href=\"/\">Projects</a>", content);
+    }
+
+    [Fact]
     public async Task GetRunDetails_RendersCaseResultsTableHeaders()
     {
         var runId = Guid.NewGuid();

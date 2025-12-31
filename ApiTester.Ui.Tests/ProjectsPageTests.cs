@@ -23,6 +23,19 @@ public class ProjectsPageTests
     }
 
     [Fact]
+    public async Task GetRoot_RendersTopNavigation()
+    {
+        await using var factory = new WebApplicationFactory<Program>();
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/");
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("<a href=\"/\">Projects</a>", content);
+    }
+
+    [Fact]
     public async Task GetRoot_WithEmptyProjects_ShowsEmptyState()
     {
         await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
@@ -57,6 +70,35 @@ public class ProjectsPageTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("No projects yet, create one by running the client or API.", content);
+    }
+
+    [Fact]
+    public async Task GetRoot_WhenApiFails_ShowsErrorPanel()
+    {
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<ApiTesterWebClient>();
+
+                var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
+                var httpClient = new HttpClient(handler)
+                {
+                    BaseAddress = new Uri("http://localhost")
+                };
+
+                services.AddSingleton(new ApiTesterWebClient(httpClient));
+            });
+        });
+
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/");
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("We couldn't load projects right now. Please try again.", content);
+        Assert.Contains("error-state", content);
     }
 
     private sealed class FakeHttpMessageHandler : HttpMessageHandler
