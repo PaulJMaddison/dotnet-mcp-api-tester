@@ -41,6 +41,29 @@ public class ApiEndpointsTests
     }
 
     [Fact]
+    public async Task PostProjects_ReturnsExisting_WhenProjectKeyExists()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var client = factory.CreateClient();
+
+        var first = await client.PostAsJsonAsync("/api/projects", new { name = "Echo" });
+        var firstPayload = await first.Content.ReadFromJsonAsync<ProjectCreateResponse>();
+
+        var second = await client.PostAsJsonAsync("/api/projects", new { name = "Echo" });
+        var secondPayload = await second.Content.ReadFromJsonAsync<ProjectCreateResponse>();
+
+        var list = await client.GetFromJsonAsync<ProjectListResponse>("/api/projects?take=10");
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.NotNull(firstPayload);
+        Assert.NotNull(secondPayload);
+        Assert.Equal(firstPayload!.ProjectId, secondPayload!.ProjectId);
+        Assert.NotNull(list);
+        Assert.Equal(1, list!.Projects.Count);
+    }
+
+    [Fact]
     public async Task GetProject_ReturnsNotFound_WhenMissing()
     {
         using var factory = new ApiTesterWebFactory();
