@@ -6,7 +6,7 @@
 }
 
 @section Breadcrumb {
-    <a href="/Projects">Projects</a>
+    <a href="/">Projects</a>
 }
 
 <h1>Projects</h1>
@@ -42,7 +42,7 @@ else
                 <tr>
                     <td>@(string.IsNullOrWhiteSpace(project.Name) ? "Untitled Project" : project.Name)</td>
                     <td>
-                        <a href="/Runs?projectKey=@project.ProjectKey">@project.ProjectKey</a>
+                        <a href="/projects/@project.ProjectId">@project.ProjectKey</a>
                     </td>
                     <td>@DisplayFormatters.FormatUtc(project.CreatedUtc)</td>
                     <td>@project.ProjectId</td>
