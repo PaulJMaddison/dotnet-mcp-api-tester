@@ -2,7 +2,7 @@
 
 <section class="page-hero bg-light py-5">
     <div class="container">
-        <h1 class="display-5 fw-bold">Security and compliance</h1>
+        <h1 class="display-5 fw-bold">Security and trust</h1>
         <p class="lead">ApiTester is designed to protect API data with layered controls, transparent audits, and enterprise-ready governance.</p>
     </div>
 </section>
@@ -14,33 +14,29 @@
                 <h2 class="h4 fw-bold">Platform safeguards</h2>
                 <p>We combine encryption, least-privilege access, and continuous monitoring to keep your environments secure.</p>
                 <ul class="list-unstyled">
-                    <li class="mb-2">✅ Encryption at rest and in transit with rotating keys</li>
-                    <li class="mb-2">✅ Dedicated audit trails for test runs and configuration changes</li>
-                    <li class="mb-2">✅ IP allowlists, SSO, and MFA for privileged users</li>
+                    <li class="mb-2">Encryption at rest and in transit with rotating keys.</li>
+                    <li class="mb-2">Audit trails for test runs, deployments, and configuration changes.</li>
+                    <li class="mb-2">IP allowlists, SSO, and MFA for privileged users.</li>
                 </ul>
             </div>
             <div class="col-lg-6">
-                <img class="img-fluid rounded-4 shadow-sm" src="images/hero-illustration.svg" alt="Illustration of the ApiTester security dashboard" />
+                <h2 class="h4 fw-bold">SSRF protections</h2>
+                <p>We block server-side request forgery by constraining outbound calls to approved targets, validating DNS resolution, and rejecting requests that resolve to private, loopback, or metadata endpoints.</p>
+                <p>Every connector enforces allowlists, rate limits, and request size limits so test traffic cannot be used to pivot into internal networks.</p>
             </div>
         </div>
         <div class="row g-4 mt-3">
             <div class="col-md-4">
-                <div class="stat-card">
-                    <h3 class="h6 text-uppercase">Compliance</h3>
-                    <p>Aligned with SOC 2 Type II practices and privacy-first data handling.</p>
-                </div>
+                <h3 class="h6 text-uppercase">Data retention</h3>
+                <p>Test payloads are stored only for the retention window you configure. You can purge runs on demand, export records, or set automated deletion schedules.</p>
             </div>
             <div class="col-md-4">
-                <div class="stat-card">
-                    <h3 class="h6 text-uppercase">Infrastructure</h3>
-                    <p>Multi-region hosting with automated failover and daily backups.</p>
-                </div>
+                <h3 class="h6 text-uppercase">Audit trail</h3>
+                <p>Every action is logged with actor, timestamp, and environment context. Audit logs are immutable and exportable for compliance reporting.</p>
             </div>
             <div class="col-md-4">
-                <div class="stat-card">
-                    <h3 class="h6 text-uppercase">Incident response</h3>
-                    <p>24/7 response with runbooks, postmortems, and customer status updates.</p>
-                </div>
+                <h3 class="h6 text-uppercase">Responsible disclosure</h3>
+                <p>We welcome security reports via our disclosure program and acknowledge findings within one business day. Verified issues receive remediation timelines and status updates.</p>
             </div>
         </div>
     </div>
