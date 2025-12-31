@@ -12,11 +12,18 @@ using ApiTester.Web.Execution;
 using ApiTester.Web.Auth;
 using ApiTester.Web.Mapping;
 using ApiTester.Web.Validation;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Readers;
+using WebOpenApiImportLimits = ApiTester.Web.OpenApiImportLimits;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = WebOpenApiImportLimits.MaxRequestBodyBytes;
+});
 
 var appConfig = AppConfig.Load(builder.Configuration);
 builder.Services.AddSingleton(appConfig);
@@ -82,6 +89,25 @@ builder.Services.AddSingleton(new ApiKeyAuthSettings(allowedKeys));
 
 var app = builder.Build();
 
+var exceptionLogger = app.Services.GetRequiredService<ILoggerFactory>()
+    .CreateLogger("ApiTester.Web.Exceptions");
+
+app.UseExceptionHandler(config =>
+{
+    config.Run(async context =>
+    {
+        var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+        exceptionLogger.LogError(exception, "Unhandled exception while processing request.");
+
+        var problem = Results.Problem(
+            title: "Server error",
+            detail: "An unexpected error occurred.",
+            statusCode: StatusCodes.Status500InternalServerError);
+
+        await problem.ExecuteAsync(context);
+    });
+});
+
 app.UseMiddleware<CorrelationIdMiddleware>();
 
 app.UseSwagger();
@@ -90,6 +116,30 @@ app.UseSwaggerUI();
 app.UseWhen(
     context => context.Request.Path.StartsWithSegments("/api"),
     builder => builder.UseMiddleware<ApiKeyAuthMiddleware>());
+
+app.UseWhen(context => context.Request.Path.StartsWithSegments("/api"), branch =>
+{
+    branch.Use(async (context, next) =>
+    {
+        var path = context.Request.Path.Value ?? string.Empty;
+        var limit = path.EndsWith("/openapi/import", StringComparison.OrdinalIgnoreCase)
+            ? WebOpenApiImportLimits.MaxRequestBodyBytes
+            : RequestBodyLimits.MaxRequestBodyBytes;
+
+        if (context.Request.ContentLength.HasValue && context.Request.ContentLength.Value > limit)
+        {
+            var problem = Results.Problem(
+                title: "Request too large",
+                detail: $"Request body must be <= {limit} bytes.",
+                statusCode: StatusCodes.Status413PayloadTooLarge);
+
+            await problem.ExecuteAsync(context);
+            return;
+        }
+
+        await next();
+    });
+});
 
 app.MapGet("/health", (IHostEnvironment env, IOptions<PersistenceOptions> options) =>
 {
@@ -166,8 +216,8 @@ app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId,
         if (file is not null)
         {
             specSource = "upload";
-            if (file.Length > OpenApiImportLimits.MaxSpecBytes)
-                return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {OpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+            if (file.Length > WebOpenApiImportLimits.MaxSpecBytes)
+                return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
 
             await using var stream = file.OpenReadStream();
             using var reader = new StreamReader(stream, Encoding.UTF8);
@@ -184,8 +234,8 @@ app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId,
                     return InvalidRequest("Spec path does not exist.");
 
                 var fileInfo = new FileInfo(path);
-                if (fileInfo.Length > OpenApiImportLimits.MaxSpecBytes)
-                    return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {OpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+                if (fileInfo.Length > WebOpenApiImportLimits.MaxSpecBytes)
+                    return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
 
                 specJson = await File.ReadAllTextAsync(path, ct);
             }
@@ -211,8 +261,8 @@ app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId,
                 return InvalidRequest("Spec path does not exist.");
 
             var fileInfo = new FileInfo(path);
-            if (fileInfo.Length > OpenApiImportLimits.MaxSpecBytes)
-                return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {OpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+            if (fileInfo.Length > WebOpenApiImportLimits.MaxSpecBytes)
+                return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
 
             specJson = await File.ReadAllTextAsync(path, ct);
         }
@@ -221,8 +271,8 @@ app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId,
     if (string.IsNullOrWhiteSpace(specJson))
         return InvalidRequest("Provide an OpenAPI file upload or path.");
 
-    if (Encoding.UTF8.GetByteCount(specJson) > OpenApiImportLimits.MaxSpecBytes)
-        return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {OpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+    if (Encoding.UTF8.GetByteCount(specJson) > WebOpenApiImportLimits.MaxSpecBytes)
+        return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
 
     JsonDocument document;
     try
