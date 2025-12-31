@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.WebUtilities;
 
@@ -56,6 +57,24 @@ public sealed class ApiTesterWebClient
 
         return response;
     }
+
+    public async Task<RunDetailDto?> GetRun(Guid runId, CancellationToken ct = default)
+    {
+        var response = await _httpClient.GetAsync($"/api/runs/{runId}", ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var run = await response.Content.ReadFromJsonAsync<RunDetailDto>(cancellationToken: ct);
+        if (run is null)
+        {
+            throw new InvalidOperationException("Empty response when loading run.");
+        }
+
+        return run;
+    }
 }
 
 public sealed record ProjectDto(Guid ProjectId, string Name, string ProjectKey, DateTime CreatedUtc);
@@ -80,3 +99,32 @@ public sealed record RunSummary(
     int Failed,
     int Blocked,
     long TotalDurationMs);
+
+public sealed record RunDetailDto(
+    Guid RunId,
+    string ProjectKey,
+    string OperationId,
+    DateTimeOffset StartedUtc,
+    DateTimeOffset CompletedUtc,
+    TestRunResult Result);
+
+public sealed record TestRunResult(
+    string OperationId,
+    int TotalCases,
+    int Passed,
+    int Failed,
+    int Blocked,
+    long TotalDurationMs,
+    IReadOnlyList<TestCaseResult> Results);
+
+public sealed record TestCaseResult(
+    string Name,
+    bool Blocked,
+    string? BlockReason,
+    string? Url,
+    string? Method,
+    int? StatusCode,
+    long DurationMs,
+    bool Pass,
+    string? FailureReason,
+    string? ResponseSnippet);
