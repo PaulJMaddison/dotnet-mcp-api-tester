@@ -5,23 +5,26 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace ApiTester.Web.IntegrationTests;
 
 public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
 {
-    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"apitester-{Guid.NewGuid():N}.db");
+    private readonly SqliteConnection _connection = new("Data Source=:memory:;Cache=Shared");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        if (_connection.State != System.Data.ConnectionState.Open)
+            _connection.Open();
         builder.UseEnvironment("Testing");
         builder.ConfigureAppConfiguration((_, config) =>
         {
             var settings = new Dictionary<string, string?>
             {
                 ["Persistence:Provider"] = "Sqlite",
-                ["Persistence:ConnectionString"] = $"Data Source={_databasePath}",
+                ["Persistence:ConnectionString"] = "Data Source=:memory:;Cache=Shared",
                 ["Execution:AllowedBaseUrls:0"] = "https://httpbin.org",
                 ["Execution:DryRun"] = "false",
                 ["Auth:ApiKey"] = ApiKeyAlpha,
@@ -38,7 +41,7 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
             services.RemoveAll<IOpenApiSpecStore>();
             services.RemoveAll<ITestPlanStore>();
 
-            services.AddDbContext<ApiTesterDbContext>(opt => opt.UseSqlite($"Data Source={_databasePath}"));
+            services.AddDbContext<ApiTesterDbContext>(opt => opt.UseSqlite(_connection));
             services.AddScoped<SqlTestRunStore>();
             services.AddScoped<SqlProjectStore>();
             services.AddScoped<SqlOpenApiSpecStore>();
@@ -57,9 +60,9 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
 
     protected override void Dispose(bool disposing)
     {
+        if (disposing)
+            _connection.Dispose();
         base.Dispose(disposing);
-        if (disposing && File.Exists(_databasePath))
-            File.Delete(_databasePath);
     }
 
     public const string ApiKeyAlpha = "dev-local-key";
