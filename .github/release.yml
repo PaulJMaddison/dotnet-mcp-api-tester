@@ -1,0 +1,25 @@
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+change-template: "- $TITLE (#$NUMBER) @$AUTHOR"
+categories:
+  - title: "Highlights"
+    labels:
+      - "highlight"
+  - title: "Features"
+    labels:
+      - "feature"
+  - title: "Fixes"
+    labels:
+      - "bug"
+  - title: "Docs"
+    labels:
+      - "documentation"
+template: |
+  ## Highlights
+  - 
+
+  ## Changes
+  $CHANGES
+
+  ## Contributors
+  $CONTRIBUTORS
