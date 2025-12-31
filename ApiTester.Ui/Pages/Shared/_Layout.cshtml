@@ -13,7 +13,9 @@
     <div class="app-shell">
         <aside class="app-sidebar">
             <div class="sidebar-header">
-                <span>App Shell</span>
+                <a class="sidebar-brand" href="/Projects">
+                    <img src="~/images/app-logo.svg" alt="API Tester" width="156" height="32" />
+                </a>
             </div>
             <nav class="sidebar-nav" aria-label="Primary">
                 <a href="/Projects">Projects</a>
@@ -27,7 +29,10 @@
         <div class="app-main">
             <header class="app-topbar">
                 <div class="topbar-left">
-                    <strong>Top bar placeholder</strong>
+                    <div class="topbar-brand">
+                        <img src="~/images/app-mark.svg" alt="" width="28" height="28" aria-hidden="true" />
+                        <strong>API Tester</strong>
+                    </div>
                     <span>Logged in: Demo User</span>
                 </div>
                 <div class="topbar-right">
@@ -39,6 +44,7 @@
                 @if (IsSectionDefined("Breadcrumb"))
                 {
                     <nav class="breadcrumbs" aria-label="Breadcrumb">
+                        <img class="breadcrumb-icon" src="~/images/app-icon.svg" alt="" width="18" height="18" aria-hidden="true" />
                         @RenderSection("Breadcrumb")
                     </nav>
                 }
