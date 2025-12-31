@@ -18,10 +18,10 @@ public class ApiEndpointsTests
         var project = await SeedProjectAsync(factory, "Alpha", "alpha");
 
         var client = factory.CreateClient();
-        var response = await client.GetFromJsonAsync<ProjectListResponse>("/api/projects?take=50");
+        var response = await client.GetFromJsonAsync<ProjectListResponse>("/api/projects?pageSize=50");
 
         Assert.NotNull(response);
-        Assert.Equal(50, response!.Take);
+        Assert.Equal(50, response!.Metadata.PageSize);
         Assert.Contains(response.Projects, p => p.ProjectId == project.ProjectId);
     }
 
@@ -32,7 +32,7 @@ public class ApiEndpointsTests
         var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync("/api/projects", new { name = "Bravo" });
-        var payload = await response.Content.ReadFromJsonAsync<ProjectCreateResponse>();
+        var payload = await response.Content.ReadFromJsonAsync<ProjectDto>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
@@ -83,7 +83,7 @@ public class ApiEndpointsTests
         await SeedRunAsync(factory, project, "op-2");
 
         var client = factory.CreateClient();
-        var response = await client.GetFromJsonAsync<RunSummaryResponse>($"/api/runs?projectKey={project.ProjectKey}&operationId=op-1&take=20");
+        var response = await client.GetFromJsonAsync<RunSummaryResponse>($"/api/runs?projectKey={project.ProjectKey}&operationId=op-1&pageSize=20");
 
         Assert.NotNull(response);
         Assert.Equal(1, response!.Runs.Count);
@@ -98,7 +98,7 @@ public class ApiEndpointsTests
         var run = await SeedRunAsync(factory, project, "op-1");
 
         var client = factory.CreateClient();
-        var response = await client.GetFromJsonAsync<RunDetailResponse>($"/api/runs/{run.RunId}");
+        var response = await client.GetFromJsonAsync<RunDetailDto>($"/api/runs/{run.RunId}");
 
         Assert.NotNull(response);
         Assert.Equal(run.RunId, response!.RunId);
@@ -126,6 +126,56 @@ public class ApiEndpointsTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetProjects_PaginatesWithNextPageToken()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var first = await SeedProjectAsync(factory, "Alpha", "alpha", DateTime.UtcNow.AddMinutes(-5));
+        var second = await SeedProjectAsync(factory, "Bravo", "bravo", DateTime.UtcNow.AddMinutes(-3));
+        var third = await SeedProjectAsync(factory, "Charlie", "charlie", DateTime.UtcNow.AddMinutes(-1));
+
+        var client = factory.CreateClient();
+        var pageOne = await client.GetFromJsonAsync<ProjectListResponse>("/api/projects?pageSize=2");
+
+        Assert.NotNull(pageOne);
+        Assert.Equal(3, pageOne!.Metadata.Total);
+        Assert.Equal(2, pageOne.Metadata.PageSize);
+        Assert.Equal("2", pageOne.Metadata.NextPageToken);
+        Assert.Equal(third.ProjectId, pageOne.Projects[0].ProjectId);
+        Assert.Equal(second.ProjectId, pageOne.Projects[1].ProjectId);
+
+        var pageTwo = await client.GetFromJsonAsync<ProjectListResponse>("/api/projects?pageSize=2&pageToken=2");
+
+        Assert.NotNull(pageTwo);
+        Assert.Null(pageTwo!.Metadata.NextPageToken);
+        Assert.Single(pageTwo.Projects);
+        Assert.Equal(first.ProjectId, pageTwo.Projects[0].ProjectId);
+    }
+
+    [Fact]
+    public async Task GetRuns_SortsAndPaginates()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "Echo", "echo", DateTime.UtcNow.AddHours(-1));
+        var first = await SeedRunAsync(factory, project, "op-1", DateTime.UtcNow.AddMinutes(-10));
+        var second = await SeedRunAsync(factory, project, "op-1", DateTime.UtcNow.AddMinutes(-5));
+
+        var client = factory.CreateClient();
+        var ascResponse = await client.GetFromJsonAsync<RunSummaryResponse>(
+            $"/api/runs?projectKey={project.ProjectKey}&sort=startedUtc&order=asc&pageSize=10");
+
+        Assert.NotNull(ascResponse);
+        Assert.Equal(first.RunId, ascResponse!.Runs[0].RunId);
+        Assert.Equal(second.RunId, ascResponse.Runs[1].RunId);
+
+        var pagedResponse = await client.GetFromJsonAsync<RunSummaryResponse>(
+            $"/api/runs?projectKey={project.ProjectKey}&pageSize=1");
+
+        Assert.NotNull(pagedResponse);
+        Assert.Equal("1", pagedResponse!.Metadata.NextPageToken);
+        Assert.Single(pagedResponse.Runs);
+    }
+
     [Theory]
     [InlineData("/api/projects?take=0")]
     [InlineData("/api/runs?projectKey=alpha&take=500")]
@@ -142,7 +192,7 @@ public class ApiEndpointsTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    private static async Task<ProjectEntity> SeedProjectAsync(ApiTesterWebFactory factory, string name, string key)
+    private static async Task<ProjectEntity> SeedProjectAsync(ApiTesterWebFactory factory, string name, string key, DateTime? createdUtc = null)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
@@ -153,7 +203,7 @@ public class ApiEndpointsTests
             ProjectId = Guid.NewGuid(),
             Name = name,
             ProjectKey = key,
-            CreatedUtc = DateTime.UtcNow
+            CreatedUtc = createdUtc ?? DateTime.UtcNow
         };
 
         db.Projects.Add(project);
@@ -161,19 +211,21 @@ public class ApiEndpointsTests
         return project;
     }
 
-    private static async Task<TestRunEntity> SeedRunAsync(ApiTesterWebFactory factory, ProjectEntity project, string operationId)
+    private static async Task<TestRunEntity> SeedRunAsync(ApiTesterWebFactory factory, ProjectEntity project, string operationId, DateTime? startedUtc = null)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
         await db.Database.EnsureCreatedAsync();
+
+        var started = startedUtc ?? DateTime.UtcNow.AddMinutes(-2);
 
         var run = new TestRunEntity
         {
             RunId = Guid.NewGuid(),
             ProjectId = project.ProjectId,
             OperationId = operationId,
-            StartedUtc = DateTime.UtcNow.AddMinutes(-2),
-            CompletedUtc = DateTime.UtcNow,
+            StartedUtc = started,
+            CompletedUtc = started.AddMinutes(2),
             TotalCases = 1,
             Passed = 1,
             Failed = 0,
@@ -199,36 +251,34 @@ public class ApiEndpointsTests
     }
 
     public sealed record ProjectListResponse(
-        [property: JsonPropertyName("take")] int Take,
-        [property: JsonPropertyName("total")] int Total,
-        [property: JsonPropertyName("projects")] IReadOnlyList<ProjectResponse> Projects);
+        [property: JsonPropertyName("projects")] IReadOnlyList<ProjectDto> Projects,
+        [property: JsonPropertyName("metadata")] PageMetadata Metadata);
 
-    public sealed record ProjectResponse(
+    public sealed record PageMetadata(
+        [property: JsonPropertyName("total")] int Total,
+        [property: JsonPropertyName("pageSize")] int PageSize,
+        [property: JsonPropertyName("nextPageToken")] string? NextPageToken);
+
+    public sealed record ProjectDto(
         [property: JsonPropertyName("projectId")] Guid ProjectId,
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("projectKey")] string ProjectKey,
-        [property: JsonPropertyName("createdUtc")] DateTime CreatedUtc);
-
-    public sealed record ProjectCreateResponse(
-        [property: JsonPropertyName("projectId")] Guid ProjectId,
-        [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("createdUtc")] DateTime CreatedUtc);
 
     public sealed record RunSummaryResponse(
         [property: JsonPropertyName("projectKey")] string ProjectKey,
-        [property: JsonPropertyName("take")] int Take,
-        [property: JsonPropertyName("total")] int Total,
-        [property: JsonPropertyName("runs")] IReadOnlyList<RunSummaryItem> Runs);
+        [property: JsonPropertyName("runs")] IReadOnlyList<RunSummaryDto> Runs,
+        [property: JsonPropertyName("metadata")] PageMetadata Metadata);
 
-    public sealed record RunSummaryItem(
+    public sealed record RunSummaryDto(
         [property: JsonPropertyName("runId")] Guid RunId,
         [property: JsonPropertyName("projectKey")] string ProjectKey,
         [property: JsonPropertyName("operationId")] string OperationId,
         [property: JsonPropertyName("startedUtc")] DateTimeOffset StartedUtc,
         [property: JsonPropertyName("completedUtc")] DateTimeOffset CompletedUtc,
-        [property: JsonPropertyName("summary")] JsonElement Summary);
+        [property: JsonPropertyName("snapshot")] JsonElement Snapshot);
 
-    public sealed record RunDetailResponse(
+    public sealed record RunDetailDto(
         [property: JsonPropertyName("runId")] Guid RunId,
         [property: JsonPropertyName("projectKey")] string ProjectKey,
         [property: JsonPropertyName("operationId")] string OperationId,

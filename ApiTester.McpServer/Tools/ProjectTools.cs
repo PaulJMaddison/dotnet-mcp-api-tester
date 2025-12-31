@@ -28,8 +28,14 @@ public sealed class ProjectTools
     [McpServerTool, Description("List recent projects.")]
     public async Task<object> ApiListProjects(int take = 50, CancellationToken ct = default)
     {
-        var projects = await _projects.ListAsync(take, ct);
-        return new { take, total = projects.Count, projects };
+        var result = await _projects.ListAsync(new PageRequest(take, 0), SortField.CreatedUtc, SortDirection.Desc, ct);
+        return new
+        {
+            pageSize = take,
+            total = result.Total,
+            nextPageToken = result.NextOffset?.ToString(),
+            projects = result.Items
+        };
     }
 
     [McpServerTool, Description("Set the current project used for storing runs.")]

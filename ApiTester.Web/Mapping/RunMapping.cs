@@ -5,13 +5,13 @@ namespace ApiTester.Web.Mapping;
 
 public static class RunMapping
 {
-    public static RunSummaryResponse ToSummaryResponse(string projectKey, int take, IReadOnlyList<TestRunRecord> runs)
+    public static RunSummaryResponse ToSummaryResponse(string projectKey, PageMetadata metadata, IReadOnlyList<TestRunRecord> runs)
     {
-        var items = runs.Select(ToSummaryItem).ToList();
-        return new RunSummaryResponse(projectKey, take, items.Count, items);
+        var items = runs.Select(ToSummaryDto).ToList();
+        return new RunSummaryResponse(projectKey, items, metadata);
     }
 
-    public static RunSummaryItem ToSummaryItem(TestRunRecord record)
+    public static RunSummaryDto ToSummaryDto(TestRunRecord record)
     {
         var summary = new RunSummary(
             record.Result.TotalCases,
@@ -20,7 +20,7 @@ public static class RunMapping
             record.Result.Blocked,
             record.Result.TotalDurationMs);
 
-        return new RunSummaryItem(
+        return new RunSummaryDto(
             record.RunId,
             record.ProjectKey,
             record.OperationId,
@@ -29,7 +29,7 @@ public static class RunMapping
             summary);
     }
 
-    public static RunDetailResponse ToDetailResponse(TestRunRecord record)
+    public static RunDetailDto ToDetailDto(TestRunRecord record)
         => new(
             record.RunId,
             record.ProjectKey,
