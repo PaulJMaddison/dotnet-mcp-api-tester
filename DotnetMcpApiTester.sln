@@ -14,6 +14,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.McpClient", "ApiT
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.SmokeApi", "ApiTester.SmokeApi\ApiTester.SmokeApi.csproj", "{92EAD82E-BE62-4EB8-BA24-7A3FD8FB8CC8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.Web", "ApiTester.Web\ApiTester.Web.csproj", "{DDFB7F38-B2DE-4D8E-A920-6A7D3D5C5431}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.Web.UnitTests", "ApiTester.Web.UnitTests\ApiTester.Web.UnitTests.csproj", "{BFF131F9-DE3C-44C7-8903-18E651A9FEB8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.Web.IntegrationTests", "ApiTester.Web.IntegrationTests\ApiTester.Web.IntegrationTests.csproj", "{93885EE6-E280-41F4-91D3-F1CAD370E927}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,6 +38,18 @@ Global
 		{92EAD82E-BE62-4EB8-BA24-7A3FD8FB8CC8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{92EAD82E-BE62-4EB8-BA24-7A3FD8FB8CC8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{92EAD82E-BE62-4EB8-BA24-7A3FD8FB8CC8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DDFB7F38-B2DE-4D8E-A920-6A7D3D5C5431}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DDFB7F38-B2DE-4D8E-A920-6A7D3D5C5431}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DDFB7F38-B2DE-4D8E-A920-6A7D3D5C5431}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DDFB7F38-B2DE-4D8E-A920-6A7D3D5C5431}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BFF131F9-DE3C-44C7-8903-18E651A9FEB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BFF131F9-DE3C-44C7-8903-18E651A9FEB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BFF131F9-DE3C-44C7-8903-18E651A9FEB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BFF131F9-DE3C-44C7-8903-18E651A9FEB8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{93885EE6-E280-41F4-91D3-F1CAD370E927}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{93885EE6-E280-41F4-91D3-F1CAD370E927}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{93885EE6-E280-41F4-91D3-F1CAD370E927}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{93885EE6-E280-41F4-91D3-F1CAD370E927}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
