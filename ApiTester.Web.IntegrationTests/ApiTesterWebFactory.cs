@@ -23,7 +23,9 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
                 ["Persistence:Provider"] = "Sqlite",
                 ["Persistence:ConnectionString"] = $"Data Source={_databasePath}",
                 ["Execution:AllowedBaseUrls:0"] = "https://httpbin.org",
-                ["Execution:DryRun"] = "false"
+                ["Execution:DryRun"] = "false",
+                ["Auth:ApiKey"] = ApiKeyAlpha,
+                ["Auth:ApiKeys:0"] = ApiKeyBravo
             };
             config.AddInMemoryCollection(settings);
         });
@@ -59,4 +61,7 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
         if (disposing && File.Exists(_databasePath))
             File.Delete(_databasePath);
     }
+
+    public const string ApiKeyAlpha = "dev-local-key";
+    public const string ApiKeyBravo = "dev-secondary-key";
 }

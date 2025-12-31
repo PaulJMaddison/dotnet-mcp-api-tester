@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Runtime;
 using ModelContextProtocol.Server;
@@ -20,7 +21,7 @@ public sealed class ProjectTools
     [McpServerTool, Description("Create a new project. Returns projectId.")]
     public async Task<object> ApiCreateProject(string name, CancellationToken ct)
     {
-        var project = await _projects.CreateAsync(name, ct);
+        var project = await _projects.CreateAsync(OwnerKeyDefaults.Default, name, ct);
         _ctx.SetCurrentProject(project.ProjectId);
         return new { projectId = project.ProjectId, currentProjectId = project.ProjectId };
     }
@@ -28,7 +29,7 @@ public sealed class ProjectTools
     [McpServerTool, Description("List recent projects.")]
     public async Task<object> ApiListProjects(int take = 50, CancellationToken ct = default)
     {
-        var result = await _projects.ListAsync(new PageRequest(take, 0), SortField.CreatedUtc, SortDirection.Desc, ct);
+        var result = await _projects.ListAsync(OwnerKeyDefaults.Default, new PageRequest(take, 0), SortField.CreatedUtc, SortDirection.Desc, ct);
         return new
         {
             pageSize = take,
@@ -44,7 +45,7 @@ public sealed class ProjectTools
         if (!Guid.TryParse(projectId, out var id))
             return new { ok = false, reason = "Invalid projectId GUID." };
 
-        if (await _projects.GetAsync(id, ct) is null)
+        if (await _projects.GetAsync(OwnerKeyDefaults.Default, id, ct) is null)
             return new { ok = false, reason = "Project not found." };
 
         _ctx.SetCurrentProject(id);

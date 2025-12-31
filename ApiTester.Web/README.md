@@ -1,5 +1,35 @@
 # ApiTester Web API
 
+## Authentication
+
+All `/api` routes require an API key via the `X-Api-Key` header. Configure one or more keys in configuration:
+
+- `Auth:ApiKey` for a single key
+- `Auth:ApiKeys` for multiple keys
+
+Example `appsettings.json` snippet:
+```json
+{
+  "Auth": {
+    "ApiKey": "dev-local-key"
+  }
+}
+```
+
+Environment variable example:
+```
+Auth__ApiKey=dev-local-key
+```
+
+Requests must include the header:
+```
+X-Api-Key: dev-local-key
+```
+
+## UI setup
+
+The UI also expects `Auth:ApiKey` (or `Auth:ApiKeys`) configured so it can authenticate incoming requests and call the Web API. Set `ApiTesterWeb:BaseUrl` to the Web API address.
+
 ## Projects
 
 ### List projects

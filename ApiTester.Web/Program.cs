@@ -8,6 +8,7 @@ using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Services;
 using ApiTester.Web.Contracts;
 using ApiTester.Web.Execution;
+using ApiTester.Web.Auth;
 using ApiTester.Web.Mapping;
 using ApiTester.Web.Validation;
 using Microsoft.Extensions.Options;
@@ -72,10 +73,20 @@ builder.Services.AddHttpClient();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+var authOptions = builder.Configuration.GetSection(ApiKeyAuthOptions.SectionName).Get<ApiKeyAuthOptions>() ?? new ApiKeyAuthOptions();
+var allowedKeys = authOptions.ResolveKeys();
+if (allowedKeys.Count == 0)
+    throw new InvalidOperationException("API key authentication requires at least one key in configuration (Auth:ApiKey or Auth:ApiKeys).");
+builder.Services.AddSingleton(new ApiKeyAuthSettings(allowedKeys));
+
 var app = builder.Build();
 
 app.UseSwagger();
 app.UseSwaggerUI();
+
+app.UseWhen(
+    context => context.Request.Path.StartsWithSegments("/api"),
+    builder => builder.UseMiddleware<ApiKeyAuthMiddleware>());
 
 app.MapGet("/health", (IHostEnvironment env, IOptions<PersistenceOptions> options) =>
 {
@@ -88,7 +99,7 @@ app.MapGet("/health", (IHostEnvironment env, IOptions<PersistenceOptions> option
     });
 });
 
-app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, IProjectStore store, CancellationToken ct) =>
+app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, IProjectStore store, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryNormalizePageSize(pageSize, take, 50, 1, 200, out var normalizedPageSize, out var sizeError))
         return InvalidRequest(sizeError);
@@ -102,39 +113,43 @@ app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, 
     if (!RequestValidation.TryNormalizeOrder(order, SortDirection.Desc, out var direction, out var orderError))
         return InvalidRequest(orderError);
 
-    var result = await store.ListAsync(new PageRequest(normalizedPageSize, offset), sortField, direction, ct);
+    var ownerKey = httpContext.GetOwnerKey();
+    var result = await store.ListAsync(ownerKey, new PageRequest(normalizedPageSize, offset), sortField, direction, ct);
     var metadata = new PageMetadata(result.Total, normalizedPageSize, result.NextOffset?.ToString());
     return Results.Ok(ProjectMapping.ToListResponse(metadata, result.Items));
 });
 
-app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore store, CancellationToken ct) =>
+app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore store, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredName(request?.Name, out var error))
         return InvalidRequest(error);
 
-    var project = await store.CreateAsync(request!.Name!, ct);
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await store.CreateAsync(ownerKey, request!.Name!, ct);
     return Results.Ok(ProjectMapping.ToDto(project));
 });
 
-app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore store, CancellationToken ct) =>
+app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore store, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
 
-    var project = await store.GetAsync(id, ct);
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await store.GetAsync(ownerKey, id, ct);
     return project is null
-        ? Results.NotFound()
+        ? await NotFoundOrForbiddenAsync(store, id, ct)
         : Results.Ok(ProjectMapping.ToDto(project));
 });
 
-app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId, HttpRequest request, IProjectStore projectStore, IOpenApiSpecStore specStore, CancellationToken ct) =>
+app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId, HttpRequest request, IProjectStore projectStore, IOpenApiSpecStore specStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
 
-    var project = await projectStore.GetAsync(id, ct);
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await projectStore.GetAsync(ownerKey, id, ct);
     if (project is null)
-        return Results.NotFound();
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
     string? specJson = null;
 
@@ -232,10 +247,15 @@ app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId,
     }
 });
 
-app.MapGet("/api/projects/{projectId}/openapi", async (string projectId, IOpenApiSpecStore specStore, CancellationToken ct) =>
+app.MapGet("/api/projects/{projectId}/openapi", async (string projectId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
     var record = await specStore.GetAsync(id, ct);
     return record is null
@@ -249,6 +269,7 @@ app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async 
     IProjectStore projectStore,
     IOpenApiSpecStore specStore,
     ITestPlanStore planStore,
+    HttpContext httpContext,
     CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
@@ -257,9 +278,10 @@ app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async 
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
 
-    var project = await projectStore.GetAsync(id, ct);
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await projectStore.GetAsync(ownerKey, id, ct);
     if (project is null)
-        return Results.NotFound();
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
     var spec = await specStore.GetAsync(id, ct);
     if (spec is null)
@@ -287,6 +309,7 @@ app.MapGet("/api/projects/{projectId}/testplans/{operationId}", async (
     string operationId,
     IProjectStore projectStore,
     ITestPlanStore planStore,
+    HttpContext httpContext,
     CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
@@ -295,9 +318,10 @@ app.MapGet("/api/projects/{projectId}/testplans/{operationId}", async (
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
 
-    var project = await projectStore.GetAsync(id, ct);
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await projectStore.GetAsync(ownerKey, id, ct);
     if (project is null)
-        return Results.NotFound();
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
     var record = await planStore.GetAsync(id, operationId.Trim(), ct);
     return record is null
@@ -313,6 +337,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     ITestPlanStore planStore,
     TestPlanRunner runner,
     ApiRuntimeConfig runtime,
+    HttpContext httpContext,
     CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
@@ -321,9 +346,10 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
 
-    var project = await projectStore.GetAsync(id, ct);
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await projectStore.GetAsync(ownerKey, id, ct);
     if (project is null)
-        return Results.NotFound();
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
     var spec = await specStore.GetAsync(id, ct);
     if (spec is null)
@@ -371,11 +397,11 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
         }
     }
 
-    var run = await runner.RunPlanAsync(plan, project.ProjectKey, ct);
+    var run = await runner.RunPlanAsync(plan, project.ProjectKey, ownerKey, ct);
     return Results.Ok(RunMapping.ToDetailDto(run));
 });
 
-app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, CancellationToken ct) =>
+app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredKey(projectKey, "projectKey", out var keyError))
         return InvalidRequest(keyError);
@@ -395,7 +421,13 @@ app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pag
     if (!RequestValidation.TryNormalizeOrder(order, SortDirection.Desc, out var direction, out var orderError))
         return InvalidRequest(orderError);
 
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await projectStore.GetByKeyAsync(ownerKey, projectKey!.Trim(), ct);
+    if (project is null)
+        return Results.NotFound();
+
     var result = await store.ListAsync(
+        ownerKey,
         projectKey!.Trim(),
         new PageRequest(normalizedPageSize, offset),
         sortField,
@@ -405,12 +437,13 @@ app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pag
     return Results.Ok(RunMapping.ToSummaryResponse(projectKey!.Trim(), metadata, result.Items));
 });
 
-app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, CancellationToken ct) =>
+app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
-    var run = await store.GetAsync(id);
+    var ownerKey = httpContext.GetOwnerKey();
+    var run = await store.GetAsync(ownerKey, id);
     return run is null
         ? Results.NotFound()
         : Results.Ok(RunMapping.ToDetailDto(run));
@@ -420,6 +453,14 @@ app.Run();
 
 static IResult InvalidRequest(string detail)
     => Results.Problem(title: "Invalid request", detail: detail, statusCode: StatusCodes.Status400BadRequest);
+
+static async Task<IResult> NotFoundOrForbiddenAsync(IProjectStore store, Guid projectId, CancellationToken ct)
+{
+    if (await store.ExistsAsync(projectId, ct))
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+    return Results.NotFound();
+}
 
 static string? ResolveBaseUrl(OpenApiDocument doc)
 {
