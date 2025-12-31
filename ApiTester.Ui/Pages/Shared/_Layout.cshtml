@@ -15,13 +15,17 @@
 <head>
     <meta charset="utf-8" />
     <title>@pageTitle</title>
+    <link rel="icon" type="image/svg+xml" href="~/images/app-icon.svg" />
     <link rel="stylesheet" href="~/styles/site.css" />
 </head>
 <body>
     <div class="app-shell">
         <aside class="app-sidebar">
             <div class="sidebar-header">
-                <a class="sidebar-brand" href="/Projects">API Tester</a>
+                <a class="sidebar-brand" href="/Projects">
+                    <img class="brand-mark" src="~/images/app-mark.svg" alt="API Tester" width="36" height="36" />
+                    <span>API Tester</span>
+                </a>
             </div>
             <nav class="sidebar-nav" aria-label="Primary">
                 <a href="/Projects">Projects</a>
@@ -37,6 +41,7 @@
             <header class="app-topbar">
                 <div class="topbar-left">
                     <div class="topbar-brand">
+                        <img class="brand-icon" src="~/images/app-icon.svg" alt="" width="24" height="24" />
                         <strong>API Tester</strong>
                     </div>
                     <span>API key: @maskedKey</span>
