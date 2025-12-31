@@ -1,0 +1,53 @@
+@page
+@model ApiTester.Ui.Pages.Onboarding.ChecklistModel
+
+@{
+    ViewData["Title"] = "Onboarding checklist";
+}
+
+<section class="page-header">
+    <h1>Onboarding checklist</h1>
+    <p class="page-intro">Track the essentials before you hand off the workspace to other teams.</p>
+</section>
+
+<form method="post" class="checklist">
+    @Html.AntiForgeryToken()
+    <label class="checklist-item">
+        <input type="checkbox" name="ChecklistItems" value="project" @(Model.IsChecked("project") ? "checked" : "") />
+        <span>
+            <strong>Project created</strong>
+            <span>Define a project name and key for your primary API.</span>
+        </span>
+    </label>
+    <label class="checklist-item">
+        <input type="checkbox" name="ChecklistItems" value="spec" @(Model.IsChecked("spec") ? "checked" : "") />
+        <span>
+            <strong>OpenAPI imported</strong>
+            <span>Verify operations are populated and ready for test plans.</span>
+        </span>
+    </label>
+    <label class="checklist-item">
+        <input type="checkbox" name="ChecklistItems" value="run" @(Model.IsChecked("run") ? "checked" : "") />
+        <span>
+            <strong>Baseline run complete</strong>
+            <span>Confirm at least one successful run in the Runs view.</span>
+        </span>
+    </label>
+    <label class="checklist-item">
+        <input type="checkbox" name="ChecklistItems" value="alerts" @(Model.IsChecked("alerts") ? "checked" : "") />
+        <span>
+            <strong>Alerts configured</strong>
+            <span>Set up monitoring or notifications for run failures.</span>
+        </span>
+    </label>
+
+    @if (!string.IsNullOrWhiteSpace(Model.Message))
+    {
+        <div class="info-state" role="status">@Model.Message</div>
+    }
+
+    <div class="form-actions">
+        <button class="button" type="submit">Save checklist</button>
+        <a class="button button-secondary" href="/Projects">Skip for now</a>
+    </div>
+</form>

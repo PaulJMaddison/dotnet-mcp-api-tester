@@ -1,0 +1,35 @@
+@page
+@model ApiTester.Ui.Pages.Onboarding.IndexModel
+
+@{
+    ViewData["Title"] = "Onboarding";
+}
+
+<section class="page-header">
+    <h1>First-project onboarding</h1>
+    <p class="page-intro">Use this guided flow to connect your first API project and verify the health checks.</p>
+</section>
+
+<section class="summary-grid">
+    <article class="summary-card">
+        <span>Step 1</span>
+        <strong>Name the project</strong>
+        <p>Choose a clear project name and key so teams can filter runs quickly.</p>
+    </article>
+    <article class="summary-card">
+        <span>Step 2</span>
+        <strong>Import OpenAPI</strong>
+        <p>Upload your spec or provide a URL to seed operations and test plans.</p>
+    </article>
+    <article class="summary-card">
+        <span>Step 3</span>
+        <strong>Run baseline tests</strong>
+        <p>Kick off your first run and confirm response coverage.</p>
+    </article>
+</section>
+
+<section class="callout-card">
+    <h2>What happens after onboarding?</h2>
+    <p>Once you complete the checklist, you can manage projects, runs, and automation from the main navigation.</p>
+    <a class="button" href="/Onboarding/Checklist">Open onboarding checklist</a>
+</section>

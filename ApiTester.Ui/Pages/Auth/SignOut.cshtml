@@ -1,0 +1,14 @@
+@page
+@model ApiTester.Ui.Pages.Auth.SignOutModel
+
+@{
+    Layout = "_AuthLayout";
+    ViewData["Title"] = "Signed out";
+}
+
+<section class="auth-header">
+    <h1>Signed out</h1>
+    <p class="page-intro">Your session has ended. You can sign back in with your API key.</p>
+</section>
+
+<a class="button button-secondary" href="/Auth/SignIn">Return to sign in</a>

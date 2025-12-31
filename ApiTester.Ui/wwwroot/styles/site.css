@@ -38,11 +38,6 @@ body {
     gap: 0.5rem;
 }
 
-.sidebar-brand img {
-    display: block;
-    max-width: 100%;
-    height: auto;
-}
 
 .sidebar-nav {
     display: flex;
@@ -96,9 +91,6 @@ body {
     gap: 0.5rem;
 }
 
-.topbar-brand img {
-    display: block;
-}
 
 .app-content {
     flex: 1;
@@ -141,6 +133,10 @@ h1 {
 .page-intro {
     margin-top: 0;
     color: #52606d;
+}
+
+.page-header {
+    margin-bottom: 1.5rem;
 }
 
 h2 {
@@ -192,6 +188,15 @@ tbody tr:hover {
     color: #991b1b;
 }
 
+.info-state {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid #bae6fd;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #1e3a8a;
+}
+
 .loading-state {
     margin-top: 1rem;
     padding: 1rem;
@@ -238,6 +243,129 @@ pre {
     margin-bottom: 0.25rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+}
+
+.callout-card {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.6rem 1.2rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: #2563eb;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.button:hover {
+    background: #1d4ed8;
+    text-decoration: none;
+}
+
+.button-secondary {
+    background: #fff;
+    color: #1d4ed8;
+    border-color: #cbd5f5;
+}
+
+.button-secondary:hover {
+    background: #eef2ff;
+}
+
+.button-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: #1d4ed8;
+    padding: 0.3rem 0.75rem;
+}
+
+.inline-form {
+    margin: 0;
+}
+
+.auth-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    background: #f8fafc;
+}
+
+.auth-card {
+    width: min(480px, 100%);
+    background: #fff;
+    padding: 2rem;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+}
+
+.auth-header {
+    margin-bottom: 1.5rem;
+}
+
+.auth-form {
+    display: grid;
+    gap: 1rem;
+}
+
+.auth-footer {
+    margin-top: 1.5rem;
+    font-size: 0.9rem;
+    color: #52606d;
+}
+
+.form-field {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.form-field input[type="password"] {
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid #cbd2d9;
+    font-size: 1rem;
+}
+
+.form-field small {
+    color: #52606d;
+}
+
+.checklist {
+    margin-top: 1.5rem;
+    display: grid;
+    gap: 1rem;
+}
+
+.checklist-item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.75rem;
+    align-items: start;
+    padding: 1rem;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+}
+
+.checklist-item span {
+    display: block;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
 }
 
 .details-row td {
