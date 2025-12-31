@@ -1,21 +1,28 @@
 ﻿using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ApiTester.McpServer.Persistence.Stores;
 
 public sealed class SqlRunStore : IRunStore
 {
     private readonly ApiTesterDbContext _db;
+    private readonly ILogger<SqlRunStore> _logger;
 
-    public SqlRunStore(ApiTesterDbContext db)
+    public SqlRunStore(ApiTesterDbContext db, ILogger<SqlRunStore> logger)
     {
         _db = db;
+        _logger = logger;
     }
 
     public async Task SaveAsync(Guid projectId, Guid runId, string operationId, DateTime startedUtc, DateTime completedUtc, TestRunResult result, CancellationToken ct)
     {
-        Console.Error.WriteLine("[server] Saving to sql store...");
+        _logger.LogInformation(
+            "Saving run {RunId} for project {ProjectId} operation {OperationId}",
+            runId,
+            projectId,
+            operationId);
 
         var run = new TestRunEntity
         {

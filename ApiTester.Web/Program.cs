@@ -6,6 +6,7 @@ using ApiTester.McpServer.Options;
 using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Services;
+using ApiTester.Web.Observability;
 using ApiTester.Web.Contracts;
 using ApiTester.Web.Execution;
 using ApiTester.Web.Auth;
@@ -81,6 +82,8 @@ builder.Services.AddSingleton(new ApiKeyAuthSettings(allowedKeys));
 
 var app = builder.Build();
 
+app.UseMiddleware<CorrelationIdMiddleware>();
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -119,13 +122,14 @@ app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, 
     return Results.Ok(ProjectMapping.ToListResponse(metadata, result.Items));
 });
 
-app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore store, HttpContext httpContext, CancellationToken ct) =>
+app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore store, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredName(request?.Name, out var error))
         return InvalidRequest(error);
 
     var ownerKey = httpContext.GetOwnerKey();
     var project = await store.CreateAsync(ownerKey, request!.Name!, ct);
+    logger.LogInformation("Created project {ProjectId} for owner {OwnerKey} with name {ProjectName}", project.ProjectId, ownerKey, project.Name);
     return Results.Ok(ProjectMapping.ToDto(project));
 });
 
@@ -141,7 +145,7 @@ app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore s
         : Results.Ok(ProjectMapping.ToDto(project));
 });
 
-app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId, HttpRequest request, IProjectStore projectStore, IOpenApiSpecStore specStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId, HttpRequest request, IProjectStore projectStore, IOpenApiSpecStore specStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
@@ -153,12 +157,15 @@ app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId,
 
     string? specJson = null;
 
+    var specSource = "payload";
+
     if (request.HasFormContentType)
     {
         var form = await request.ReadFormAsync(ct);
         var file = form.Files.FirstOrDefault();
         if (file is not null)
         {
+            specSource = "upload";
             if (file.Length > OpenApiImportLimits.MaxSpecBytes)
                 return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {OpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
 
@@ -172,6 +179,7 @@ app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId,
             var path = form["path"].ToString();
             if (!string.IsNullOrWhiteSpace(path))
             {
+                specSource = "path";
                 if (!File.Exists(path))
                     return InvalidRequest("Spec path does not exist.");
 
@@ -198,6 +206,7 @@ app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId,
         if (!string.IsNullOrWhiteSpace(payload?.Path))
         {
             var path = payload.Path.Trim();
+            specSource = "path";
             if (!File.Exists(path))
                 return InvalidRequest("Spec path does not exist.");
 
@@ -243,6 +252,12 @@ app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId,
         version = string.IsNullOrWhiteSpace(version) ? "unknown" : version.Trim();
 
         var record = await specStore.UpsertAsync(project.ProjectId, title, version, specJson, DateTime.UtcNow, ct);
+        logger.LogInformation(
+            "Imported OpenAPI spec for project {ProjectId} titled {Title} version {Version} from {SpecSource}",
+            project.ProjectId,
+            title,
+            version,
+            specSource);
         return Results.Ok(OpenApiMapping.ToMetadataDto(record));
     }
 });
@@ -338,6 +353,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     TestPlanRunner runner,
     ApiRuntimeConfig runtime,
     HttpContext httpContext,
+    ILogger<Program> logger,
     CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
@@ -397,11 +413,13 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
         }
     }
 
+    logger.LogInformation("Executing run for project {ProjectId} operation {OperationId}", project.ProjectId, trimmedOperationId);
     var run = await runner.RunPlanAsync(plan, project.ProjectKey, ownerKey, ct);
+    logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, trimmedOperationId);
     return Results.Ok(RunMapping.ToDetailDto(run));
 });
 
-app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, IProjectStore projectStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredKey(projectKey, "projectKey", out var keyError))
         return InvalidRequest(keyError);
@@ -425,6 +443,11 @@ app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pag
     var project = await projectStore.GetByKeyAsync(ownerKey, projectKey!.Trim(), ct);
     if (project is null)
         return Results.NotFound();
+
+    logger.LogInformation(
+        "Listing runs for project {ProjectKey} operation {OperationId}",
+        projectKey!.Trim(),
+        normalizedOperationId ?? "(all)");
 
     var result = await store.ListAsync(
         ownerKey,
