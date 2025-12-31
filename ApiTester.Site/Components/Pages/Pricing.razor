@@ -2,8 +2,122 @@
 
 <section class="page-hero bg-light py-5">
     <div class="container">
-        <h1 class="display-5 fw-bold">Pricing that scales with your team</h1>
-        <p class="lead">Choose a plan that matches your release cadence, then expand as your API footprint grows.</p>
+        <h1 class="display-5 fw-bold">@Content.HeroTitle</h1>
+        <p class="lead">@Content.HeroSubtitle</p>
+        <div class="d-flex flex-wrap gap-2 mt-4">
+            <a class="btn btn-primary" href="@Content.PrimaryCtaLink">@Content.PrimaryCtaLabel</a>
+            <a class="btn btn-outline-primary" href="@Content.SecondaryCtaLink">@Content.SecondaryCtaLabel</a>
+        </div>
+    </div>
+</section>
+
+<section class="py-5">
+    <div class="container">
+        <div class="row g-4">
+            @foreach (var plan in Content.Plans)
+            {
+                <div class="col-lg-4">
+                    <div class="card pricing-card h-100 @(plan.IsFeatured ? "featured" : string.Empty)">
+                        <div class="card-body d-flex flex-column">
+                            @if (!string.IsNullOrWhiteSpace(plan.Badge))
+                            {
+                                <div class="badge bg-primary">@plan.Badge</div>
+                            }
+                            <h3 class="h5 mt-3">@plan.Name</h3>
+                            <p class="text-muted">@plan.Tagline</p>
+                            <div class="display-6 fw-bold">@plan.Price <span class="fs-6 text-muted">@plan.PriceSuffix</span></div>
+                            <ul class="mt-3">
+                                @foreach (var highlight in plan.Highlights)
+                                {
+                                    <li>@highlight</li>
+                                }
+                            </ul>
+                            <div class="mt-auto">
+                                <a class="btn @(plan.IsFeatured ? "btn-primary" : "btn-outline-primary") w-100" href="@plan.CtaLink">@plan.CtaLabel</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+<section class="bg-white py-5">
+    <div class="container">
+        <div class="row g-4 align-items-center">
+            <div class="col-md-6">
+                <h2 class="h4 fw-bold">@Content.ValuePropsTitle</h2>
+                <ul class="list-unstyled">
+                    @foreach (var value in Content.ValueProps)
+                    {
+                        <li class="mb-2">✅ @value</li>
+                    }
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <div class="ratio ratio-16x9 bg-light rounded-4 d-flex align-items-center justify-content-center text-muted">
+                    <span>@Content.ValuePropsPlaceholder</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="py-5">
+    <div class="container">
+        <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+            <div>
+                <h2 class="h4 fw-bold">@Content.ComparisonTitle</h2>
+                <p class="text-muted">@Content.ComparisonSubtitle</p>
+            </div>
+            <a class="btn btn-outline-primary" href="@Content.ComparisonCtaLink">@Content.ComparisonCtaLabel</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">@Content.ComparisonHeader</th>
+                        @foreach (var plan in Content.Plans)
+                        {
+                            <th scope="col">@plan.Name</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var feature in Content.FeatureMatrix)
+                    {
+                        <tr>
+                            <th scope="row">@feature.Feature</th>
+                            @foreach (var value in feature.Values)
+                            {
+                                <td>@value</td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="bg-light py-5">
+    <div class="container">
+        <h2 class="h4 fw-bold">@Content.UseCasesTitle</h2>
+        <p class="text-muted">@Content.UseCasesSubtitle</p>
+        <div class="row g-4 mt-2">
+            @foreach (var useCase in Content.UseCases)
+            {
+                <div class="col-md-6 col-lg-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h3 class="h6 fw-bold">@useCase.Title</h3>
+                            <p class="text-muted mb-0">@useCase.Description</p>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
     </div>
 </section>
 
@@ -11,70 +125,187 @@
     <div class="container">
         <div class="row g-4">
             <div class="col-lg-4">
-                <div class="card pricing-card h-100">
-                    <div class="card-body">
-                        <h3 class="h5">Starter</h3>
-                        <p class="text-muted">For early product teams validating their first APIs.</p>
-                        <div class="display-6 fw-bold">$49<span class="fs-6 text-muted">/month</span></div>
-                        <ul class="mt-3">
-                            <li>Up to 5 projects</li>
-                            <li>Basic monitoring</li>
-                            <li>Email support</li>
-                        </ul>
-                        <a class="btn btn-outline-primary w-100" href="/contact">Get started</a>
-                    </div>
-                </div>
+                <h2 class="h4 fw-bold">@Content.FaqTitle</h2>
+                <p class="text-muted">@Content.FaqSubtitle</p>
             </div>
-            <div class="col-lg-4">
-                <div class="card pricing-card featured h-100">
-                    <div class="card-body">
-                        <div class="badge bg-primary">Most Popular</div>
-                        <h3 class="h5 mt-3">Growth</h3>
-                        <p class="text-muted">For teams shipping weekly releases with shared QA workflows.</p>
-                        <div class="display-6 fw-bold">$199<span class="fs-6 text-muted">/month</span></div>
-                        <ul class="mt-3">
-                            <li>Unlimited projects</li>
-                            <li>Contract diffing</li>
-                            <li>Slack + email alerts</li>
-                        </ul>
-                        <a class="btn btn-primary w-100" href="/contact">Book a demo</a>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-4">
-                <div class="card pricing-card h-100">
-                    <div class="card-body">
-                        <h3 class="h5">Enterprise</h3>
-                        <p class="text-muted">For platform orgs with regulated workloads and multi-region APIs.</p>
-                        <div class="display-6 fw-bold">Custom</div>
-                        <ul class="mt-3">
-                            <li>Dedicated environment</li>
-                            <li>Advanced access controls</li>
-                            <li>24/7 response team</li>
-                        </ul>
-                        <a class="btn btn-outline-primary w-100" href="/contact">Talk to sales</a>
-                    </div>
+            <div class="col-lg-8">
+                <div class="accordion" id="pricingFaq">
+                    @for (var index = 0; index < Content.Faqs.Count; index++)
+                    {
+                        var faq = Content.Faqs[index];
+                        var itemId = $"faq-{index}";
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="@itemId-heading">
+                                <button class="accordion-button @(index == 0 ? string.Empty : "collapsed")" type="button" data-bs-toggle="collapse" data-bs-target="#@itemId" aria-expanded="@(index == 0)" aria-controls="@itemId">
+                                    @faq.Question
+                                </button>
+                            </h2>
+                            <div id="@itemId" class="accordion-collapse collapse @(index == 0 ? "show" : string.Empty)" aria-labelledby="@itemId-heading" data-bs-parent="#pricingFaq">
+                                <div class="accordion-body">
+                                    @faq.Answer
+                                </div>
+                            </div>
+                        </div>
+                    }
                 </div>
             </div>
         </div>
     </div>
 </section>
 
-<section class="bg-white py-5">
-    <div class="container">
-        <div class="row g-4">
-            <div class="col-md-6">
-                <h2 class="h4 fw-bold">Every plan includes</h2>
-                <ul class="list-unstyled">
-                    <li class="mb-2">✅ Guided onboarding with API import</li>
-                    <li class="mb-2">✅ Shared reporting dashboard</li>
-                    <li class="mb-2">✅ Role-based access with audit trails</li>
-                    <li class="mb-2">✅ Reliable data retention for 12 months</li>
-                </ul>
-            </div>
-            <div class="col-md-6">
-                <img class="img-fluid rounded-4" src="images/pattern-grid.svg" alt="" />
-            </div>
-        </div>
-    </div>
-</section>
+@code {
+    private PricingContent Content { get; } = PricingContent.Build();
+
+    private sealed record PricingContent(
+        string HeroTitle,
+        string HeroSubtitle,
+        string PrimaryCtaLabel,
+        string PrimaryCtaLink,
+        string SecondaryCtaLabel,
+        string SecondaryCtaLink,
+        IReadOnlyList<PlanDefinition> Plans,
+        string ValuePropsTitle,
+        IReadOnlyList<string> ValueProps,
+        string ValuePropsPlaceholder,
+        string ComparisonTitle,
+        string ComparisonSubtitle,
+        string ComparisonHeader,
+        string ComparisonCtaLabel,
+        string ComparisonCtaLink,
+        IReadOnlyList<FeatureComparison> FeatureMatrix,
+        string UseCasesTitle,
+        string UseCasesSubtitle,
+        IReadOnlyList<UseCaseDefinition> UseCases,
+        string FaqTitle,
+        string FaqSubtitle,
+        IReadOnlyList<FaqDefinition> Faqs)
+    {
+        public static PricingContent Build()
+        {
+            var plans = new List<PlanDefinition>
+            {
+                new(
+                    "Free",
+                    "For individual engineers validating a new API or prototype.",
+                    "£0",
+                    "/month",
+                    "Start free",
+                    "/signup",
+                    false,
+                    string.Empty,
+                    new List<string>
+                    {
+                        "1 workspace with 2 environments",
+                        "Up to 250 checks per month",
+                        "Community support with response within 72 hours",
+                        "Manual test runs and basic reporting"
+                    }),
+                new(
+                    "Pro",
+                    "For product teams who need dependable release confidence every sprint.",
+                    "£79",
+                    "/user/month",
+                    "Upgrade",
+                    "/upgrade",
+                    true,
+                    "Most popular",
+                    new List<string>
+                    {
+                        "Unlimited workspaces and environments",
+                        "5,000 checks per month with scheduled runs",
+                        "Contract diffing and regression alerts",
+                        "Slack, Teams, and email notifications"
+                    }),
+                new(
+                    "Team",
+                    "For regulated organisations scaling audit-ready API assurance.",
+                    "Custom",
+                    string.Empty,
+                    "Talk to sales",
+                    "/contact",
+                    false,
+                    string.Empty,
+                    new List<string>
+                    {
+                        "Dedicated tenant and custom retention",
+                        "Compliance evidence packs and export controls",
+                        "SAML SSO, SCIM provisioning, and audit logs",
+                        "Priority response with named success lead"
+                    })
+            };
+
+            var featureMatrix = new List<FeatureComparison>
+            {
+                new("Run API tests on demand", new List<string> { "✔", "✔", "✔" }),
+                new("Scheduled regression runs", new List<string> { "Limited", "Every 15 minutes", "Every 5 minutes" }),
+                new("Checks per month", new List<string> { "250", "5,000", "Custom" }),
+                new("Team collaboration", new List<string> { "Up to 2 users", "Unlimited users", "Unlimited users" }),
+                new("Compliance evidence packs", new List<string> { "—", "Add-on", "Included" }),
+                new("Support response time", new List<string> { "72 hours", "24 hours", "4 hours" })
+            };
+
+            var useCases = new List<UseCaseDefinition>
+            {
+                new("API testing", "Validate endpoints, schemas, and authentication flows before every release."),
+                new("Regression checks", "Catch unexpected contract changes with automated diffing and alerts."),
+                new("Compliance evidence", "Generate traceable run histories for audit, SOC 2, and ISO reporting."),
+                new("CI smoke tests", "Prove deployments are healthy with lightweight checks in your pipeline.")
+            };
+
+            var faqs = new List<FaqDefinition>
+            {
+                new("Can we change plan as we grow?", "Yes. Upgrade or downgrade at any time and we will prorate the remaining billing period."),
+                new("What counts as a check?", "A check is a single API request with assertions. Retries within the same run count once."),
+                new("Do you offer discounts for annual billing?", "Annual billing is available on Pro and Team with a dedicated account manager and invoicing."),
+                new("How do you handle data residency?", "Team customers can select UK or EU data residency with dedicated retention settings.")
+            };
+
+            return new PricingContent(
+                "Pricing built for predictable API delivery",
+                "Start free and scale with confidence as your API estate grows across teams and environments.",
+                "Start free",
+                "/signup",
+                "Upgrade",
+                "/upgrade",
+                plans,
+                "Every plan includes",
+                new List<string>
+                {
+                    "Guided onboarding with API import and sample collections",
+                    "Shared dashboards for quality, performance, and coverage",
+                    "Role-based access with full audit logging",
+                    "Retention settings designed for regulated workloads"
+                },
+                "Visual placeholder for product tour",
+                "Compare plans at a glance",
+                "All plans include core API testing with flexible scaling options.",
+                "Feature",
+                "See enterprise options",
+                "/contact",
+                featureMatrix,
+                "Use cases",
+                "What teams deliver with consistent API testing.",
+                useCases,
+                "Frequently asked questions",
+                "Answers to the questions we hear most from engineering leaders.",
+                faqs);
+        }
+    }
+
+    private sealed record PlanDefinition(
+        string Name,
+        string Tagline,
+        string Price,
+        string PriceSuffix,
+        string CtaLabel,
+        string CtaLink,
+        bool IsFeatured,
+        string Badge,
+        IReadOnlyList<string> Highlights);
+
+    private sealed record FeatureComparison(string Feature, IReadOnlyList<string> Values);
+
+    private sealed record UseCaseDefinition(string Title, string Description);
+
+    private sealed record FaqDefinition(string Question, string Answer);
+}
