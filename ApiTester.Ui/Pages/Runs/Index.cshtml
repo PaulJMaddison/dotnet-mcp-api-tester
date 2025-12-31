@@ -13,6 +13,39 @@
             color: #1f2933;
         }
 
+        .top-nav {
+            margin-bottom: 0.75rem;
+            font-size: 0.95rem;
+        }
+
+        .top-nav a {
+            font-weight: 600;
+            color: #111827;
+            text-decoration: none;
+        }
+
+        .top-nav a:hover {
+            text-decoration: underline;
+        }
+
+        .breadcrumbs {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            font-size: 0.9rem;
+            color: #52606d;
+            margin-bottom: 1.5rem;
+        }
+
+        .breadcrumbs a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+
+        .breadcrumbs a:hover {
+            text-decoration: underline;
+        }
+
         h1 {
             margin-bottom: 0.25rem;
         }
@@ -101,23 +134,24 @@
     </style>
 </head>
 <body>
+    <nav class="top-nav">
+        <a href="/">Projects</a>
+    </nav>
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <a href="/">Projects</a>
+        <span>/</span>
+        <span>Run Details</span>
+    </nav>
+
     <h1>Run Details</h1>
 
     @if (Model.HasError)
     {
-        <div class="error-state">
-            <p>@Model.ErrorMessage</p>
-            <details>
-                <summary>Details</summary>
-                <pre>@Model.ErrorDetails</pre>
-            </details>
-        </div>
+        <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
     }
     else if (Model.NotFound)
     {
-        <div class="empty-state">
-            <p>Run not found</p>
-        </div>
+        <partial name="Shared/_EmptyState" model="new EmptyStateModel(\"Run not found\")" />
     }
     else if (Model.Run is not null)
     {
@@ -133,11 +167,11 @@
             </div>
             <div class="summary-card">
                 <span>StartedUtc</span>
-                <strong>@Model.Run.StartedUtc.ToString("u")</strong>
+                <strong>@DisplayFormatters.FormatUtc(Model.Run.StartedUtc)</strong>
             </div>
             <div class="summary-card">
                 <span>CompletedUtc</span>
-                <strong>@Model.Run.CompletedUtc.ToString("u")</strong>
+                <strong>@DisplayFormatters.FormatUtc(Model.Run.CompletedUtc)</strong>
             </div>
             <div class="summary-card">
                 <span>Total</span>
@@ -157,16 +191,14 @@
             </div>
             <div class="summary-card">
                 <span>TotalDurationMs</span>
-                <strong>@Model.Run.Result.TotalDurationMs</strong>
+                <strong>@DisplayFormatters.FormatDurationMs(Model.Run.Result.TotalDurationMs)</strong>
             </div>
         </div>
 
         <h2>Case Results</h2>
         @if (Model.Run.Result.Results.Count == 0)
         {
-            <div class="empty-state">
-                <p>No case results recorded</p>
-            </div>
+            <partial name="Shared/_EmptyState" model="new EmptyStateModel(\"No case results recorded\")" />
         }
         else
         {
@@ -190,7 +222,7 @@
                             <td>@(result.Pass ? "Yes" : "No")</td>
                             <td>@(result.Blocked ? "Yes" : "No")</td>
                             <td>@(result.StatusCode?.ToString() ?? "—")</td>
-                            <td>@result.DurationMs</td>
+                            <td>@DisplayFormatters.FormatDurationMs(result.DurationMs)</td>
                             <td>@(string.IsNullOrWhiteSpace(result.Method) ? "—" : result.Method)</td>
                             <td>@(string.IsNullOrWhiteSpace(result.Url) ? "—" : result.Url)</td>
                         </tr>

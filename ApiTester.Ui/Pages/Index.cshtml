@@ -13,6 +13,21 @@
             color: #1f2933;
         }
 
+        .top-nav {
+            margin-bottom: 1.5rem;
+            font-size: 0.95rem;
+        }
+
+        .top-nav a {
+            font-weight: 600;
+            color: #111827;
+            text-decoration: none;
+        }
+
+        .top-nav a:hover {
+            text-decoration: underline;
+        }
+
         h1 {
             margin-bottom: 1rem;
         }
@@ -66,23 +81,19 @@
     </style>
 </head>
 <body>
+    <nav class="top-nav">
+        <a href="/">Projects</a>
+    </nav>
+
     <h1>Projects</h1>
 
     @if (Model.HasError)
     {
-        <div class="error-state">
-            <p>@Model.ErrorMessage</p>
-            <details>
-                <summary>Details</summary>
-                <pre>@Model.ErrorDetails</pre>
-            </details>
-        </div>
+        <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
     }
     else if (Model.Projects.Count == 0)
     {
-        <div class="empty-state">
-            <p>No projects yet, create one by running the client or API.</p>
-        </div>
+        <partial name="Shared/_EmptyState" model="new EmptyStateModel(\"No projects yet, create one by running the client or API.\")" />
     }
     else
     {
@@ -101,7 +112,7 @@
                         <td>
                             <a href="/projects/@project.ProjectId">@project.Name</a>
                         </td>
-                        <td>@project.CreatedUtc.ToString("u")</td>
+                        <td>@DisplayFormatters.FormatUtc(project.CreatedUtc)</td>
                         <td>@project.ProjectId</td>
                     </tr>
                 }

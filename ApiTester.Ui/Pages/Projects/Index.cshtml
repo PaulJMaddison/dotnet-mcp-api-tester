@@ -13,6 +13,39 @@
             color: #1f2933;
         }
 
+        .top-nav {
+            margin-bottom: 0.75rem;
+            font-size: 0.95rem;
+        }
+
+        .top-nav a {
+            font-weight: 600;
+            color: #111827;
+            text-decoration: none;
+        }
+
+        .top-nav a:hover {
+            text-decoration: underline;
+        }
+
+        .breadcrumbs {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            font-size: 0.9rem;
+            color: #52606d;
+            margin-bottom: 1.5rem;
+        }
+
+        .breadcrumbs a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+
+        .breadcrumbs a:hover {
+            text-decoration: underline;
+        }
+
         h1 {
             margin-bottom: 0.25rem;
         }
@@ -103,6 +136,15 @@
     </style>
 </head>
 <body>
+    <nav class="top-nav">
+        <a href="/">Projects</a>
+    </nav>
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <a href="/">Projects</a>
+        <span>/</span>
+        <span>Runs</span>
+    </nav>
+
     <h1>Runs</h1>
     <p class="project-meta">
         Project:
@@ -131,19 +173,11 @@
 
     @if (Model.HasError)
     {
-        <div class="error-state">
-            <p>@Model.ErrorMessage</p>
-            <details>
-                <summary>Details</summary>
-                <pre>@Model.ErrorDetails</pre>
-            </details>
-        </div>
+        <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
     }
     else if (Model.Runs.Count == 0)
     {
-        <div class="empty-state">
-            <p>No runs for this project yet.</p>
-        </div>
+        <partial name="Shared/_EmptyState" model="new EmptyStateModel(\"No runs for this project yet.\")" />
     }
     else
     {
@@ -164,14 +198,14 @@
                 {
                     <tr>
                         <td>
-                            <a href="/runs/@run.RunId">@run.StartedUtc.ToString("u")</a>
+                            <a href="/runs/@run.RunId">@DisplayFormatters.FormatUtc(run.StartedUtc)</a>
                         </td>
                         <td>@run.OperationId</td>
                         <td>@run.Snapshot.TotalCases</td>
                         <td>@run.Snapshot.Passed</td>
                         <td>@run.Snapshot.Failed</td>
                         <td>@run.Snapshot.Blocked</td>
-                        <td>@run.Snapshot.TotalDurationMs</td>
+                        <td>@DisplayFormatters.FormatDurationMs(run.Snapshot.TotalDurationMs)</td>
                     </tr>
                 }
             </tbody>
