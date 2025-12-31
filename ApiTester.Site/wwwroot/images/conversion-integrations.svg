@@ -1,32 +1,55 @@
 <svg width="720" height="360" viewBox="0 0 720 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="integrationGradient" x1="90" y1="210" x2="630" y2="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BFDBFE" />
+      <stop offset="1" stop-color="#A7F3D0" />
+    </linearGradient>
+  </defs>
   <rect width="720" height="360" rx="28" fill="#F8FAFC" />
   <rect x="32" y="32" width="656" height="296" rx="20" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2" />
+
+  <g stroke="#E2E8F0" stroke-width="1">
+    <path d="M90 132H630" />
+    <path d="M90 268H630" />
+  </g>
+
   <text x="64" y="82" font-family="Inter, sans-serif" font-size="20" font-weight="700" fill="#0F172A">Integration map</text>
-  <text x="64" y="112" font-family="Inter, sans-serif" font-size="14" fill="#475569">Connect specs, pipelines, and alerts to one hub.</text>
+  <text x="64" y="112" font-family="Inter, sans-serif" font-size="14" fill="#475569">Wire your spec sources into one delivery hub.</text>
 
-  <rect x="80" y="150" width="150" height="64" rx="16" fill="#DBEAFE" stroke="#60A5FA" stroke-width="2" />
-  <text x="110" y="186" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#1E3A8A">Spec sources</text>
-  <text x="104" y="206" font-family="Inter, sans-serif" font-size="11" fill="#475569">OpenAPI · GraphQL</text>
+  <rect x="80" y="152" width="160" height="76" rx="18" fill="#EFF6FF" stroke="#60A5FA" stroke-width="2" />
+  <text x="110" y="188" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#1E3A8A">Spec sources</text>
+  <text x="108" y="208" font-family="Inter, sans-serif" font-size="11" fill="#475569">OpenAPI · GraphQL</text>
 
-  <rect x="285" y="138" width="150" height="88" rx="18" fill="#EEF2FF" stroke="#818CF8" stroke-width="2" />
-  <text x="314" y="184" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#312E81">ApiTester hub</text>
-  <text x="304" y="204" font-family="Inter, sans-serif" font-size="11" fill="#475569">Run orchestration</text>
+  <rect x="280" y="142" width="160" height="96" rx="20" fill="#EEF2FF" stroke="#818CF8" stroke-width="2" />
+  <text x="310" y="188" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#312E81">ApiTester hub</text>
+  <text x="304" y="208" font-family="Inter, sans-serif" font-size="11" fill="#475569">Run orchestration</text>
 
-  <rect x="490" y="150" width="150" height="64" rx="16" fill="#ECFDF3" stroke="#34D399" stroke-width="2" />
-  <text x="524" y="186" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#065F46">Alerts + analytics</text>
-  <text x="520" y="206" font-family="Inter, sans-serif" font-size="11" fill="#475569">Slack · Email · BI</text>
+  <rect x="480" y="152" width="160" height="76" rx="18" fill="#ECFDF3" stroke="#34D399" stroke-width="2" />
+  <text x="512" y="188" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#065F46">Alerts + analytics</text>
+  <text x="510" y="208" font-family="Inter, sans-serif" font-size="11" fill="#475569">Slack · Email · BI</text>
 
-  <g stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M230 182H275" />
-    <path d="M435 182H480" />
-    <path d="M265 174L275 182L265 190" />
-    <path d="M470 174L480 182L470 190" />
+  <path d="M240 190H280" stroke="url(#integrationGradient)" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 10" />
+  <path d="M440 190H480" stroke="url(#integrationGradient)" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 10" />
+
+  <g fill="#94A3B8">
+    <circle cx="260" cy="190" r="6" />
+    <circle cx="460" cy="190" r="6" />
+  </g>
+
+  <g stroke="#CBD5F5" stroke-width="2" stroke-linecap="round">
+    <path d="M120 244C140 244 150 256 170 256" />
+    <path d="M170 256C190 256 200 268 220 268" />
+    <path d="M570 244C550 244 540 256 520 256" />
+    <path d="M520 256C500 256 490 268 470 268" />
   </g>
 
   <g fill="#CBD5F5">
-    <circle cx="120" cy="260" r="12" />
-    <circle cx="155" cy="260" r="12" />
-    <circle cx="190" cy="260" r="12" />
+    <circle cx="130" cy="246" r="10" />
+    <circle cx="170" cy="256" r="10" />
+    <circle cx="210" cy="268" r="10" />
+    <circle cx="570" cy="246" r="10" />
+    <circle cx="530" cy="256" r="10" />
+    <circle cx="490" cy="268" r="10" />
   </g>
-  <text x="95" y="292" font-family="Inter, sans-serif" font-size="11" fill="#64748B">CI/CD · Jira · GitHub</text>
+  <text x="95" y="292" font-family="Inter, sans-serif" font-size="11" fill="#64748B">CI/CD · Jira · GitHub · PagerDuty</text>
 </svg>
