@@ -6,9 +6,10 @@ public interface ITestRunStore
 {
     Task SaveAsync(TestRunRecord record);
 
-    Task<TestRunRecord?> GetAsync(Guid runId);
+    Task<TestRunRecord?> GetAsync(string ownerKey, Guid runId);
 
     Task<PagedResult<TestRunRecord>> ListAsync(
+        string ownerKey,
         string projectKey,
         PageRequest request,
         SortField sortField,

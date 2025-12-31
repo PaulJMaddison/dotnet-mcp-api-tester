@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Entities;
 using ApiTester.Web;
+using ApiTester.Web.Auth;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -14,12 +15,35 @@ namespace ApiTester.Web.IntegrationTests;
 public class ApiEndpointsTests
 {
     [Fact]
+    public async Task GetProjects_ReturnsUnauthorized_WhenMissingApiKey()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/projects");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetProject_ReturnsForbidden_WhenOwnerMismatch()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "OwnerA", "owner-a", ApiTesterWebFactory.ApiKeyAlpha);
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyBravo);
+        var response = await client.GetAsync($"/api/projects/{project.ProjectId}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task GetProjects_ReturnsProjects()
     {
         using var factory = new ApiTesterWebFactory();
         var project = await SeedProjectAsync(factory, "Alpha", "alpha");
 
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
         var response = await client.GetFromJsonAsync<ProjectListResponse>("/api/projects?pageSize=50");
 
         Assert.NotNull(response);
@@ -31,7 +55,7 @@ public class ApiEndpointsTests
     public async Task PostProjects_CreatesProject()
     {
         using var factory = new ApiTesterWebFactory();
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
         var response = await client.PostAsJsonAsync("/api/projects", new { name = "Bravo" });
         var payload = await response.Content.ReadFromJsonAsync<ProjectDto>();
@@ -46,7 +70,7 @@ public class ApiEndpointsTests
     public async Task PostProjects_ReturnsExisting_WhenProjectKeyExists()
     {
         using var factory = new ApiTesterWebFactory();
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
         var first = await client.PostAsJsonAsync("/api/projects", new { name = "Echo" });
         var firstPayload = await first.Content.ReadFromJsonAsync<ProjectDto>();
@@ -69,7 +93,7 @@ public class ApiEndpointsTests
     public async Task GetProject_ReturnsNotFound_WhenMissing()
     {
         using var factory = new ApiTesterWebFactory();
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
         var response = await client.GetAsync($"/api/projects/{Guid.NewGuid()}");
 
@@ -84,7 +108,7 @@ public class ApiEndpointsTests
         var runMatch = await SeedRunAsync(factory, project, "op-1");
         await SeedRunAsync(factory, project, "op-2");
 
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
         var response = await client.GetFromJsonAsync<RunSummaryResponse>($"/api/runs?projectKey={project.ProjectKey}&operationId=op-1&pageSize=20");
 
         Assert.NotNull(response);
@@ -99,7 +123,7 @@ public class ApiEndpointsTests
         var project = await SeedProjectAsync(factory, "Delta", "delta");
         var run = await SeedRunAsync(factory, project, "op-1");
 
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
         var response = await client.GetFromJsonAsync<RunDetailDto>($"/api/runs/{run.RunId}");
 
         Assert.NotNull(response);
@@ -110,7 +134,7 @@ public class ApiEndpointsTests
     public async Task GetRun_ReturnsNotFound_WhenMissing()
     {
         using var factory = new ApiTesterWebFactory();
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
         var response = await client.GetAsync($"/api/runs/{Guid.NewGuid()}");
 
@@ -121,7 +145,7 @@ public class ApiEndpointsTests
     public async Task PostProjects_ReturnsBadRequest_WhenNameMissing()
     {
         using var factory = new ApiTesterWebFactory();
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
         var response = await client.PostAsJsonAsync("/api/projects", new { name = "" });
 
@@ -133,7 +157,7 @@ public class ApiEndpointsTests
     {
         using var factory = new ApiTesterWebFactory();
         var project = await SeedProjectAsync(factory, "OpenApi", "openapi");
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
         var specJson = """
                        {
@@ -165,7 +189,7 @@ public class ApiEndpointsTests
     {
         using var factory = new ApiTesterWebFactory();
         var project = await SeedProjectAsync(factory, "Broken", "broken");
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
         var content = BuildMultipartSpec("not-json");
         var response = await client.PostAsync($"/api/projects/{project.ProjectId}/openapi/import", content);
@@ -177,7 +201,7 @@ public class ApiEndpointsTests
     public async Task ImportOpenApi_ReturnsNotFound_ForMissingProject()
     {
         using var factory = new ApiTesterWebFactory();
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
         var specJson = """
                        {
@@ -201,7 +225,7 @@ public class ApiEndpointsTests
     {
         using var factory = new ApiTesterWebFactory();
         var project = await SeedProjectAsync(factory, "Large", "large");
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
         var oversized = new string('a', OpenApiImportLimits.MaxSpecBytes);
         var specJson = $"{{\"openapi\":\"3.0.0\",\"info\":{{\"title\":\"Large\",\"version\":\"1.0\"}},\"x-notes\":\"{oversized}\"}}";
@@ -217,7 +241,7 @@ public class ApiEndpointsTests
     {
         using var factory = new ApiTesterWebFactory();
         var project = await SeedProjectAsync(factory, "NoSpec", "nospec");
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
         var response = await client.PostAsync($"/api/projects/{project.ProjectId}/testplans/op-1/generate", null);
 
@@ -231,7 +255,7 @@ public class ApiEndpointsTests
         var project = await SeedProjectAsync(factory, "MissingOp", "missingop");
         await SeedSpecAsync(factory, project, BuildSpecJson("op-1"));
 
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
         var response = await client.PostAsync($"/api/projects/{project.ProjectId}/testplans/op-404/generate", null);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -247,7 +271,7 @@ public class ApiEndpointsTests
         var oldCreatedUtc = DateTime.UtcNow.AddHours(-1);
         await SeedTestPlanAsync(factory, project, "op-1", "old-plan", oldCreatedUtc);
 
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
         var response = await client.PostAsync($"/api/projects/{project.ProjectId}/testplans/op-1/generate", null);
         var payload = await response.Content.ReadFromJsonAsync<TestPlanResponse>();
 
@@ -270,7 +294,7 @@ public class ApiEndpointsTests
         var specJson = await File.ReadAllTextAsync(GetHttpbinSpecPath());
         await SeedSpecAsync(factory, project, specJson);
 
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
         var response = await client.PostAsync($"/api/projects/{project.ProjectId}/runs/execute/getUuid", null);
         var payload = await response.Content.ReadFromJsonAsync<RunDetailDto>();
 
@@ -325,11 +349,11 @@ public class ApiEndpointsTests
     public async Task GetProjects_PaginatesWithNextPageToken()
     {
         using var factory = new ApiTesterWebFactory();
-        var first = await SeedProjectAsync(factory, "Alpha", "alpha", DateTime.UtcNow.AddMinutes(-5));
-        var second = await SeedProjectAsync(factory, "Bravo", "bravo", DateTime.UtcNow.AddMinutes(-3));
-        var third = await SeedProjectAsync(factory, "Charlie", "charlie", DateTime.UtcNow.AddMinutes(-1));
+        var first = await SeedProjectAsync(factory, "Alpha", "alpha", createdUtc: DateTime.UtcNow.AddMinutes(-5));
+        var second = await SeedProjectAsync(factory, "Bravo", "bravo", createdUtc: DateTime.UtcNow.AddMinutes(-3));
+        var third = await SeedProjectAsync(factory, "Charlie", "charlie", createdUtc: DateTime.UtcNow.AddMinutes(-1));
 
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
         var pageOne = await client.GetFromJsonAsync<ProjectListResponse>("/api/projects?pageSize=2");
 
         Assert.NotNull(pageOne);
@@ -351,11 +375,11 @@ public class ApiEndpointsTests
     public async Task GetRuns_SortsAndPaginates()
     {
         using var factory = new ApiTesterWebFactory();
-        var project = await SeedProjectAsync(factory, "Echo", "echo", DateTime.UtcNow.AddHours(-1));
+        var project = await SeedProjectAsync(factory, "Echo", "echo", createdUtc: DateTime.UtcNow.AddHours(-1));
         var first = await SeedRunAsync(factory, project, "op-1", DateTime.UtcNow.AddMinutes(-10));
         var second = await SeedRunAsync(factory, project, "op-1", DateTime.UtcNow.AddMinutes(-5));
 
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
         var ascResponse = await client.GetFromJsonAsync<RunSummaryResponse>(
             $"/api/runs?projectKey={project.ProjectKey}&sort=startedUtc&order=asc&pageSize=10");
 
@@ -380,14 +404,14 @@ public class ApiEndpointsTests
     public async Task InvalidRequests_ReturnBadRequest(string url)
     {
         using var factory = new ApiTesterWebFactory();
-        var client = factory.CreateClient();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
         var response = await client.GetAsync(url);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    private static async Task<ProjectEntity> SeedProjectAsync(ApiTesterWebFactory factory, string name, string key, DateTime? createdUtc = null)
+    private static async Task<ProjectEntity> SeedProjectAsync(ApiTesterWebFactory factory, string name, string key, string ownerKey = ApiTesterWebFactory.ApiKeyAlpha, DateTime? createdUtc = null)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
@@ -396,6 +420,7 @@ public class ApiEndpointsTests
         var project = new ProjectEntity
         {
             ProjectId = Guid.NewGuid(),
+            OwnerKey = ownerKey,
             Name = name,
             ProjectKey = key,
             CreatedUtc = createdUtc ?? DateTime.UtcNow
@@ -492,6 +517,13 @@ public class ApiEndpointsTests
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         content.Add(fileContent, "file", "openapi.json");
         return content;
+    }
+
+    private static HttpClient CreateClient(ApiTesterWebFactory factory, string apiKey)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(ApiKeyAuthDefaults.HeaderName, apiKey);
+        return client;
     }
 
     private static string GetHttpbinSpecPath()
