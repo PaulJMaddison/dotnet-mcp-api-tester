@@ -6,403 +6,167 @@
 <head>
     <meta charset="utf-8" />
     <title>Project Runs</title>
-    <style>
-        body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            margin: 2rem;
-            color: #1f2933;
-        }
-
-        .top-nav {
-            margin-bottom: 0.75rem;
-            font-size: 0.95rem;
-        }
-
-        .top-nav a {
-            font-weight: 600;
-            color: #111827;
-            text-decoration: none;
-        }
-
-        .top-nav a:hover {
-            text-decoration: underline;
-        }
-
-        .breadcrumbs {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-            font-size: 0.9rem;
-            color: #52606d;
-            margin-bottom: 1.5rem;
-        }
-
-        .breadcrumbs a {
-            color: #2563eb;
-            text-decoration: none;
-        }
-
-        .breadcrumbs a:hover {
-            text-decoration: underline;
-        }
-
-        h1 {
-            margin-bottom: 0.25rem;
-        }
-
-        .project-meta {
-            margin-top: 0;
-            color: #52606d;
-        }
-
-        .filter-form {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            align-items: end;
-            margin: 1.5rem 0 1rem;
-        }
-
-        .filter-form label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 0.25rem;
-        }
-
-        .filter-form input,
-        .filter-form select {
-            padding: 0.5rem;
-            border: 1px solid #cbd2d9;
-            border-radius: 6px;
-            min-width: 200px;
-        }
-
-        .filter-form button {
-            padding: 0.6rem 1.2rem;
-            border-radius: 6px;
-            border: none;
-            background: #2563eb;
-            color: #fff;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .import-panel {
-            margin: 1.5rem 0;
-            padding: 1rem;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            background: #f9fafb;
-        }
-
-        .import-panel h2 {
-            margin-top: 0;
-        }
-
-        .import-panel form {
-            display: grid;
-            gap: 0.75rem;
-        }
-
-        .import-panel label {
-            font-weight: 600;
-        }
-
-        .import-panel input[type="text"],
-        .import-panel input[type="file"] {
-            padding: 0.5rem;
-            border: 1px solid #cbd2d9;
-            border-radius: 6px;
-        }
-
-        .import-panel button {
-            width: fit-content;
-            padding: 0.6rem 1.2rem;
-            border-radius: 6px;
-            border: none;
-            background: #0f766e;
-            color: #fff;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .import-message {
-            margin-top: 0.75rem;
-            padding: 0.75rem;
-            border-radius: 6px;
-        }
-
-        .import-message.success {
-            background: #ecfdf3;
-            border: 1px solid #bbf7d0;
-            color: #166534;
-        }
-
-        .import-message.error {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            color: #991b1b;
-        }
-
-        .plan-panel {
-            margin: 1.5rem 0;
-            padding: 1rem;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            background: #fff;
-        }
-
-        .plan-panel h2 {
-            margin-top: 0;
-        }
-
-        .plan-panel form {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.75rem;
-            align-items: end;
-        }
-
-        .plan-panel input[type="text"] {
-            padding: 0.5rem;
-            border: 1px solid #cbd2d9;
-            border-radius: 6px;
-            min-width: 240px;
-        }
-
-        .plan-panel button {
-            padding: 0.6rem 1.2rem;
-            border-radius: 6px;
-            border: none;
-            background: #1d4ed8;
-            color: #fff;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .plan-message {
-            margin-top: 0.75rem;
-            padding: 0.75rem;
-            border-radius: 6px;
-        }
-
-        .plan-message.success {
-            background: #ecfdf3;
-            border: 1px solid #bbf7d0;
-            color: #166534;
-        }
-
-        .plan-message.error {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            color: #991b1b;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
-
-        th, td {
-            text-align: left;
-            padding: 0.75rem 0.5rem;
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        th {
-            font-weight: 600;
-            color: #374151;
-        }
-
-        .empty-state,
-        .error-state {
-            margin-top: 1rem;
-            padding: 1rem;
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 6px;
-        }
-
-        details {
-            margin-top: 0.5rem;
-        }
-
-        pre {
-            margin: 0.5rem 0 0;
-            white-space: pre-wrap;
-            word-break: break-word;
-            font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 0.9rem;
-        }
-
-        a {
-            color: #2563eb;
-            text-decoration: none;
-        }
-
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
+    <link rel="stylesheet" href="~/styles/site.css" />
 </head>
 <body>
-    <nav class="top-nav">
-        <a href="/">Projects</a>
-    </nav>
-    <nav class="breadcrumbs" aria-label="Breadcrumb">
-        <a href="/">Projects</a>
-        <span>/</span>
-        <span>Runs</span>
-    </nav>
+    <main class="page">
+        <nav class="top-nav">
+            <a href="/">Projects</a>
+        </nav>
+        <nav class="breadcrumbs" aria-label="Breadcrumb">
+            <a href="/">Projects</a>
+            <span>/</span>
+            <span>Runs</span>
+        </nav>
 
-    <h1>Runs</h1>
-    <p class="project-meta">
-        Project:
-        <strong>@(Model.ProjectName ?? Model.ProjectId.ToString())</strong>
-        @if (!string.IsNullOrWhiteSpace(Model.ProjectName))
-        {
-            <span>(@Model.ProjectId)</span>
-        }
-    </p>
+        <h1>Runs</h1>
+        <p class="project-meta">
+            Project:
+            <strong>@(Model.ProjectName ?? Model.ProjectId.ToString())</strong>
+            @if (!string.IsNullOrWhiteSpace(Model.ProjectName))
+            {
+                <span>(@Model.ProjectId)</span>
+            }
+        </p>
 
-    <section class="import-panel" aria-label="OpenAPI Import">
-        <h2>Import OpenAPI</h2>
-        <p>Upload an OpenAPI JSON file or provide a local server path to import into this project.</p>
+        <section class="import-panel" aria-label="OpenAPI Import">
+            <h2>Import OpenAPI</h2>
+            <p>Upload an OpenAPI JSON file or provide a local server path to import into this project.</p>
 
-        <form method="post" enctype="multipart/form-data" asp-page-handler="Import">
+            <form method="post" enctype="multipart/form-data" asp-page-handler="Import">
+                <div>
+                    <label for="openapi-file">OpenAPI JSON file</label>
+                    <input id="openapi-file" type="file" name="OpenApiFile" accept=".json,application/json" />
+                </div>
+                <div>
+                    <label for="openapi-path">Server file path (optional)</label>
+                    <input id="openapi-path" type="text" name="OpenApiPath" value="@(Model.OpenApiPath ?? string.Empty)" placeholder="/path/to/openapi.json" />
+                </div>
+                <button type="submit">Import spec</button>
+            </form>
+
+            @if (Model.OpenApiSpec is not null)
+            {
+                <p>
+                    Current spec:
+                    <strong>@Model.OpenApiSpec.Title</strong>
+                    <span>(@Model.OpenApiSpec.Version)</span>
+                    <span>imported @DisplayFormatters.FormatUtc(Model.OpenApiSpec.CreatedUtc)</span>
+                </p>
+            }
+            else
+            {
+                <p>No OpenAPI spec imported yet.</p>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Model.ImportMessage))
+            {
+                <div class="import-message @Model.ImportMessageKind">
+                    @Model.ImportMessage
+                </div>
+            }
+        </section>
+
+        <section class="plan-panel" aria-label="Test Plan">
+            <h2>Test Plan</h2>
+            <p>Generate and store a deterministic test plan per operation.</p>
+
+            <form method="post" asp-page-handler="GeneratePlan">
+                <div>
+                    <label for="testplan-operation">Operation ID</label>
+                    <input id="testplan-operation" type="text" name="TestPlanOperationId" value="@(Model.OperationId ?? string.Empty)" />
+                </div>
+                <button type="submit">Generate plan</button>
+            </form>
+
+            @if (!string.IsNullOrWhiteSpace(Model.TestPlanMessage))
+            {
+                <div class="plan-message @Model.TestPlanMessageKind">
+                    @Model.TestPlanMessage
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Model.RunMessage))
+            {
+                <div class="plan-message @Model.RunMessageKind">
+                    @Model.RunMessage
+                </div>
+            }
+
+            @if (Model.TestPlan is not null)
+            {
+                <p>
+                    Stored plan for <strong>@Model.TestPlan.OperationId</strong>
+                    generated @DisplayFormatters.FormatUtc(Model.TestPlan.CreatedUtc).
+                </p>
+                <form method="post" asp-page-handler="RunPlan">
+                    <input type="hidden" name="RunOperationId" value="@Model.TestPlan.OperationId" />
+                    <button type="submit">Run now</button>
+                </form>
+                <pre>@Model.TestPlan.PlanJson</pre>
+            }
+            else if (!string.IsNullOrWhiteSpace(Model.OperationId))
+            {
+                <p>No stored test plan for this operation yet.</p>
+            }
+        </section>
+
+        <form method="get" class="filter-form">
             <div>
-                <label for="openapi-file">OpenAPI JSON file</label>
-                <input id="openapi-file" type="file" name="OpenApiFile" accept=".json,application/json" />
+                <label for="operationId">Operation ID</label>
+                <input id="operationId" name="operationId" type="text" value="@(Model.OperationId ?? string.Empty)" />
             </div>
             <div>
-                <label for="openapi-path">Server file path (optional)</label>
-                <input id="openapi-path" type="text" name="OpenApiPath" value="@(Model.OpenApiPath ?? string.Empty)" placeholder="/path/to/openapi.json" />
+                <label for="take">Take</label>
+                <select id="take" name="take">
+                    <option value="10" selected="@(Model.Take == 10 ? "selected" : null)">10</option>
+                    <option value="20" selected="@(Model.Take == 20 ? "selected" : null)">20</option>
+                    <option value="50" selected="@(Model.Take == 50 ? "selected" : null)">50</option>
+                </select>
             </div>
-            <button type="submit">Import spec</button>
+            <button type="submit">Filter</button>
         </form>
 
-        @if (Model.OpenApiSpec is not null)
+        @if (Model.HasError)
         {
-            <p>
-                Current spec:
-                <strong>@Model.OpenApiSpec.Title</strong>
-                <span>(@Model.OpenApiSpec.Version)</span>
-                <span>imported @DisplayFormatters.FormatUtc(Model.OpenApiSpec.CreatedUtc)</span>
-            </p>
+            <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
+        }
+        else if (Model.Runs.Count == 0)
+        {
+            <partial name="Shared/_EmptyState" model='new EmptyStateModel("No runs for this project yet.")' />
         }
         else
         {
-            <p>No OpenAPI spec imported yet.</p>
-        }
-
-        @if (!string.IsNullOrWhiteSpace(Model.ImportMessage))
-        {
-            <div class="import-message @Model.ImportMessageKind">
-                @Model.ImportMessage
-            </div>
-        }
-    </section>
-
-    <section class="plan-panel" aria-label="Test Plan">
-        <h2>Test Plan</h2>
-        <p>Generate and store a deterministic test plan per operation.</p>
-
-        <form method="post" asp-page-handler="GeneratePlan">
-            <div>
-                <label for="testplan-operation">OperationId</label>
-                <input id="testplan-operation" type="text" name="TestPlanOperationId" value="@(Model.OperationId ?? string.Empty)" />
-            </div>
-            <button type="submit">Generate plan</button>
-        </form>
-
-        @if (!string.IsNullOrWhiteSpace(Model.TestPlanMessage))
-        {
-            <div class="plan-message @Model.TestPlanMessageKind">
-                @Model.TestPlanMessage
-            </div>
-        }
-
-        @if (!string.IsNullOrWhiteSpace(Model.RunMessage))
-        {
-            <div class="plan-message @Model.RunMessageKind">
-                @Model.RunMessage
-            </div>
-        }
-
-        @if (Model.TestPlan is not null)
-        {
-            <p>
-                Stored plan for <strong>@Model.TestPlan.OperationId</strong>
-                generated @DisplayFormatters.FormatUtc(Model.TestPlan.CreatedUtc).
-            </p>
-            <form method="post" asp-page-handler="RunPlan">
-                <input type="hidden" name="RunOperationId" value="@Model.TestPlan.OperationId" />
-                <button type="submit">Run now</button>
-            </form>
-            <pre>@Model.TestPlan.PlanJson</pre>
-        }
-        else if (!string.IsNullOrWhiteSpace(Model.OperationId))
-        {
-            <p>No stored test plan for this operation yet.</p>
-        }
-    </section>
-
-    <form method="get" class="filter-form">
-        <div>
-            <label for="operationId">OperationId</label>
-            <input id="operationId" name="operationId" type="text" value="@(Model.OperationId ?? string.Empty)" />
-        </div>
-        <div>
-            <label for="take">Take</label>
-            <select id="take" name="take">
-                <option value="10" selected="@(Model.Take == 10 ? "selected" : null)">10</option>
-                <option value="20" selected="@(Model.Take == 20 ? "selected" : null)">20</option>
-                <option value="50" selected="@(Model.Take == 50 ? "selected" : null)">50</option>
-            </select>
-        </div>
-        <button type="submit">Filter</button>
-    </form>
-
-    @if (Model.HasError)
-    {
-        <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
-    }
-    else if (Model.Runs.Count == 0)
-    {
-        <partial name="Shared/_EmptyState" model='new EmptyStateModel("No runs for this project yet.")' />
-    }
-    else
-    {
-        <table>
-            <thead>
-                <tr>
-                    <th>StartedUtc</th>
-                    <th>OperationId</th>
-                    <th>TotalCases</th>
-                    <th>Passed</th>
-                    <th>Failed</th>
-                    <th>Blocked</th>
-                    <th>TotalDurationMs</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var run in Model.Runs)
-                {
+            <table>
+                <thead>
                     <tr>
-                        <td>
-                            <a href="/runs/@run.RunId">@DisplayFormatters.FormatUtc(run.StartedUtc)</a>
-                        </td>
-                        <td>@run.OperationId</td>
-                        <td>@run.Snapshot.TotalCases</td>
-                        <td>@run.Snapshot.Passed</td>
-                        <td>@run.Snapshot.Failed</td>
-                        <td>@run.Snapshot.Blocked</td>
-                        <td>@DisplayFormatters.FormatDurationMs(run.Snapshot.TotalDurationMs)</td>
+                        <th>Started UTC</th>
+                        <th>Operation ID</th>
+                        <th>Total Cases</th>
+                        <th>Passed</th>
+                        <th>Failed</th>
+                        <th>Blocked</th>
+                        <th>Total Duration (ms)</th>
                     </tr>
-                }
-            </tbody>
-        </table>
-    }
+                </thead>
+                <tbody>
+                    @foreach (var run in Model.Runs)
+                    {
+                        <tr>
+                            <td>
+                                <a href="/runs/@run.RunId">@DisplayFormatters.FormatUtc(run.StartedUtc)</a>
+                            </td>
+                            <td>@run.OperationId</td>
+                            <td>@run.Snapshot.TotalCases</td>
+                            <td>@run.Snapshot.Passed</td>
+                            <td>@run.Snapshot.Failed</td>
+                            <td>@run.Snapshot.Blocked</td>
+                            <td>@DisplayFormatters.FormatDurationMs(run.Snapshot.TotalDurationMs)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </main>
 </body>
 </html>

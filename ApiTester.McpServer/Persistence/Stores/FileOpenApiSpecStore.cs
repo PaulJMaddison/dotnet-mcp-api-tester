@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ApiTester.McpServer.Models;
+using ApiTester.McpServer.Serialization;
 
 namespace ApiTester.McpServer.Persistence.Stores;
 
@@ -7,11 +8,6 @@ public sealed class FileOpenApiSpecStore : IOpenApiSpecStore
 {
     private readonly AppConfig _cfg;
     private readonly SemaphoreSlim _mutex = new(1, 1);
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true
-    };
 
     public FileOpenApiSpecStore(AppConfig cfg)
     {
@@ -63,12 +59,12 @@ public sealed class FileOpenApiSpecStore : IOpenApiSpecStore
         if (string.IsNullOrWhiteSpace(json))
             return [];
 
-        return JsonSerializer.Deserialize<List<OpenApiSpecRecord>>(json, JsonOptions) ?? [];
+        return JsonSerializer.Deserialize<List<OpenApiSpecRecord>>(json, JsonDefaults.Default) ?? [];
     }
 
     private async Task SaveAsync(List<OpenApiSpecRecord> list, CancellationToken ct)
     {
-        var json = JsonSerializer.Serialize(list, JsonOptions);
+        var json = JsonSerializer.Serialize(list, JsonDefaults.Default);
         await File.WriteAllTextAsync(FilePath, json, ct);
     }
 }

@@ -1,4 +1,5 @@
-﻿using ApiTester.McpServer.Services;
+﻿using ApiTester.McpServer.Serialization;
+using ApiTester.McpServer.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using ModelContextProtocol.Server;
@@ -74,7 +75,7 @@ public sealed class ExecuteTools
                 method,
                 baseUrl = baseUrl.Trim().TrimEnd('/'),
                 url = (string?)null
-            }, new JsonSerializerOptions { WriteIndented = true });
+            }, JsonDefaults.Default);
         }
 
 
@@ -92,7 +93,7 @@ public sealed class ExecuteTools
                 method,
                 baseUrl = normalisedBaseUrl,
                 url = (string?)null
-            }, new JsonSerializerOptions { WriteIndented = true });
+            }, JsonDefaults.Default);
         }
 
         if (policy.AllowedBaseUrls.Count > 0 &&
@@ -111,7 +112,7 @@ public sealed class ExecuteTools
                 method,
                 baseUrl = normalisedBaseUrl,
                 url = (string?)null
-            }, new JsonSerializerOptions { WriteIndented = true });
+            }, JsonDefaults.Default);
         }
 
         // -----------------------------------------
@@ -140,7 +141,7 @@ public sealed class ExecuteTools
                 operationId,
                 method,
                 url
-            }, new JsonSerializerOptions { WriteIndented = true });
+            }, JsonDefaults.Default);
         }
 
 
@@ -185,7 +186,7 @@ public sealed class ExecuteTools
                     : (bodyJson!.Length > 2000 ? bodyJson[..2000] + "\n... (truncated)" : bodyJson)
             };
 
-            return JsonSerializer.Serialize(dryRunResult, new JsonSerializerOptions { WriteIndented = true });
+            return JsonSerializer.Serialize(dryRunResult, JsonDefaults.Default);
         }
 
         var client = _httpClientFactory.CreateClient();
@@ -240,7 +241,7 @@ public sealed class ExecuteTools
             (int)response.StatusCode,
             sw.ElapsedMilliseconds);
 
-        return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(result, JsonDefaults.Default);
     }
 
     private static async Task<(string Text, bool Truncated)> ReadBodyCappedAsync(
