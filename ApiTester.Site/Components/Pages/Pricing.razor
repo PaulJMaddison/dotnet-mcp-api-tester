@@ -19,6 +19,7 @@
                 <div class="col-lg-4">
                     <div class="card pricing-card h-100 @(plan.IsFeatured ? "featured" : string.Empty)">
                         <div class="card-body d-flex flex-column">
+                            <img class="img-fluid mb-3" src="@plan.ImageUrl" alt="@plan.ImageAlt" loading="lazy" />
                             @if (!string.IsNullOrWhiteSpace(plan.Badge))
                             {
                                 <div class="badge bg-primary">@plan.Badge</div>
@@ -56,9 +57,7 @@
                 </ul>
             </div>
             <div class="col-md-6">
-                <div class="ratio ratio-16x9 bg-light rounded-4 d-flex align-items-center justify-content-center text-muted">
-                    <span>@Content.ValuePropsPlaceholder</span>
-                </div>
+                <img class="img-fluid rounded-4 shadow-sm" src="images/pricing-hero.svg" alt="Illustration of pricing analytics and plan comparison" loading="lazy" />
             </div>
         </div>
     </div>
@@ -166,7 +165,6 @@
         IReadOnlyList<PlanDefinition> Plans,
         string ValuePropsTitle,
         IReadOnlyList<string> ValueProps,
-        string ValuePropsPlaceholder,
         string ComparisonTitle,
         string ComparisonSubtitle,
         string ComparisonHeader,
@@ -193,6 +191,8 @@
                     "/signup",
                     false,
                     string.Empty,
+                    "images/pricing-tier-starter.svg",
+                    "Illustration of the Free plan starter toolkit",
                     new List<string>
                     {
                         "1 workspace with 2 environments",
@@ -209,6 +209,8 @@
                     "/upgrade",
                     true,
                     "Most popular",
+                    "images/pricing-tier-pro.svg",
+                    "Illustration of the Pro plan growth toolkit",
                     new List<string>
                     {
                         "Unlimited workspaces and environments",
@@ -225,6 +227,8 @@
                     "/contact",
                     false,
                     string.Empty,
+                    "images/pattern-grid.svg",
+                    "Abstract grid pattern representing custom enterprise coverage",
                     new List<string>
                     {
                         "Dedicated tenant and custom retention",
@@ -276,7 +280,6 @@
                     "Role-based access with full audit logging",
                     "Retention settings designed for regulated workloads"
                 },
-                "Visual placeholder for product tour",
                 "Compare plans at a glance",
                 "All plans include core API testing with flexible scaling options.",
                 "Feature",
@@ -301,6 +304,8 @@
         string CtaLink,
         bool IsFeatured,
         string Badge,
+        string ImageUrl,
+        string ImageAlt,
         IReadOnlyList<string> Highlights);
 
     private sealed record FeatureComparison(string Feature, IReadOnlyList<string> Values);
