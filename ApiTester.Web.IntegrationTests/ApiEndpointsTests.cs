@@ -47,10 +47,10 @@ public class ApiEndpointsTests
         var client = factory.CreateClient();
 
         var first = await client.PostAsJsonAsync("/api/projects", new { name = "Echo" });
-        var firstPayload = await first.Content.ReadFromJsonAsync<ProjectCreateResponse>();
+        var firstPayload = await first.Content.ReadFromJsonAsync<ProjectDto>();
 
         var second = await client.PostAsJsonAsync("/api/projects", new { name = "Echo" });
-        var secondPayload = await second.Content.ReadFromJsonAsync<ProjectCreateResponse>();
+        var secondPayload = await second.Content.ReadFromJsonAsync<ProjectDto>();
 
         var list = await client.GetFromJsonAsync<ProjectListResponse>("/api/projects?take=10");
 

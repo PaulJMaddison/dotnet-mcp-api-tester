@@ -151,7 +151,7 @@
     }
     else if (Model.NotFound)
     {
-        <partial name="Shared/_EmptyState" model="new EmptyStateModel(\"Run not found\")" />
+        <partial name="Shared/_EmptyState" model='new EmptyStateModel("Run not found")' />
     }
     else if (Model.Run is not null)
     {
@@ -198,7 +198,7 @@
         <h2>Case Results</h2>
         @if (Model.Run.Result.Results.Count == 0)
         {
-            <partial name="Shared/_EmptyState" model="new EmptyStateModel(\"No case results recorded\")" />
+            <partial name="Shared/_EmptyState" model='new EmptyStateModel("No case results recorded")' />
         }
         else
         {

@@ -1,8 +1,10 @@
 using System.Net;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using ApiTester.Ui.Clients;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace ApiTester.Ui.Tests;
@@ -97,7 +99,8 @@ public class ProjectsPageTests
         var content = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("We couldn't load projects right now. Please try again.", content);
+        var expectedMessage = HtmlEncoder.Default.Encode("We couldn't load projects right now. Please try again.");
+        Assert.Contains(expectedMessage, content);
         Assert.Contains("error-state", content);
     }
 

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using ApiTester.Ui.Clients;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace ApiTester.Ui.Tests;
