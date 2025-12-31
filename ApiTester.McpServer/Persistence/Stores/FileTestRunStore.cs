@@ -72,6 +72,41 @@ public sealed class FileTestRunStore : ITestRunStore
         return null;
     }
 
+    public async Task<bool> SetBaselineAsync(string ownerKey, Guid runId, Guid baselineRunId)
+    {
+        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
+
+        if (!Directory.Exists(RootPath))
+            return false;
+
+        var ownerDir = OwnerPath(ownerKey);
+        if (!Directory.Exists(ownerDir))
+            return false;
+
+        var baseline = await GetAsync(ownerKey, baselineRunId);
+        if (baseline is null)
+            return false;
+
+        foreach (var projectDir in Directory.EnumerateDirectories(ownerDir))
+        {
+            var candidate = Path.Combine(projectDir, $"{runId:D}.json");
+            if (!File.Exists(candidate))
+                continue;
+
+            var json = await File.ReadAllTextAsync(candidate);
+            var record = JsonSerializer.Deserialize<TestRunRecord>(json, JsonDefaults.Default);
+            if (record is null)
+                return false;
+
+            record.BaselineRunId = baselineRunId;
+            var updatedJson = JsonSerializer.Serialize(record, JsonDefaults.Default);
+            await File.WriteAllTextAsync(candidate, updatedJson);
+            return true;
+        }
+
+        return false;
+    }
+
     public async Task<PagedResult<TestRunRecord>> ListAsync(
         string ownerKey,
         string projectKey,
@@ -109,6 +144,7 @@ public sealed class FileTestRunStore : ITestRunStore
                     OwnerKey = ownerKey,
                     ProjectKey = record.ProjectKey,
                     OperationId = record.OperationId,
+                    BaselineRunId = record.BaselineRunId,
                     StartedUtc = record.StartedUtc,
                     CompletedUtc = record.CompletedUtc,
                     Result = record.Result
@@ -128,6 +164,7 @@ public sealed class FileTestRunStore : ITestRunStore
                     OwnerKey = ownerKey,
                     ProjectKey = projectKey,
                     OperationId = record.OperationId,
+                    BaselineRunId = record.BaselineRunId,
                     StartedUtc = record.StartedUtc,
                     CompletedUtc = record.CompletedUtc,
                     Result = record.Result

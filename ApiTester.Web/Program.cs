@@ -8,6 +8,7 @@ using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Services;
 using ApiTester.Web.Observability;
 using ApiTester.Web.Contracts;
+using ApiTester.Web.Comparison;
 using ApiTester.Web.Execution;
 using ApiTester.Web.Auth;
 using ApiTester.Web.Mapping;
@@ -77,6 +78,7 @@ builder.Services.AddScoped<ApiRuntimeConfig>(sp =>
 });
 builder.Services.AddScoped<TestPlanRunner>();
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton<RunComparisonService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -530,6 +532,40 @@ app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, HttpCo
     return run is null
         ? Results.NotFound()
         : Results.Ok(RunMapping.ToDetailDto(run));
+});
+
+app.MapPost("/api/runs/{runId}/baseline/{baselineRunId}", async (string runId, string baselineRunId, ITestRunStore store, HttpContext httpContext) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
+        return InvalidRequest(runError);
+
+    if (!RequestValidation.TryParseGuid(baselineRunId, out var baselineId, out var baselineError))
+        return InvalidRequest(baselineError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var updated = await store.SetBaselineAsync(ownerKey, id, baselineId);
+    return updated ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapGet("/api/runs/{runId}/compare/{baselineRunId}", async (string runId, string baselineRunId, ITestRunStore store, RunComparisonService comparison, HttpContext httpContext) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
+        return InvalidRequest(runError);
+
+    if (!RequestValidation.TryParseGuid(baselineRunId, out var baselineId, out var baselineError))
+        return InvalidRequest(baselineError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var run = await store.GetAsync(ownerKey, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var baseline = await store.GetAsync(ownerKey, baselineId);
+    if (baseline is null)
+        return Results.NotFound();
+
+    var response = comparison.Compare(run, baseline);
+    return Results.Ok(response);
 });
 
 app.Run();

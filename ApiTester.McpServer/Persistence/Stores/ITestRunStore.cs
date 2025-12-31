@@ -8,6 +8,8 @@ public interface ITestRunStore
 
     Task<TestRunRecord?> GetAsync(string ownerKey, Guid runId);
 
+    Task<bool> SetBaselineAsync(string ownerKey, Guid runId, Guid baselineRunId);
+
     Task<PagedResult<TestRunRecord>> ListAsync(
         string ownerKey,
         string projectKey,
