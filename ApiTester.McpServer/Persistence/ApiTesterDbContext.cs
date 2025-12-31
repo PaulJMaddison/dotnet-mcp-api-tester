@@ -11,6 +11,7 @@ public sealed class ApiTesterDbContext : DbContext
     public DbSet<TestRunEntity> TestRuns => Set<TestRunEntity>();
     public DbSet<TestCaseResultEntity> TestCaseResults => Set<TestCaseResultEntity>();
     public DbSet<OpenApiSpecEntity> OpenApiSpecs => Set<OpenApiSpecEntity>();
+    public DbSet<TestPlanEntity> TestPlans => Set<TestPlanEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -69,6 +70,19 @@ public sealed class ApiTesterDbContext : DbContext
             b.HasOne(x => x.Project)
                 .WithOne(p => p.OpenApiSpec)
                 .HasForeignKey<OpenApiSpecEntity>(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TestPlanEntity>(b =>
+        {
+            b.HasKey(x => new { x.ProjectId, x.OperationId });
+            b.Property(x => x.OperationId).HasMaxLength(200).IsRequired();
+            b.Property(x => x.PlanJson).IsRequired();
+            b.HasIndex(x => x.ProjectId);
+
+            b.HasOne(x => x.Project)
+                .WithMany(p => p.TestPlans)
+                .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

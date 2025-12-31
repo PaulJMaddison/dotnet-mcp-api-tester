@@ -31,12 +31,18 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
             services.RemoveAll<ApiTesterDbContext>();
             services.RemoveAll<ITestRunStore>();
             services.RemoveAll<IProjectStore>();
+            services.RemoveAll<IOpenApiSpecStore>();
+            services.RemoveAll<ITestPlanStore>();
 
             services.AddDbContext<ApiTesterDbContext>(opt => opt.UseSqlite($"Data Source={_databasePath}"));
             services.AddScoped<SqlTestRunStore>();
             services.AddScoped<SqlProjectStore>();
+            services.AddScoped<SqlOpenApiSpecStore>();
+            services.AddScoped<SqlTestPlanStore>();
             services.AddScoped<ITestRunStore>(sp => sp.GetRequiredService<SqlTestRunStore>());
             services.AddScoped<IProjectStore>(sp => sp.GetRequiredService<SqlProjectStore>());
+            services.AddScoped<IOpenApiSpecStore>(sp => sp.GetRequiredService<SqlOpenApiSpecStore>());
+            services.AddScoped<ITestPlanStore>(sp => sp.GetRequiredService<SqlTestPlanStore>());
 
             using var provider = services.BuildServiceProvider();
             using var scope = provider.CreateScope();

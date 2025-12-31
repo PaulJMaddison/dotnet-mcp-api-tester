@@ -7,6 +7,7 @@ public sealed class ProjectEntity
     public DateTime CreatedUtc { get; set; }
 
     public List<TestRunEntity> Runs { get; set; } = new();
+    public List<TestPlanEntity> TestPlans { get; set; } = new();
     public OpenApiSpecEntity? OpenApiSpec { get; set; }
     public string ProjectKey { get; set; } = "";
 }

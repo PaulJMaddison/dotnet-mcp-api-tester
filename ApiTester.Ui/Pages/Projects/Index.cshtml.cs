@@ -46,6 +46,17 @@ public class IndexModel : PageModel
     [TempData]
     public string? ImportMessageKind { get; set; }
 
+    public TestPlanResponse? TestPlan { get; private set; }
+
+    [TempData]
+    public string? TestPlanMessage { get; set; }
+
+    [TempData]
+    public string? TestPlanMessageKind { get; set; }
+
+    [BindProperty]
+    public string? TestPlanOperationId { get; set; }
+
     public async Task OnGetAsync(Guid projectId, string? operationId, int? take)
     {
         ProjectId = projectId;
@@ -62,6 +73,11 @@ public class IndexModel : PageModel
             Runs = response.Runs;
 
             OpenApiSpec = await _apiTesterWebClient.GetOpenApiSpec(projectId, HttpContext.RequestAborted);
+
+            if (!string.IsNullOrWhiteSpace(OperationId))
+            {
+                TestPlan = await _apiTesterWebClient.GetTestPlan(projectId, OperationId, HttpContext.RequestAborted);
+            }
         }
         catch (Exception ex)
         {
@@ -100,6 +116,32 @@ public class IndexModel : PageModel
         }
 
         return RedirectToPage(new { projectId });
+    }
+
+    public async Task<IActionResult> OnPostGeneratePlanAsync(Guid projectId)
+    {
+        var operationId = string.IsNullOrWhiteSpace(TestPlanOperationId) ? null : TestPlanOperationId.Trim();
+        if (string.IsNullOrWhiteSpace(operationId))
+        {
+            TestPlanMessage = "Provide an operationId to generate a test plan.";
+            TestPlanMessageKind = "error";
+            return RedirectToPage(new { projectId });
+        }
+
+        try
+        {
+            await _apiTesterWebClient.GenerateTestPlan(projectId, operationId, HttpContext.RequestAborted);
+            TestPlanMessage = $"Generated test plan for {operationId}.";
+            TestPlanMessageKind = "success";
+        }
+        catch (Exception ex)
+        {
+            TestPlanMessage = "We couldn't generate the test plan. Verify the OpenAPI spec and operationId.";
+            TestPlanMessageKind = "error";
+            ErrorDetails = $"{ex.GetType().Name}: {ex.Message}";
+        }
+
+        return RedirectToPage(new { projectId, operationId });
     }
 
     private static int NormalizeTake(int? take)
