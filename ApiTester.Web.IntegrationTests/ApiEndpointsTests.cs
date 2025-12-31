@@ -1,12 +1,15 @@
 ﻿using System.Net;
 using System.Net.Http.Json;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Entities;
 using ApiTester.Web;
 using ApiTester.Web.Auth;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -237,6 +240,21 @@ public class ApiEndpointsTests
     }
 
     [Fact]
+    public async Task CreateProject_ReturnsPayloadTooLarge_ForLargeRequest()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+
+        var name = new string('a', RequestBodyLimits.MaxRequestBodyBytes + 1024);
+        var json = JsonSerializer.Serialize(new { name });
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync("/api/projects", content);
+
+        Assert.True(response.StatusCode is HttpStatusCode.RequestEntityTooLarge or HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task GenerateTestPlan_ReturnsConflict_WhenNoSpecImported()
     {
         using var factory = new ApiTesterWebFactory();
@@ -346,6 +364,81 @@ public class ApiEndpointsTests
     }
 
     [Fact]
+    public async Task ExecuteRun_BlocksLocalhost()
+    {
+        var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Execution:AllowedBaseUrls:0"] = "http://localhost:12345",
+                    ["Execution:DryRun"] = "false"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "Blocked", "blocked");
+        var specJson = BuildSpecJson("blockedOp", "http://localhost:12345", "/sample");
+        await SeedSpecAsync(factory, project, specJson);
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsync($"/api/projects/{project.ProjectId}/runs/execute/blockedOp", null);
+        var payload = await response.Content.ReadFromJsonAsync<RunDetailDto>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.True(payload!.Result.TryGetProperty("results", out var results));
+        Assert.Contains(results.EnumerateArray(), item =>
+            item.TryGetProperty("blocked", out var blockedEl) && blockedEl.ValueKind == JsonValueKind.True);
+    }
+
+    [Fact]
+    public async Task ExecuteRun_ReportsTimeout()
+    {
+        var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Execution:AllowedBaseUrls:0"] = "https://httpbin.org",
+                    ["Execution:TimeoutSeconds"] = "1",
+                    ["Execution:DryRun"] = "false"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "Timeout", "timeout");
+        var specJson = BuildSpecJson("delayOp", "https://httpbin.org", "/delay/3");
+        await SeedSpecAsync(factory, project, specJson);
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsync($"/api/projects/{project.ProjectId}/runs/execute/delayOp", null);
+        var payload = await response.Content.ReadFromJsonAsync<RunDetailDto>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.True(payload!.Result.TryGetProperty("results", out var results));
+        Assert.Contains(results.EnumerateArray(), item =>
+        {
+            if (!item.TryGetProperty("pass", out var passEl) || passEl.ValueKind != JsonValueKind.False)
+                return false;
+
+            if (!item.TryGetProperty("failureReason", out var failEl) || failEl.ValueKind != JsonValueKind.String)
+                return false;
+
+            var reason = failEl.GetString() ?? string.Empty;
+            return reason.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+                   reason.Contains("canceled", StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Fact]
     public async Task GetProjects_PaginatesWithNextPageToken()
     {
         using var factory = new ApiTesterWebFactory();
@@ -411,7 +504,7 @@ public class ApiEndpointsTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    private static async Task<ProjectEntity> SeedProjectAsync(ApiTesterWebFactory factory, string name, string key, string ownerKey = ApiTesterWebFactory.ApiKeyAlpha, DateTime? createdUtc = null)
+    private static async Task<ProjectEntity> SeedProjectAsync(WebApplicationFactory<Program> factory, string name, string key, string ownerKey = ApiTesterWebFactory.ApiKeyAlpha, DateTime? createdUtc = null)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
@@ -431,7 +524,7 @@ public class ApiEndpointsTests
         return project;
     }
 
-    private static async Task<TestRunEntity> SeedRunAsync(ApiTesterWebFactory factory, ProjectEntity project, string operationId, DateTime? startedUtc = null)
+    private static async Task<TestRunEntity> SeedRunAsync(WebApplicationFactory<Program> factory, ProjectEntity project, string operationId, DateTime? startedUtc = null)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
@@ -470,7 +563,7 @@ public class ApiEndpointsTests
         return run;
     }
 
-    private static async Task<OpenApiSpecEntity> SeedSpecAsync(ApiTesterWebFactory factory, ProjectEntity project, string specJson, DateTime? createdUtc = null)
+    private static async Task<OpenApiSpecEntity> SeedSpecAsync(WebApplicationFactory<Program> factory, ProjectEntity project, string specJson, DateTime? createdUtc = null)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
@@ -491,7 +584,7 @@ public class ApiEndpointsTests
         return spec;
     }
 
-    private static async Task<TestPlanEntity> SeedTestPlanAsync(ApiTesterWebFactory factory, ProjectEntity project, string operationId, string planJson, DateTime? createdUtc = null)
+    private static async Task<TestPlanEntity> SeedTestPlanAsync(WebApplicationFactory<Program> factory, ProjectEntity project, string operationId, string planJson, DateTime? createdUtc = null)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
@@ -519,7 +612,7 @@ public class ApiEndpointsTests
         return content;
     }
 
-    private static HttpClient CreateClient(ApiTesterWebFactory factory, string apiKey)
+    private static HttpClient CreateClient(WebApplicationFactory<Program> factory, string apiKey)
     {
         var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add(ApiKeyAuthDefaults.HeaderName, apiKey);
@@ -574,6 +667,34 @@ public class ApiEndpointsTests
                    },
                    "paths": {
                      "/sample": {
+                       "get": {
+                         "operationId": "{{operationId}}",
+                         "responses": {
+                           "200": {
+                             "description": "ok"
+                           }
+                         }
+                       }
+                     }
+                   }
+                 }
+                 """;
+    }
+
+    private static string BuildSpecJson(string operationId, string serverUrl, string path)
+    {
+        return $$"""
+                 {
+                   "openapi": "3.0.0",
+                   "info": {
+                     "title": "Sample API",
+                     "version": "1.0.0"
+                   },
+                   "servers": [
+                     { "url": "{{serverUrl}}" }
+                   ],
+                   "paths": {
+                     "{{path}}": {
                        "get": {
                          "operationId": "{{operationId}}",
                          "responses": {
