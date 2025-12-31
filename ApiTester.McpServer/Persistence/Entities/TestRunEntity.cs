@@ -5,6 +5,8 @@ public sealed class TestRunEntity
     public Guid RunId { get; set; }
     public Guid ProjectId { get; set; }
     public ProjectEntity? Project { get; set; }
+    public Guid? BaselineRunId { get; set; }
+    public TestRunEntity? BaselineRun { get; set; }
 
     public string OperationId { get; set; } = "";
     public DateTime StartedUtc { get; set; }

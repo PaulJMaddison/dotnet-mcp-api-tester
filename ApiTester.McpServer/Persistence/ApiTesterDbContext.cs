@@ -27,11 +27,17 @@ public sealed class ApiTesterDbContext : DbContext
             b.HasKey(x => x.RunId);
             b.Property(x => x.OperationId).HasMaxLength(200).IsRequired();
             b.HasIndex(x => new { x.ProjectId, x.StartedUtc });
+            b.HasIndex(x => x.BaselineRunId);
 
             b.HasOne(x => x.Project)
                 .WithMany(p => p.Runs)
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(x => x.BaselineRun)
+                .WithMany()
+                .HasForeignKey(x => x.BaselineRunId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ProjectEntity>(b =>
