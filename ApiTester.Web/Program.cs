@@ -32,13 +32,23 @@ app.MapGet("/health", (IHostEnvironment env, IOptions<PersistenceOptions> option
     });
 });
 
-app.MapGet("/api/projects", async (int? take, IProjectStore store, CancellationToken ct) =>
+app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, IProjectStore store, CancellationToken ct) =>
 {
-    if (!RequestValidation.TryNormalizeTake(take, 50, 1, 200, out var normalizedTake, out var error))
-        return InvalidRequest(error);
+    if (!RequestValidation.TryNormalizePageSize(pageSize, take, 50, 1, 200, out var normalizedPageSize, out var sizeError))
+        return InvalidRequest(sizeError);
 
-    var projects = await store.ListAsync(normalizedTake, ct);
-    return Results.Ok(ProjectMapping.ToListResponse(normalizedTake, projects));
+    if (!RequestValidation.TryNormalizePageToken(pageToken, skip, out var offset, out var tokenError))
+        return InvalidRequest(tokenError);
+
+    if (!RequestValidation.TryNormalizeSort(sort, SortField.CreatedUtc, out var sortField, out var sortError))
+        return InvalidRequest(sortError);
+
+    if (!RequestValidation.TryNormalizeOrder(order, SortDirection.Desc, out var direction, out var orderError))
+        return InvalidRequest(orderError);
+
+    var result = await store.ListAsync(new PageRequest(normalizedPageSize, offset), sortField, direction, ct);
+    var metadata = new PageMetadata(result.Total, normalizedPageSize, result.NextOffset?.ToString());
+    return Results.Ok(ProjectMapping.ToListResponse(metadata, result.Items));
 });
 
 app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore store, CancellationToken ct) =>
@@ -47,7 +57,7 @@ app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore 
         return InvalidRequest(error);
 
     var project = await store.CreateAsync(request!.Name!, ct);
-    return Results.Ok(ProjectMapping.ToCreateResponse(project));
+    return Results.Ok(ProjectMapping.ToDto(project));
 });
 
 app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore store, CancellationToken ct) =>
@@ -58,22 +68,37 @@ app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore s
     var project = await store.GetAsync(id, ct);
     return project is null
         ? Results.NotFound()
-        : Results.Ok(ProjectMapping.ToResponse(project));
+        : Results.Ok(ProjectMapping.ToDto(project));
 });
 
-app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? take, ITestRunStore store, CancellationToken ct) =>
+app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredKey(projectKey, "projectKey", out var keyError))
         return InvalidRequest(keyError);
 
-    if (!RequestValidation.TryNormalizeTake(take, 20, 1, 200, out var normalizedTake, out var takeError))
-        return InvalidRequest(takeError);
+    if (!RequestValidation.TryNormalizePageSize(pageSize, take, 20, 1, 200, out var normalizedPageSize, out var sizeError))
+        return InvalidRequest(sizeError);
+
+    if (!RequestValidation.TryNormalizePageToken(pageToken, skip, out var offset, out var tokenError))
+        return InvalidRequest(tokenError);
 
     if (!RequestValidation.TryNormalizeOptionalValue(operationId, out var normalizedOperationId, out var opError))
         return InvalidRequest(opError);
 
-    var runs = await store.ListAsync(projectKey!.Trim(), normalizedTake, normalizedOperationId);
-    return Results.Ok(RunMapping.ToSummaryResponse(projectKey!.Trim(), normalizedTake, runs));
+    if (!RequestValidation.TryNormalizeSort(sort, SortField.StartedUtc, out var sortField, out var sortError))
+        return InvalidRequest(sortError);
+
+    if (!RequestValidation.TryNormalizeOrder(order, SortDirection.Desc, out var direction, out var orderError))
+        return InvalidRequest(orderError);
+
+    var result = await store.ListAsync(
+        projectKey!.Trim(),
+        new PageRequest(normalizedPageSize, offset),
+        sortField,
+        direction,
+        normalizedOperationId);
+    var metadata = new PageMetadata(result.Total, normalizedPageSize, result.NextOffset?.ToString());
+    return Results.Ok(RunMapping.ToSummaryResponse(projectKey!.Trim(), metadata, result.Items));
 });
 
 app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, CancellationToken ct) =>
@@ -84,7 +109,7 @@ app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, Cancel
     var run = await store.GetAsync(id);
     return run is null
         ? Results.NotFound()
-        : Results.Ok(RunMapping.ToDetailResponse(run));
+        : Results.Ok(RunMapping.ToDetailDto(run));
 });
 
 app.Run();

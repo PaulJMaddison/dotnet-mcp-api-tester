@@ -2,15 +2,15 @@
 
 namespace ApiTester.Web.Contracts;
 
-public sealed record RunSummaryResponse(string ProjectKey, int Take, int Total, IReadOnlyList<RunSummaryItem> Runs);
+public sealed record RunSummaryResponse(string ProjectKey, IReadOnlyList<RunSummaryDto> Runs, PageMetadata Metadata);
 
-public sealed record RunSummaryItem(
+public sealed record RunSummaryDto(
     Guid RunId,
     string ProjectKey,
     string OperationId,
     DateTimeOffset StartedUtc,
     DateTimeOffset CompletedUtc,
-    RunSummary Summary);
+    RunSummary Snapshot);
 
 public sealed record RunSummary(
     int TotalCases,
@@ -19,7 +19,7 @@ public sealed record RunSummary(
     int Blocked,
     long TotalDurationMs);
 
-public sealed record RunDetailResponse(
+public sealed record RunDetailDto(
     Guid RunId,
     string ProjectKey,
     string OperationId,

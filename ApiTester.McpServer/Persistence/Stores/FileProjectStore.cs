@@ -46,16 +46,31 @@ public sealed class FileProjectStore : IProjectStore
         }
     }
 
-    public async Task<IReadOnlyList<ProjectRecord>> ListAsync(int take, CancellationToken ct)
+    public async Task<PagedResult<ProjectRecord>> ListAsync(PageRequest request, SortField sortField, SortDirection direction, CancellationToken ct)
     {
-        take = take <= 0 ? 50 : Math.Min(take, 200);
-
         var list = await LoadAsync(ct);
 
-        return list
-            .OrderByDescending(p => p.CreatedUtc)
-            .Take(take)
+        var ordered = sortField switch
+        {
+            SortField.StartedUtc => direction == SortDirection.Asc
+                ? list.OrderBy(p => p.CreatedUtc)
+                : list.OrderByDescending(p => p.CreatedUtc),
+            _ => direction == SortDirection.Asc
+                ? list.OrderBy(p => p.CreatedUtc)
+                : list.OrderByDescending(p => p.CreatedUtc)
+        };
+
+        var total = list.Count;
+        var page = ordered
+            .Skip(request.Offset)
+            .Take(request.PageSize)
             .ToList();
+
+        var nextOffset = request.Offset + page.Count < total
+            ? request.Offset + page.Count
+            : null;
+
+        return new PagedResult<ProjectRecord>(page, total, nextOffset);
     }
 
     public async Task<ProjectRecord?> GetAsync(Guid projectId, CancellationToken ct)

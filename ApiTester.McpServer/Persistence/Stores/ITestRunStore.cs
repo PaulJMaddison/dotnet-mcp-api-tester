@@ -8,6 +8,10 @@ public interface ITestRunStore
 
     Task<TestRunRecord?> GetAsync(Guid runId);
 
-    Task<IReadOnlyList<TestRunRecord>> ListAsync(string projectKey, int take, string? operationId = null);
+    Task<PagedResult<TestRunRecord>> ListAsync(
+        string projectKey,
+        PageRequest request,
+        SortField sortField,
+        SortDirection direction,
+        string? operationId = null);
 }
-

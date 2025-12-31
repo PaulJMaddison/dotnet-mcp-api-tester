@@ -1,24 +1,106 @@
-﻿namespace ApiTester.Web.Validation;
+﻿using ApiTester.McpServer.Persistence.Stores;
+
+namespace ApiTester.Web.Validation;
 
 public static class RequestValidation
 {
-    public static bool TryNormalizeTake(int? take, int defaultValue, int minValue, int maxValue, out int normalized, out string error)
+    public static bool TryNormalizePageSize(
+        int? pageSize,
+        int? take,
+        int defaultValue,
+        int minValue,
+        int maxValue,
+        out int normalized,
+        out string error)
     {
-        if (!take.HasValue)
+        var value = pageSize ?? take;
+
+        if (!value.HasValue)
         {
             normalized = defaultValue;
             error = string.Empty;
             return true;
         }
 
-        if (take.Value < minValue || take.Value > maxValue)
+        if (value.Value < minValue || value.Value > maxValue)
         {
             normalized = defaultValue;
-            error = $"take must be between {minValue} and {maxValue}.";
+            error = $"pageSize must be between {minValue} and {maxValue}.";
             return false;
         }
 
-        normalized = take.Value;
+        normalized = value.Value;
+        error = string.Empty;
+        return true;
+    }
+
+    public static bool TryNormalizePageToken(string? pageToken, int? skip, out int normalized, out string error)
+    {
+        if (string.IsNullOrWhiteSpace(pageToken) && !skip.HasValue)
+        {
+            normalized = 0;
+            error = string.Empty;
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(pageToken))
+        {
+            if (!int.TryParse(pageToken, out normalized) || normalized < 0)
+            {
+                error = "pageToken must be a non-negative integer.";
+                return false;
+            }
+
+            error = string.Empty;
+            return true;
+        }
+
+        if (skip is null || skip.Value < 0)
+        {
+            normalized = 0;
+            error = "skip must be a non-negative integer.";
+            return false;
+        }
+
+        normalized = skip.Value;
+        error = string.Empty;
+        return true;
+    }
+
+    public static bool TryNormalizeSort(string? sort, SortField defaultValue, out SortField normalized, out string error)
+    {
+        if (string.IsNullOrWhiteSpace(sort))
+        {
+            normalized = defaultValue;
+            error = string.Empty;
+            return true;
+        }
+
+        if (!Enum.TryParse<SortField>(sort, true, out normalized))
+        {
+            error = "sort must be createdUtc or startedUtc.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    public static bool TryNormalizeOrder(string? order, SortDirection defaultValue, out SortDirection normalized, out string error)
+    {
+        if (string.IsNullOrWhiteSpace(order))
+        {
+            normalized = defaultValue;
+            error = string.Empty;
+            return true;
+        }
+
+        if (!Enum.TryParse<SortDirection>(order, true, out normalized))
+        {
+            error = "order must be asc or desc.";
+            return false;
+        }
+
         error = string.Empty;
         return true;
     }

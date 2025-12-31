@@ -57,19 +57,22 @@ public sealed class FileTestRunStore : ITestRunStore
         return null;
     }
 
-    public async Task<IReadOnlyList<TestRunRecord>> ListAsync(string projectKey, int take, string? operationId = null)
+    public async Task<PagedResult<TestRunRecord>> ListAsync(
+        string projectKey,
+        PageRequest request,
+        SortField sortField,
+        SortDirection direction,
+        string? operationId = null)
     {
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
         operationId = string.IsNullOrWhiteSpace(operationId) ? null : operationId.Trim();
 
         var dir = ProjectPath(projectKey);
         if (!Directory.Exists(dir))
-            return Array.Empty<TestRunRecord>();
+            return new PagedResult<TestRunRecord>(Array.Empty<TestRunRecord>(), 0, null);
 
         var files = Directory.EnumerateFiles(dir, "*.json", SearchOption.TopDirectoryOnly)
             .Select(f => new FileInfo(f))
-            .OrderByDescending(f => f.LastWriteTimeUtc)
-            .Take(Math.Max(1, take))
             .ToList();
 
         var list = new List<TestRunRecord>(files.Count);
@@ -102,7 +105,27 @@ public sealed class FileTestRunStore : ITestRunStore
             list.Add(record);
         }
 
-        return list;
+        var ordered = sortField switch
+        {
+            SortField.CreatedUtc => direction == SortDirection.Asc
+                ? list.OrderBy(r => r.StartedUtc)
+                : list.OrderByDescending(r => r.StartedUtc),
+            _ => direction == SortDirection.Asc
+                ? list.OrderBy(r => r.StartedUtc)
+                : list.OrderByDescending(r => r.StartedUtc)
+        };
+
+        var total = list.Count;
+        var page = ordered
+            .Skip(request.Offset)
+            .Take(request.PageSize)
+            .ToList();
+
+        var nextOffset = request.Offset + page.Count < total
+            ? request.Offset + page.Count
+            : null;
+
+        return new PagedResult<TestRunRecord>(page, total, nextOffset);
     }
 
     private static string Sanitize(string s)
