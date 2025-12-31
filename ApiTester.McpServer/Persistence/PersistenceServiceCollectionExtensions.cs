@@ -17,6 +17,7 @@ public static class PersistenceServiceCollectionExtensions
 
         services.AddSingleton<FileTestRunStore>();
         services.AddSingleton<FileProjectStore>();
+        services.AddSingleton<FileOpenApiSpecStore>();
 
         if (selection.UseSqlProvider)
         {
@@ -30,13 +31,16 @@ public static class PersistenceServiceCollectionExtensions
 
             services.AddScoped<SqlTestRunStore>();
             services.AddScoped<SqlProjectStore>();
+            services.AddScoped<SqlOpenApiSpecStore>();
             services.AddScoped<ITestRunStore>(sp => sp.GetRequiredService<SqlTestRunStore>());
             services.AddScoped<IProjectStore>(sp => sp.GetRequiredService<SqlProjectStore>());
+            services.AddScoped<IOpenApiSpecStore>(sp => sp.GetRequiredService<SqlOpenApiSpecStore>());
         }
         else
         {
             services.AddSingleton<ITestRunStore>(sp => sp.GetRequiredService<FileTestRunStore>());
             services.AddSingleton<IProjectStore>(sp => sp.GetRequiredService<FileProjectStore>());
+            services.AddSingleton<IOpenApiSpecStore>(sp => sp.GetRequiredService<FileOpenApiSpecStore>());
         }
 
         return services;

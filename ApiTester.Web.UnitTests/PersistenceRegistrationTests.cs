@@ -25,8 +25,10 @@ public sealed class PersistenceRegistrationTests
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
+        var openApiStore = scope.ServiceProvider.GetRequiredService<IOpenApiSpecStore>();
 
         Assert.IsType<FileProjectStore>(store);
+        Assert.IsType<FileOpenApiSpecStore>(openApiStore);
         Assert.Null(scope.ServiceProvider.GetService<ApiTesterDbContext>());
     }
 
@@ -48,8 +50,10 @@ public sealed class PersistenceRegistrationTests
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         var store = scope.ServiceProvider.GetRequiredService<IProjectStore>();
+        var openApiStore = scope.ServiceProvider.GetRequiredService<IOpenApiSpecStore>();
 
         Assert.IsType<SqlProjectStore>(store);
+        Assert.IsType<SqlOpenApiSpecStore>(openApiStore);
         Assert.NotNull(scope.ServiceProvider.GetService<ApiTesterDbContext>());
     }
 }
