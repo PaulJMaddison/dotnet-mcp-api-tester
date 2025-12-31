@@ -22,6 +22,7 @@ builder.Services.AddSingleton(new ApiKeyAuthSettings(allowedKeys));
 var app = builder.Build();
 
 app.UseMiddleware<ApiKeyAuthMiddleware>();
+app.UseStaticFiles();
 app.MapGet("/ping", () => "ok");
 app.MapRazorPages();
 

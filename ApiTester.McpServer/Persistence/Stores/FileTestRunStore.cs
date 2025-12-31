@@ -1,4 +1,5 @@
 ﻿using ApiTester.McpServer.Models;
+using ApiTester.McpServer.Serialization;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -8,11 +9,6 @@ public sealed class FileTestRunStore : ITestRunStore
 {
     private readonly AppConfig _cfg;
     private readonly ILogger<FileTestRunStore> _logger;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true
-    };
 
     public FileTestRunStore(AppConfig cfg, ILogger<FileTestRunStore> logger)
     {
@@ -46,7 +42,7 @@ public sealed class FileTestRunStore : ITestRunStore
             ownerKey,
             projectKey,
             path);
-        var json = JsonSerializer.Serialize(record, JsonOptions);
+        var json = JsonSerializer.Serialize(record, JsonDefaults.Default);
 
         await File.WriteAllTextAsync(path, json);
     }
@@ -70,7 +66,7 @@ public sealed class FileTestRunStore : ITestRunStore
                 continue;
 
             var json = await File.ReadAllTextAsync(candidate);
-            return JsonSerializer.Deserialize<TestRunRecord>(json, JsonOptions);
+            return JsonSerializer.Deserialize<TestRunRecord>(json, JsonDefaults.Default);
         }
 
         return null;
@@ -101,7 +97,7 @@ public sealed class FileTestRunStore : ITestRunStore
         foreach (var fi in files)
         {
             var json = await File.ReadAllTextAsync(fi.FullName);
-            var record = JsonSerializer.Deserialize<TestRunRecord>(json, JsonOptions);
+            var record = JsonSerializer.Deserialize<TestRunRecord>(json, JsonDefaults.Default);
             if (record is null)
                 continue;
 

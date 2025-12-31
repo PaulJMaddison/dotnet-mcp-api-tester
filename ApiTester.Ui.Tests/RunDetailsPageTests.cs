@@ -61,12 +61,12 @@ public class RunDetailsPageTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("<th>Name</th>", content);
-        Assert.Contains("<th>Pass</th>", content);
+        Assert.Contains("<th>Passed</th>", content);
         Assert.Contains("<th>Blocked</th>", content);
-        Assert.Contains("<th>StatusCode</th>", content);
-        Assert.Contains("<th>DurationMs</th>", content);
+        Assert.Contains("<th>Status Code</th>", content);
+        Assert.Contains("<th>Duration (ms)</th>", content);
         Assert.Contains("<th>Method</th>", content);
-        Assert.Contains("<th>Url</th>", content);
+        Assert.Contains("<th>URL</th>", content);
     }
 
     [Fact]
