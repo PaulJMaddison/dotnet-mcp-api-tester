@@ -1,0 +1,9 @@
+<svg width="360" height="120" viewBox="0 0 360 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="360" height="120" rx="24" fill="#0F172A"/>
+  <rect x="24" y="24" width="72" height="72" rx="16" fill="#1E293B"/>
+  <path d="M44 60C44 49.402 52.402 41 63 41H80V53H63C58.582 53 55 56.582 55 61V80H44V60Z" fill="#38BDF8"/>
+  <path d="M80 80H63C52.402 80 44 71.598 44 61V44H56V61C56 65.418 59.582 69 64 69H80V80Z" fill="#F97316"/>
+  <path d="M126 50H168" stroke="#F8FAFC" stroke-width="6" stroke-linecap="round"/>
+  <path d="M126 70H210" stroke="#CBD5F5" stroke-width="6" stroke-linecap="round"/>
+  <text x="126" y="90" fill="#F8FAFC" font-family="'Segoe UI', sans-serif" font-size="24" font-weight="600">API Tester</text>
+</svg>
