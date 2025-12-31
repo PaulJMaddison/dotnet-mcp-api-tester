@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using ApiTester.McpServer.Models;
+using ApiTester.McpServer.Serialization;
 
 namespace ApiTester.McpServer.Persistence.Stores;
 
@@ -7,11 +8,6 @@ public sealed class FileProjectStore : IProjectStore
 {
     private readonly AppConfig _cfg;
     private readonly SemaphoreSlim _mutex = new(1, 1);
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true
-    };
 
     public FileProjectStore(AppConfig cfg)
     {
@@ -107,13 +103,13 @@ public sealed class FileProjectStore : IProjectStore
         if (string.IsNullOrWhiteSpace(json))
             return [];
 
-        var list = JsonSerializer.Deserialize<List<ProjectRecord>>(json, JsonOptions) ?? [];
+        var list = JsonSerializer.Deserialize<List<ProjectRecord>>(json, JsonDefaults.Default) ?? [];
         return list.Select(NormalizeOwnerKey).ToList();
     }
 
     private async Task SaveAsync(List<ProjectRecord> list, CancellationToken ct)
     {
-        var json = JsonSerializer.Serialize(list, JsonOptions);
+        var json = JsonSerializer.Serialize(list, JsonDefaults.Default);
         await File.WriteAllTextAsync(FilePath, json, ct);
     }
 

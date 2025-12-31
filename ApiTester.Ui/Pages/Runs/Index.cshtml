@@ -6,251 +6,128 @@
 <head>
     <meta charset="utf-8" />
     <title>Run Details</title>
-    <style>
-        body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            margin: 2rem;
-            color: #1f2933;
-        }
-
-        .top-nav {
-            margin-bottom: 0.75rem;
-            font-size: 0.95rem;
-        }
-
-        .top-nav a {
-            font-weight: 600;
-            color: #111827;
-            text-decoration: none;
-        }
-
-        .top-nav a:hover {
-            text-decoration: underline;
-        }
-
-        .breadcrumbs {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-            font-size: 0.9rem;
-            color: #52606d;
-            margin-bottom: 1.5rem;
-        }
-
-        .breadcrumbs a {
-            color: #2563eb;
-            text-decoration: none;
-        }
-
-        .breadcrumbs a:hover {
-            text-decoration: underline;
-        }
-
-        h1 {
-            margin-bottom: 0.25rem;
-        }
-
-        h2 {
-            margin-top: 2rem;
-        }
-
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .summary-card {
-            padding: 0.75rem 1rem;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            background: #f9fafb;
-        }
-
-        .summary-card span {
-            display: block;
-            color: #52606d;
-            font-size: 0.85rem;
-            margin-bottom: 0.25rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
-
-        th, td {
-            text-align: left;
-            padding: 0.75rem 0.5rem;
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        th {
-            font-weight: 600;
-            color: #374151;
-        }
-
-        .details-row td {
-            background: #f9fafb;
-        }
-
-        .details-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 1rem;
-            margin-top: 0.5rem;
-        }
-
-        .details-grid strong {
-            display: block;
-            margin-bottom: 0.25rem;
-            color: #1f2933;
-        }
-
-        .empty-state,
-        .error-state {
-            margin-top: 1rem;
-            padding: 1rem;
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 6px;
-        }
-
-        details {
-            margin-top: 0.5rem;
-        }
-
-        pre {
-            margin: 0.5rem 0 0;
-            white-space: pre-wrap;
-            word-break: break-word;
-            font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            font-size: 0.9rem;
-        }
-    </style>
+    <link rel="stylesheet" href="~/styles/site.css" />
 </head>
 <body>
-    <nav class="top-nav">
-        <a href="/">Projects</a>
-    </nav>
-    <nav class="breadcrumbs" aria-label="Breadcrumb">
-        <a href="/">Projects</a>
-        <span>/</span>
-        <span>Run Details</span>
-    </nav>
+    <main class="page">
+        <nav class="top-nav">
+            <a href="/">Projects</a>
+        </nav>
+        <nav class="breadcrumbs" aria-label="Breadcrumb">
+            <a href="/">Projects</a>
+            <span>/</span>
+            <span>Run Details</span>
+        </nav>
 
-    <h1>Run Details</h1>
+        <h1>Run Details</h1>
 
-    @if (Model.HasError)
-    {
-        <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
-    }
-    else if (Model.NotFound)
-    {
-        <partial name="Shared/_EmptyState" model='new EmptyStateModel("Run not found")' />
-    }
-    else if (Model.Run is not null)
-    {
-        <h2>Run Summary</h2>
-        <div class="summary-grid">
-            <div class="summary-card">
-                <span>ProjectKey</span>
-                <strong>@Model.Run.ProjectKey</strong>
-            </div>
-            <div class="summary-card">
-                <span>OperationId</span>
-                <strong>@Model.Run.OperationId</strong>
-            </div>
-            <div class="summary-card">
-                <span>StartedUtc</span>
-                <strong>@DisplayFormatters.FormatUtc(Model.Run.StartedUtc)</strong>
-            </div>
-            <div class="summary-card">
-                <span>CompletedUtc</span>
-                <strong>@DisplayFormatters.FormatUtc(Model.Run.CompletedUtc)</strong>
-            </div>
-            <div class="summary-card">
-                <span>Total</span>
-                <strong>@Model.Run.Result.TotalCases</strong>
-            </div>
-            <div class="summary-card">
-                <span>Passed</span>
-                <strong>@Model.Run.Result.Passed</strong>
-            </div>
-            <div class="summary-card">
-                <span>Failed</span>
-                <strong>@Model.Run.Result.Failed</strong>
-            </div>
-            <div class="summary-card">
-                <span>Blocked</span>
-                <strong>@Model.Run.Result.Blocked</strong>
-            </div>
-            <div class="summary-card">
-                <span>TotalDurationMs</span>
-                <strong>@DisplayFormatters.FormatDurationMs(Model.Run.Result.TotalDurationMs)</strong>
-            </div>
-        </div>
-
-        <h2>Case Results</h2>
-        @if (Model.Run.Result.Results.Count == 0)
+        @if (Model.HasError)
         {
-            <partial name="Shared/_EmptyState" model='new EmptyStateModel("No case results recorded")' />
+            <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
         }
-        else
+        else if (Model.NotFound)
         {
-            <table>
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Pass</th>
-                        <th>Blocked</th>
-                        <th>StatusCode</th>
-                        <th>DurationMs</th>
-                        <th>Method</th>
-                        <th>Url</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var result in Model.Run.Result.Results)
-                    {
+            <partial name="Shared/_EmptyState" model='new EmptyStateModel("Run not found")' />
+        }
+        else if (Model.Run is not null)
+        {
+            <h2>Run Summary</h2>
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <span>Project Key</span>
+                    <strong>@Model.Run.ProjectKey</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Operation ID</span>
+                    <strong>@Model.Run.OperationId</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Started UTC</span>
+                    <strong>@DisplayFormatters.FormatUtc(Model.Run.StartedUtc)</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Completed UTC</span>
+                    <strong>@DisplayFormatters.FormatUtc(Model.Run.CompletedUtc)</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Total Cases</span>
+                    <strong>@Model.Run.Result.TotalCases</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Passed</span>
+                    <strong>@Model.Run.Result.Passed</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Failed</span>
+                    <strong>@Model.Run.Result.Failed</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Blocked</span>
+                    <strong>@Model.Run.Result.Blocked</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Total Duration (ms)</span>
+                    <strong>@DisplayFormatters.FormatDurationMs(Model.Run.Result.TotalDurationMs)</strong>
+                </div>
+            </div>
+
+            <h2>Case Results</h2>
+            @if (Model.Run.Result.Results.Count == 0)
+            {
+                <partial name="Shared/_EmptyState" model='new EmptyStateModel("No case results recorded")' />
+            }
+            else
+            {
+                <table>
+                    <thead>
                         <tr>
-                            <td>@result.Name</td>
-                            <td>@(result.Pass ? "Yes" : "No")</td>
-                            <td>@(result.Blocked ? "Yes" : "No")</td>
-                            <td>@(result.StatusCode?.ToString() ?? "—")</td>
-                            <td>@DisplayFormatters.FormatDurationMs(result.DurationMs)</td>
-                            <td>@(string.IsNullOrWhiteSpace(result.Method) ? "—" : result.Method)</td>
-                            <td>@(string.IsNullOrWhiteSpace(result.Url) ? "—" : result.Url)</td>
+                            <th>Name</th>
+                            <th>Passed</th>
+                            <th>Blocked</th>
+                            <th>Status Code</th>
+                            <th>Duration (ms)</th>
+                            <th>Method</th>
+                            <th>URL</th>
                         </tr>
-                        <tr class="details-row">
-                            <td colspan="7">
-                                <details>
-                                    <summary>Details</summary>
-                                    <div class="details-grid">
-                                        <div>
-                                            <strong>FailureReason</strong>
-                                            <p>@(string.IsNullOrWhiteSpace(result.FailureReason) ? "None" : result.FailureReason)</p>
+                    </thead>
+                    <tbody>
+                        @foreach (var result in Model.Run.Result.Results)
+                        {
+                            <tr>
+                                <td>@result.Name</td>
+                                <td>@(result.Pass ? "Yes" : "No")</td>
+                                <td>@(result.Blocked ? "Yes" : "No")</td>
+                                <td>@(result.StatusCode?.ToString() ?? "—")</td>
+                                <td>@DisplayFormatters.FormatDurationMs(result.DurationMs)</td>
+                                <td>@(string.IsNullOrWhiteSpace(result.Method) ? "—" : result.Method)</td>
+                                <td>@(string.IsNullOrWhiteSpace(result.Url) ? "—" : result.Url)</td>
+                            </tr>
+                            <tr class="details-row">
+                                <td colspan="7">
+                                    <details>
+                                        <summary>Details</summary>
+                                        <div class="details-grid">
+                                            <div>
+                                                <strong>Failure Reason</strong>
+                                                <p>@(string.IsNullOrWhiteSpace(result.FailureReason) ? "None" : result.FailureReason)</p>
+                                            </div>
+                                            <div>
+                                                <strong>Block Reason</strong>
+                                                <p>@(string.IsNullOrWhiteSpace(result.BlockReason) ? "None" : result.BlockReason)</p>
+                                            </div>
+                                            <div>
+                                                <strong>Response Snippet</strong>
+                                                <pre>@(string.IsNullOrWhiteSpace(result.ResponseSnippet) ? "None" : result.ResponseSnippet)</pre>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <strong>BlockReason</strong>
-                                            <p>@(string.IsNullOrWhiteSpace(result.BlockReason) ? "None" : result.BlockReason)</p>
-                                        </div>
-                                        <div>
-                                            <strong>ResponseSnippet</strong>
-                                            <pre>@(string.IsNullOrWhiteSpace(result.ResponseSnippet) ? "None" : result.ResponseSnippet)</pre>
-                                        </div>
-                                    </div>
-                                </details>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+                                    </details>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
         }
-    }
+    </main>
 </body>
 </html>

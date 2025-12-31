@@ -1,4 +1,5 @@
-﻿using ModelContextProtocol.Server;
+﻿using ApiTester.McpServer.Serialization;
+using ModelContextProtocol.Server;
 using System.ComponentModel;
 using System.Text.Json;
 
@@ -20,6 +21,6 @@ public sealed class CoreTools
             utcNow = DateTime.UtcNow
         };
 
-        return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(result, JsonDefaults.Default);
     }
 }

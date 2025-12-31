@@ -81,6 +81,13 @@ builder.Services.AddHttpClient();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+var jsonOptions = new JsonSerializerOptions
+{
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    PropertyNameCaseInsensitive = true,
+    WriteIndented = true
+};
+
 var authOptions = builder.Configuration.GetSection(ApiKeyAuthOptions.SectionName).Get<ApiKeyAuthOptions>() ?? new ApiKeyAuthOptions();
 var allowedKeys = authOptions.ResolveKeys();
 if (allowedKeys.Count == 0)
@@ -88,6 +95,7 @@ if (allowedKeys.Count == 0)
 builder.Services.AddSingleton(new ApiKeyAuthSettings(allowedKeys));
 
 var app = builder.Build();
+var appVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";
 
 var exceptionLogger = app.Services.GetRequiredService<ILoggerFactory>()
     .CreateLogger("ApiTester.Web.Exceptions");
@@ -151,6 +159,8 @@ app.MapGet("/health", (IHostEnvironment env, IOptions<PersistenceOptions> option
         hasConnectionString = !string.IsNullOrWhiteSpace(persistence.ConnectionString)
     });
 });
+
+app.MapGet("/api/version", () => Results.Ok(new VersionResponse(appVersion)));
 
 app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, IProjectStore store, HttpContext httpContext, CancellationToken ct) =>
 {
@@ -363,7 +373,7 @@ app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async 
 
     var (path, method, op) = match.Value;
     var plan = TestPlanFactory.Create(op, method, path, operationId.Trim());
-    var planJson = JsonSerializer.Serialize(plan, new JsonSerializerOptions { WriteIndented = true });
+    var planJson = JsonSerializer.Serialize(plan, jsonOptions);
 
     var record = await planStore.UpsertAsync(id, operationId.Trim(), planJson, DateTime.UtcNow, ct);
     return Results.Ok(new TestPlanResponse(record.ProjectId, record.OperationId, record.PlanJson, record.CreatedUtc));
@@ -447,14 +457,14 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
 
         var (path, method, op) = match.Value;
         plan = TestPlanFactory.Create(op, method, path, trimmedOperationId);
-        var planJson = JsonSerializer.Serialize(plan, new JsonSerializerOptions { WriteIndented = true });
+        var planJson = JsonSerializer.Serialize(plan, jsonOptions);
         await planStore.UpsertAsync(id, trimmedOperationId, planJson, DateTime.UtcNow, ct);
     }
     else
     {
         try
         {
-            plan = JsonSerializer.Deserialize<TestPlan>(existingPlan.PlanJson)
+            plan = JsonSerializer.Deserialize<TestPlan>(existingPlan.PlanJson, jsonOptions)
                 ?? throw new JsonException("Stored test plan was empty.");
         }
         catch (JsonException)
