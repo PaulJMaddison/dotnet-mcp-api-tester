@@ -37,6 +37,7 @@ public sealed class SqlTestRunStore : ITestRunStore
             RunId = record.RunId,
             ProjectId = project.ProjectId,
             OperationId = record.OperationId,
+            BaselineRunId = record.BaselineRunId,
             StartedUtc = record.StartedUtc.UtcDateTime,
             CompletedUtc = record.CompletedUtc.UtcDateTime,
 
@@ -83,6 +84,7 @@ public sealed class SqlTestRunStore : ITestRunStore
             OwnerKey = run.Project?.OwnerKey ?? OwnerKeyDefaults.Default,
             ProjectKey = run.Project?.ProjectKey ?? "default",
             OperationId = run.OperationId,
+            BaselineRunId = run.BaselineRunId,
             StartedUtc = new DateTimeOffset(run.StartedUtc, TimeSpan.Zero),
             CompletedUtc = new DateTimeOffset(run.CompletedUtc, TimeSpan.Zero),
             Result = new TestRunResult
@@ -111,6 +113,27 @@ public sealed class SqlTestRunStore : ITestRunStore
                     .ToList()
             }
         };
+    }
+
+    public async Task<bool> SetBaselineAsync(string ownerKey, Guid runId, Guid baselineRunId)
+    {
+        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
+
+        var run = await _db.TestRuns
+            .Include(x => x.Project)
+            .FirstOrDefaultAsync(x => x.RunId == runId && x.Project.OwnerKey == ownerKey);
+        if (run is null)
+            return false;
+
+        var baselineExists = await _db.TestRuns
+            .Include(x => x.Project)
+            .AnyAsync(x => x.RunId == baselineRunId && x.Project.OwnerKey == ownerKey);
+        if (!baselineExists)
+            return false;
+
+        run.BaselineRunId = baselineRunId;
+        await _db.SaveChangesAsync();
+        return true;
     }
 
     public async Task<PagedResult<TestRunRecord>> ListAsync(
@@ -158,6 +181,7 @@ public sealed class SqlTestRunStore : ITestRunStore
             OwnerKey = run.Project?.OwnerKey ?? ownerKey,
             ProjectKey = run.Project?.ProjectKey ?? projectKey,
             OperationId = run.OperationId,
+            BaselineRunId = run.BaselineRunId,
             StartedUtc = new DateTimeOffset(run.StartedUtc, TimeSpan.Zero),
             CompletedUtc = new DateTimeOffset(run.CompletedUtc, TimeSpan.Zero),
             Result = new TestRunResult
