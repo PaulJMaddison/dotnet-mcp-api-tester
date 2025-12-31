@@ -1,53 +1,9 @@
 @page
 @model ApiTester.Ui.Pages.IndexModel
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <title>Projects</title>
-    <link rel="stylesheet" href="~/styles/site.css" />
-</head>
-<body>
-    <main class="page">
-        <nav class="top-nav">
-            <a href="/">Projects</a>
-        </nav>
+@{
+    ViewData["Title"] = "Redirecting";
+}
 
-        <h1>Projects</h1>
-
-        @if (Model.HasError)
-        {
-            <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
-        }
-        else if (Model.Projects.Count == 0)
-        {
-            <partial name="Shared/_EmptyState" model='new EmptyStateModel("No projects yet, create one by running the client or API.")' />
-        }
-        else
-        {
-            <table>
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Created UTC</th>
-                        <th>Project ID</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var project in Model.Projects)
-                    {
-                        <tr>
-                            <td>
-                                <a href="/projects/@project.ProjectId">@project.Name</a>
-                            </td>
-                            <td>@DisplayFormatters.FormatUtc(project.CreatedUtc)</td>
-                            <td>@project.ProjectId</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        }
-    </main>
-</body>
-</html>
+<h1>Redirecting…</h1>
+<p>Loading the app shell.</p>

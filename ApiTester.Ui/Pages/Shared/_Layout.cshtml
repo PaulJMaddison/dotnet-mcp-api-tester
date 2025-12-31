@@ -1,0 +1,52 @@
+@{
+    var pageTitle = ViewData["Title"] as string ?? "Api Tester";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>@pageTitle</title>
+    <link rel="stylesheet" href="~/styles/site.css" />
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="app-sidebar">
+            <div class="sidebar-header">
+                <span>App Shell</span>
+            </div>
+            <nav class="sidebar-nav" aria-label="Primary">
+                <a href="/Projects">Projects</a>
+                <a href="/Runs">Runs</a>
+            </nav>
+            <div class="sidebar-footer">
+                <p>Sidebar placeholder</p>
+            </div>
+        </aside>
+
+        <div class="app-main">
+            <header class="app-topbar">
+                <div class="topbar-left">
+                    <strong>Top bar placeholder</strong>
+                    <span>Logged in: Demo User</span>
+                </div>
+                <div class="topbar-right">
+                    <span>Workspace: Local</span>
+                </div>
+            </header>
+
+            <div class="app-content">
+                @if (IsSectionDefined("Breadcrumb"))
+                {
+                    <nav class="breadcrumbs" aria-label="Breadcrumb">
+                        @RenderSection("Breadcrumb")
+                    </nav>
+                }
+                <main class="page">
+                    @RenderBody()
+                </main>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
