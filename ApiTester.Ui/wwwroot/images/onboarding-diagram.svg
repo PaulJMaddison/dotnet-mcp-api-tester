@@ -1,0 +1,32 @@
+<svg width="720" height="480" viewBox="0 0 720 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="720" height="480" rx="36" fill="#0B1120"/>
+  <rect x="44" y="52" width="632" height="376" rx="28" fill="#111827"/>
+
+  <rect x="84" y="116" width="168" height="180" rx="18" fill="#0F172A" stroke="#1E293B" stroke-width="2"/>
+  <rect x="108" y="144" width="108" height="12" rx="6" fill="#38BDF8"/>
+  <rect x="108" y="166" width="92" height="10" rx="5" fill="#1F2937"/>
+  <rect x="108" y="186" width="112" height="10" rx="5" fill="#1F2937"/>
+  <rect x="108" y="214" width="96" height="26" rx="13" fill="#22D3EE"/>
+  <text x="108" y="270" fill="#94A3B8" font-family="Inter, Arial, sans-serif" font-size="12">Name project</text>
+
+  <rect x="276" y="116" width="168" height="180" rx="18" fill="#0F172A" stroke="#1E293B" stroke-width="2"/>
+  <rect x="300" y="144" width="108" height="12" rx="6" fill="#38BDF8"/>
+  <rect x="300" y="166" width="92" height="10" rx="5" fill="#1F2937"/>
+  <rect x="300" y="186" width="112" height="10" rx="5" fill="#1F2937"/>
+  <rect x="300" y="214" width="96" height="26" rx="13" fill="#22D3EE"/>
+  <text x="300" y="270" fill="#94A3B8" font-family="Inter, Arial, sans-serif" font-size="12">Import OpenAPI</text>
+
+  <rect x="468" y="116" width="168" height="180" rx="18" fill="#0F172A" stroke="#1E293B" stroke-width="2"/>
+  <rect x="492" y="144" width="108" height="12" rx="6" fill="#38BDF8"/>
+  <rect x="492" y="166" width="92" height="10" rx="5" fill="#1F2937"/>
+  <rect x="492" y="186" width="112" height="10" rx="5" fill="#1F2937"/>
+  <rect x="492" y="214" width="96" height="26" rx="13" fill="#22D3EE"/>
+  <text x="492" y="270" fill="#94A3B8" font-family="Inter, Arial, sans-serif" font-size="12">Run baseline</text>
+
+  <path d="M252 206H270" stroke="#38BDF8" stroke-width="6" stroke-linecap="round"/>
+  <path d="M444 206H462" stroke="#38BDF8" stroke-width="6" stroke-linecap="round"/>
+  <rect x="84" y="324" width="552" height="64" rx="16" fill="#0F172A" stroke="#1E293B" stroke-width="2"/>
+  <circle cx="120" cy="356" r="16" fill="#0EA5E9"/>
+  <path d="M112 356L118 362L130 348" stroke="#0B1120" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="150" y="362" fill="#E2E8F0" font-family="Inter, Arial, sans-serif" font-size="14">Automation ready once all steps are complete.</text>
+</svg>
