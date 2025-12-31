@@ -7,12 +7,16 @@
 <head>
     <meta charset="utf-8" />
     <title>@pageTitle</title>
+    <link rel="icon" type="image/svg+xml" href="~/images/app-icon.svg" />
     <link rel="stylesheet" href="~/styles/site.css" />
 </head>
 <body>
     <div class="auth-shell">
         <div class="auth-panel">
             <main class="auth-card">
+                <div class="auth-brand">
+                    <img src="~/images/app-logo.svg" alt="API Tester" />
+                </div>
                 @RenderBody()
             </main>
             <aside class="auth-visual" aria-hidden="true">

@@ -40,6 +40,11 @@ body {
     gap: 0.5rem;
 }
 
+.brand-mark {
+    width: 36px;
+    height: 36px;
+}
+
 
 .sidebar-nav {
     display: flex;
@@ -93,6 +98,20 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+}
+
+.brand-icon {
+    width: 24px;
+    height: 24px;
+}
+
+.auth-brand {
+    margin-bottom: 1.5rem;
+}
+
+.auth-brand img {
+    width: min(220px, 100%);
+    height: auto;
 }
 
 
@@ -188,6 +207,18 @@ tbody tr:hover {
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     background: #f8fafc;
+}
+
+.empty-state {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.empty-state-illustration {
+    width: min(280px, 100%);
+    height: auto;
 }
 
 .error-state {
