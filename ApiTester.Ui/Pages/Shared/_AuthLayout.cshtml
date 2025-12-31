@@ -1,0 +1,19 @@
+@{
+    var pageTitle = ViewData["Title"] as string ?? "Api Tester";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>@pageTitle</title>
+    <link rel="stylesheet" href="~/styles/site.css" />
+</head>
+<body>
+    <div class="auth-shell">
+        <main class="auth-card">
+            @RenderBody()
+        </main>
+    </div>
+</body>
+</html>

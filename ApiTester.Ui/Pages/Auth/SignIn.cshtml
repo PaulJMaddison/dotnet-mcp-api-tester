@@ -1,0 +1,33 @@
+@page
+@model ApiTester.Ui.Pages.Auth.SignInModel
+
+@{
+    Layout = "_AuthLayout";
+    ViewData["Title"] = "Sign in";
+}
+
+<section class="auth-header">
+    <h1>Sign in with your API key</h1>
+    <p class="page-intro">Enter the workspace API key to unlock projects, runs, and onboarding guidance.</p>
+</section>
+
+<form method="post" class="auth-form">
+    <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
+    @Html.AntiForgeryToken()
+    <div class="form-field">
+        <label for="api-key">API key</label>
+        <input id="api-key" name="ApiKey" type="password" autocomplete="current-password" spellcheck="false" required />
+        <small>Your key is stored in a server-side session and never written to the browser.</small>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="error-state" role="alert">@Model.ErrorMessage</div>
+    }
+
+    <button class="button" type="submit">Continue</button>
+</form>
+
+<div class="auth-footer">
+    <p>Need a key? Ask an administrator to add your key to the Auth:ApiKey configuration.</p>
+</div>
