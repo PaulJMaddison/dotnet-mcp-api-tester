@@ -139,6 +139,31 @@ X-Workspace: api-team</code></pre>
                         <li class="mb-2"><strong>Post-release audits:</strong> Export JSON summaries for compliance archives.</li>
                     </ul>
                 </div>
+                <div class="doc-section">
+                    <h2 class="h4 fw-bold">Release readiness</h2>
+                    <p>Bring the most important launch signals together in one place. Use these notes to communicate scope, risk, and ownership before pushing to production.</p>
+                    <div class="row g-4">
+                        <div class="col-lg-6">
+                            <h3 class="h6 text-uppercase">Deployment notes</h3>
+                            <ul class="list-unstyled">
+                                <li class="mb-2"><strong>Version:</strong> Confirm the build number, artifact hash, and rollout window.</li>
+                                <li class="mb-2"><strong>Impact:</strong> Highlight API endpoints affected, data migrations, and client updates.</li>
+                                <li class="mb-2"><strong>Dependencies:</strong> Record upstream services, feature flags, and credentials that must be refreshed.</li>
+                                <li class="mb-2"><strong>Support:</strong> Assign on-call coverage, escalation contacts, and rollback owners.</li>
+                            </ul>
+                        </div>
+                        <div class="col-lg-6">
+                            <h3 class="h6 text-uppercase">Launch checklist</h3>
+                            <ol class="doc-list">
+                                <li>Validate the release readiness report is green for critical suites.</li>
+                                <li>Capture approval notes from security, compliance, and QA leads.</li>
+                                <li>Verify synthetic monitors are enabled in staging and production.</li>
+                                <li>Share the deployment plan and rollback steps in the incident channel.</li>
+                                <li>Schedule post-release review with metrics, latency, and error budgets.</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="col-lg-4">
                 <div class="doc-sidebar p-4 border rounded-4">
@@ -150,6 +175,7 @@ X-Workspace: api-team</code></pre>
                         <li class="mb-2">Test data management</li>
                         <li class="mb-2">Response schema validation</li>
                         <li class="mb-2">Alert escalation paths</li>
+                        <li class="mb-2">Release readiness checklist</li>
                         <li class="mb-0">Exporting compliance reports</li>
                     </ul>
                 </div>
@@ -202,6 +228,7 @@ X-Workspace: api-team</code></pre>
         new("Monitoring schedules", "Attach intervals, alert channels, and escalation policies to monitors.", "Monitoring", "/docs/monitors"),
         new("Alert routing", "Configure Slack, PagerDuty, and email escalation paths.", "Monitoring", "/docs/alert-routing"),
         new("Runbook templates", "Attach remediation steps to known failure signatures.", "Operations", "/docs/runbooks"),
+        new("Release readiness checklist", "Summarize deployment notes, approvals, and go-live criteria.", "Release", "/docs/release-readiness"),
         new("API authentication", "Issue tokens, rotate keys, and enforce workspace scoping.", "API reference", "/docs/api/authentication"),
         new("Pagination and filtering", "Cursor pagination and advanced filtering for large result sets.", "API reference", "/docs/api/pagination"),
         new("Exporting results", "Download JSON, CSV, or PDF summaries for compliance.", "Reporting", "/docs/exporting-results"),
