@@ -1,4 +1,5 @@
-﻿using ApiTester.McpServer.Persistence.Entities;
+﻿using ApiTester.McpServer.Models;
+using ApiTester.McpServer.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace ApiTester.McpServer.Persistence.Stores;
@@ -12,13 +13,13 @@ public sealed class SqlProjectStore : IProjectStore
         _db = db;
     }
 
-    public async Task<Guid> CreateAsync(string name, CancellationToken ct)
+    public async Task<ProjectRecord> CreateAsync(string name, CancellationToken ct)
     {
         name = (name ?? "").Trim();
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Project name is required.", nameof(name));
 
-        var key = ToProjectKey(name);
+        var key = ProjectKeyGenerator.FromName(name);
 
         var exists = await _db.Projects.AsNoTracking().AnyAsync(x => x.ProjectKey == key, ct);
         if (exists)
@@ -35,25 +36,10 @@ public sealed class SqlProjectStore : IProjectStore
         _db.Projects.Add(entity);
         await _db.SaveChangesAsync(ct);
 
-        return entity.ProjectId;
+        return new ProjectRecord(entity.ProjectId, entity.Name, entity.ProjectKey, entity.CreatedUtc);
     }
 
-    private static string ToProjectKey(string name)
-    {
-        // Simple, deterministic slug
-        var s = name.Trim().ToLowerInvariant();
-        var chars = s.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray();
-        var key = new string(chars);
-
-        while (key.Contains("--", StringComparison.Ordinal))
-            key = key.Replace("--", "-", StringComparison.Ordinal);
-
-        key = key.Trim('-');
-
-        return string.IsNullOrWhiteSpace(key) ? "default" : key;
-    }
-
-    public async Task<object> ListAsync(int take, CancellationToken ct)
+    public async Task<IReadOnlyList<ProjectRecord>> ListAsync(int take, CancellationToken ct)
     {
         take = take <= 0 ? 50 : Math.Min(take, 200);
 
@@ -61,20 +47,18 @@ public sealed class SqlProjectStore : IProjectStore
             .AsNoTracking()
             .OrderByDescending(x => x.CreatedUtc)
             .Take(take)
-            .Select(x => new
-            {
-                projectId = x.ProjectId,
-                name = x.Name,
-                projectKey = x.ProjectKey,
-                createdUtc = x.CreatedUtc
-            })
+            .Select(x => new ProjectRecord(x.ProjectId, x.Name, x.ProjectKey, x.CreatedUtc))
             .ToListAsync(ct);
 
-        return new { take, total = projects.Count, projects };
+        return projects;
     }
 
-    public async Task<bool> ExistsAsync(Guid projectId, CancellationToken ct)
+    public async Task<ProjectRecord?> GetAsync(Guid projectId, CancellationToken ct)
     {
-        return await _db.Projects.AsNoTracking().AnyAsync(x => x.ProjectId == projectId, ct);
+        return await _db.Projects
+            .AsNoTracking()
+            .Where(x => x.ProjectId == projectId)
+            .Select(x => new ProjectRecord(x.ProjectId, x.Name, x.ProjectKey, x.CreatedUtc))
+            .FirstOrDefaultAsync(ct);
     }
 }

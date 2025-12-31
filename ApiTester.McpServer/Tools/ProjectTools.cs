@@ -20,15 +20,16 @@ public sealed class ProjectTools
     [McpServerTool, Description("Create a new project. Returns projectId.")]
     public async Task<object> ApiCreateProject(string name, CancellationToken ct)
     {
-        var projectId = await _projects.CreateAsync(name, ct);
-        _ctx.SetCurrentProject(projectId);
-        return new { projectId, currentProjectId = projectId };
+        var project = await _projects.CreateAsync(name, ct);
+        _ctx.SetCurrentProject(project.ProjectId);
+        return new { projectId = project.ProjectId, currentProjectId = project.ProjectId };
     }
 
     [McpServerTool, Description("List recent projects.")]
     public async Task<object> ApiListProjects(int take = 50, CancellationToken ct = default)
     {
-        return await _projects.ListAsync(take, ct);
+        var projects = await _projects.ListAsync(take, ct);
+        return new { take, total = projects.Count, projects };
     }
 
     [McpServerTool, Description("Set the current project used for storing runs.")]
@@ -37,7 +38,7 @@ public sealed class ProjectTools
         if (!Guid.TryParse(projectId, out var id))
             return new { ok = false, reason = "Invalid projectId GUID." };
 
-        if (!await _projects.ExistsAsync(id, ct))
+        if (await _projects.GetAsync(id, ct) is null)
             return new { ok = false, reason = "Project not found." };
 
         _ctx.SetCurrentProject(id);
