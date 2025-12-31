@@ -1,9 +1,11 @@
 ﻿using System.Net;
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Entities;
+using ApiTester.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -124,6 +126,90 @@ public class ApiEndpointsTests
         var response = await client.PostAsJsonAsync("/api/projects", new { name = "" });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ImportOpenApi_SavesSpecAndReturnsMetadata()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "OpenApi", "openapi");
+        var client = factory.CreateClient();
+
+        var specJson = """
+                       {
+                         "openapi": "3.0.0",
+                         "info": {
+                           "title": "Sample API",
+                           "version": "1.2.3"
+                         },
+                         "paths": {}
+                       }
+                       """;
+
+        var content = BuildMultipartSpec(specJson);
+        var response = await client.PostAsync($"/api/projects/{project.ProjectId}/openapi/import", content);
+        var payload = await response.Content.ReadFromJsonAsync<OpenApiSpecMetadataDto>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal("Sample API", payload!.Title);
+        Assert.Equal("1.2.3", payload.Version);
+
+        var fetched = await client.GetFromJsonAsync<OpenApiSpecMetadataDto>($"/api/projects/{project.ProjectId}/openapi");
+        Assert.NotNull(fetched);
+        Assert.Equal(payload.ProjectId, fetched!.ProjectId);
+    }
+
+    [Fact]
+    public async Task ImportOpenApi_ReturnsBadRequest_ForInvalidJson()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "Broken", "broken");
+        var client = factory.CreateClient();
+
+        var content = BuildMultipartSpec("not-json");
+        var response = await client.PostAsync($"/api/projects/{project.ProjectId}/openapi/import", content);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ImportOpenApi_ReturnsNotFound_ForMissingProject()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var client = factory.CreateClient();
+
+        var specJson = """
+                       {
+                         "openapi": "3.0.0",
+                         "info": {
+                           "title": "Missing",
+                           "version": "0.1.0"
+                         },
+                         "paths": {}
+                       }
+                       """;
+
+        var content = BuildMultipartSpec(specJson);
+        var response = await client.PostAsync($"/api/projects/{Guid.NewGuid()}/openapi/import", content);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ImportOpenApi_ReturnsPayloadTooLarge_ForLargeSpec()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "Large", "large");
+        var client = factory.CreateClient();
+
+        var oversized = new string('a', OpenApiImportLimits.MaxSpecBytes);
+        var specJson = $"{{\"openapi\":\"3.0.0\",\"info\":{{\"title\":\"Large\",\"version\":\"1.0\"}},\"x-notes\":\"{oversized}\"}}";
+
+        var content = BuildMultipartSpec(specJson);
+        var response = await client.PostAsync($"/api/projects/{project.ProjectId}/openapi/import", content);
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
     }
 
     [Fact]
@@ -250,6 +336,15 @@ public class ApiEndpointsTests
         return run;
     }
 
+    private static MultipartFormDataContent BuildMultipartSpec(string specJson)
+    {
+        var content = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(specJson));
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        content.Add(fileContent, "file", "openapi.json");
+        return content;
+    }
+
     public sealed record ProjectListResponse(
         [property: JsonPropertyName("projects")] IReadOnlyList<ProjectDto> Projects,
         [property: JsonPropertyName("metadata")] PageMetadata Metadata);
@@ -285,4 +380,10 @@ public class ApiEndpointsTests
         [property: JsonPropertyName("startedUtc")] DateTimeOffset StartedUtc,
         [property: JsonPropertyName("completedUtc")] DateTimeOffset CompletedUtc,
         [property: JsonPropertyName("result")] JsonElement Result);
+
+    public sealed record OpenApiSpecMetadataDto(
+        [property: JsonPropertyName("projectId")] Guid ProjectId,
+        [property: JsonPropertyName("title")] string Title,
+        [property: JsonPropertyName("version")] string Version,
+        [property: JsonPropertyName("createdUtc")] DateTime CreatedUtc);
 }

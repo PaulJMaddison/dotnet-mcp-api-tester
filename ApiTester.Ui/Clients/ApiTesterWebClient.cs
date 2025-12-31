@@ -75,6 +75,61 @@ public sealed class ApiTesterWebClient
 
         return run;
     }
+
+    public async Task<OpenApiSpecMetadataDto?> GetOpenApiSpec(Guid projectId, CancellationToken ct = default)
+    {
+        var response = await _httpClient.GetAsync($"/api/projects/{projectId}/openapi", ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<OpenApiSpecMetadataDto>(cancellationToken: ct);
+        if (payload is null)
+        {
+            throw new InvalidOperationException("Empty response when loading OpenAPI spec.");
+        }
+
+        return payload;
+    }
+
+    public async Task<OpenApiSpecMetadataDto> ImportOpenApiSpec(Guid projectId, Stream? fileStream, string? fileName, string? path, CancellationToken ct = default)
+    {
+        HttpResponseMessage response;
+
+        if (fileStream is not null)
+        {
+            var content = new MultipartFormDataContent();
+            var streamContent = new StreamContent(fileStream);
+            content.Add(streamContent, "file", string.IsNullOrWhiteSpace(fileName) ? "openapi.json" : fileName);
+
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                content.Add(new StringContent(path), "path");
+            }
+
+            response = await _httpClient.PostAsync($"/api/projects/{projectId}/openapi/import", content, ct);
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                throw new InvalidOperationException("Either a file or path is required to import an OpenAPI spec.");
+            }
+
+            response = await _httpClient.PostAsJsonAsync($"/api/projects/{projectId}/openapi/import", new { path }, ct);
+        }
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<OpenApiSpecMetadataDto>(cancellationToken: ct);
+        if (payload is null)
+        {
+            throw new InvalidOperationException("Empty response when importing OpenAPI spec.");
+        }
+
+        return payload;
+    }
 }
 
 public sealed record ProjectDto(Guid ProjectId, string Name, string ProjectKey, DateTime CreatedUtc);
@@ -128,3 +183,9 @@ public sealed record TestCaseResult(
     bool Pass,
     string? FailureReason,
     string? ResponseSnippet);
+
+public sealed record OpenApiSpecMetadataDto(
+    Guid ProjectId,
+    string Title,
+    string Version,
+    DateTime CreatedUtc);

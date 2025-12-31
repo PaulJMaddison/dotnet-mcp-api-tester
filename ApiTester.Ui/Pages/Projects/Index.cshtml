@@ -87,6 +87,63 @@
             cursor: pointer;
         }
 
+        .import-panel {
+            margin: 1.5rem 0;
+            padding: 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: #f9fafb;
+        }
+
+        .import-panel h2 {
+            margin-top: 0;
+        }
+
+        .import-panel form {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .import-panel label {
+            font-weight: 600;
+        }
+
+        .import-panel input[type="text"],
+        .import-panel input[type="file"] {
+            padding: 0.5rem;
+            border: 1px solid #cbd2d9;
+            border-radius: 6px;
+        }
+
+        .import-panel button {
+            width: fit-content;
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            border: none;
+            background: #0f766e;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .import-message {
+            margin-top: 0.75rem;
+            padding: 0.75rem;
+            border-radius: 6px;
+        }
+
+        .import-message.success {
+            background: #ecfdf3;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+        }
+
+        .import-message.error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -154,6 +211,44 @@
             <span>(@Model.ProjectId)</span>
         }
     </p>
+
+    <section class="import-panel" aria-label="OpenAPI Import">
+        <h2>Import OpenAPI</h2>
+        <p>Upload an OpenAPI JSON file or provide a local server path to import into this project.</p>
+
+        <form method="post" enctype="multipart/form-data" asp-page-handler="Import">
+            <div>
+                <label for="openapi-file">OpenAPI JSON file</label>
+                <input id="openapi-file" type="file" name="OpenApiFile" accept=".json,application/json" />
+            </div>
+            <div>
+                <label for="openapi-path">Server file path (optional)</label>
+                <input id="openapi-path" type="text" name="OpenApiPath" value="@(Model.OpenApiPath ?? string.Empty)" placeholder="/path/to/openapi.json" />
+            </div>
+            <button type="submit">Import spec</button>
+        </form>
+
+        @if (Model.OpenApiSpec is not null)
+        {
+            <p>
+                Current spec:
+                <strong>@Model.OpenApiSpec.Title</strong>
+                <span>(@Model.OpenApiSpec.Version)</span>
+                <span>imported @DisplayFormatters.FormatUtc(Model.OpenApiSpec.CreatedUtc)</span>
+            </p>
+        }
+        else
+        {
+            <p>No OpenAPI spec imported yet.</p>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.ImportMessage))
+        {
+            <div class="import-message @Model.ImportMessageKind">
+                @Model.ImportMessage
+            </div>
+        }
+    </section>
 
     <form method="get" class="filter-form">
         <div>

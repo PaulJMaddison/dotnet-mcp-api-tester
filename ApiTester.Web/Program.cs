@@ -1,4 +1,7 @@
-﻿using ApiTester.McpServer.Options;
+﻿using System.Text;
+using System.Text.Json;
+using ApiTester.Web;
+using ApiTester.McpServer.Options;
 using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.Web.Contracts;
@@ -69,6 +72,122 @@ app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore s
     return project is null
         ? Results.NotFound()
         : Results.Ok(ProjectMapping.ToDto(project));
+});
+
+app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId, HttpRequest request, IProjectStore projectStore, IOpenApiSpecStore specStore, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var project = await projectStore.GetAsync(id, ct);
+    if (project is null)
+        return Results.NotFound();
+
+    string? specJson = null;
+
+    if (request.HasFormContentType)
+    {
+        var form = await request.ReadFormAsync(ct);
+        var file = form.Files.FirstOrDefault();
+        if (file is not null)
+        {
+            if (file.Length > OpenApiImportLimits.MaxSpecBytes)
+                return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {OpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+
+            await using var stream = file.OpenReadStream();
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            specJson = await reader.ReadToEndAsync(ct);
+        }
+
+        if (specJson is null)
+        {
+            var path = form["path"].ToString();
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                if (!File.Exists(path))
+                    return InvalidRequest("Spec path does not exist.");
+
+                var fileInfo = new FileInfo(path);
+                if (fileInfo.Length > OpenApiImportLimits.MaxSpecBytes)
+                    return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {OpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+
+                specJson = await File.ReadAllTextAsync(path, ct);
+            }
+        }
+    }
+    else
+    {
+        OpenApiImportRequest? payload;
+        try
+        {
+            payload = await request.ReadFromJsonAsync<OpenApiImportRequest>(cancellationToken: ct);
+        }
+        catch (JsonException)
+        {
+            return InvalidRequest("OpenAPI import request must be valid JSON.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(payload?.Path))
+        {
+            var path = payload.Path.Trim();
+            if (!File.Exists(path))
+                return InvalidRequest("Spec path does not exist.");
+
+            var fileInfo = new FileInfo(path);
+            if (fileInfo.Length > OpenApiImportLimits.MaxSpecBytes)
+                return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {OpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+
+            specJson = await File.ReadAllTextAsync(path, ct);
+        }
+    }
+
+    if (string.IsNullOrWhiteSpace(specJson))
+        return InvalidRequest("Provide an OpenAPI file upload or path.");
+
+    if (Encoding.UTF8.GetByteCount(specJson) > OpenApiImportLimits.MaxSpecBytes)
+        return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {OpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+
+    JsonDocument document;
+    try
+    {
+        document = JsonDocument.Parse(specJson);
+    }
+    catch (JsonException)
+    {
+        return InvalidRequest("OpenAPI spec must be valid JSON.");
+    }
+
+    using (document)
+    {
+        var title = "Untitled API";
+        var version = "unknown";
+
+        if (document.RootElement.TryGetProperty("info", out var info))
+        {
+            if (info.TryGetProperty("title", out var titleElement) && titleElement.ValueKind == JsonValueKind.String)
+                title = titleElement.GetString() ?? title;
+
+            if (info.TryGetProperty("version", out var versionElement) && versionElement.ValueKind == JsonValueKind.String)
+                version = versionElement.GetString() ?? version;
+        }
+
+        title = string.IsNullOrWhiteSpace(title) ? "Untitled API" : title.Trim();
+        version = string.IsNullOrWhiteSpace(version) ? "unknown" : version.Trim();
+
+        var record = await specStore.UpsertAsync(project.ProjectId, title, version, specJson, DateTime.UtcNow, ct);
+        return Results.Ok(OpenApiMapping.ToMetadataDto(record));
+    }
+});
+
+app.MapGet("/api/projects/{projectId}/openapi", async (string projectId, IOpenApiSpecStore specStore, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var record = await specStore.GetAsync(id, ct);
+    return record is null
+        ? Results.NotFound()
+        : Results.Ok(OpenApiMapping.ToMetadataDto(record));
 });
 
 app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, CancellationToken ct) =>
