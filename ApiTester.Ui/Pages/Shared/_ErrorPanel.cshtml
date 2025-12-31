@@ -1,0 +1,12 @@
+@model ApiTester.Ui.Components.ErrorPanelModel
+
+<div class="error-state" role="alert">
+    <p>@Model.Message</p>
+    @if (!string.IsNullOrWhiteSpace(Model.Details))
+    {
+        <details>
+            <summary>Details</summary>
+            <pre>@Model.Details</pre>
+        </details>
+    }
+</div>

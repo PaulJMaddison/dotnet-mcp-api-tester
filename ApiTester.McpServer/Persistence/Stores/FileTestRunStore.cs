@@ -121,7 +121,7 @@ public sealed class FileTestRunStore : ITestRunStore
             .Take(request.PageSize)
             .ToList();
 
-        var nextOffset = request.Offset + page.Count < total
+        int? nextOffset = request.Offset + page.Count < total
             ? request.Offset + page.Count
             : null;
 

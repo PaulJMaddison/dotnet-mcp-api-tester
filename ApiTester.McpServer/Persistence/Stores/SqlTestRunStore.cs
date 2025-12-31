@@ -121,7 +121,7 @@ public sealed class SqlTestRunStore : ITestRunStore
             q = q.Where(x => x.OperationId == op);
         }
 
-        var total = await q.CountAsync(ct);
+        var total = await q.CountAsync(CancellationToken.None);
 
         var ordered = sortField switch
         {
@@ -136,7 +136,7 @@ public sealed class SqlTestRunStore : ITestRunStore
         var runs = await ordered
             .Skip(request.Offset)
             .Take(request.PageSize)
-            .ToListAsync(ct);
+            .ToListAsync(CancellationToken.None);
 
         var items = runs.Select(run => new TestRunRecord
         {
@@ -157,8 +157,9 @@ public sealed class SqlTestRunStore : ITestRunStore
             }
         }).ToList();
 
-        var nextOffset = request.Offset + items.Count < total
-            ? request.Offset + items.Count
+        var itemCount = items.Count;
+        int? nextOffset = request.Offset + itemCount < total
+            ? request.Offset + itemCount
             : null;
 
         return new PagedResult<TestRunRecord>(items, total, nextOffset);

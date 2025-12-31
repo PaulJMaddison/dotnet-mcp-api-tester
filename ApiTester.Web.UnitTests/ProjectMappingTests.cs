@@ -11,9 +11,10 @@ public class ProjectMappingTests
     {
         var record = new ProjectRecord(Guid.NewGuid(), "Demo", "demo", DateTime.UtcNow);
 
-        var response = ProjectMapping.ToListResponse(50, new[] { record });
+        var metadata = new ApiTester.Web.Contracts.PageMetadata(10, 50, "next");
+        var response = ProjectMapping.ToListResponse(metadata, new[] { record });
 
-        Assert.Equal(50, response.Take);
+        Assert.Equal(metadata, response.Metadata);
         Assert.Single(response.Projects);
         Assert.Equal(record.ProjectId, response.Projects[0].ProjectId);
     }
@@ -23,7 +24,7 @@ public class ProjectMappingTests
     {
         var record = new ProjectRecord(Guid.NewGuid(), "Demo", "demo", DateTime.UtcNow);
 
-        var response = ProjectMapping.ToCreateResponse(record);
+        var response = ProjectMapping.ToDto(record);
 
         Assert.Equal(record.ProjectId, response.ProjectId);
         Assert.Equal(record.Name, response.Name);
