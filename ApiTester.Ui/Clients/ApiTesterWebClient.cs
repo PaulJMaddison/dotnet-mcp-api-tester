@@ -94,6 +94,38 @@ public sealed class ApiTesterWebClient
         return payload;
     }
 
+    public async Task<TestPlanResponse?> GetTestPlan(Guid projectId, string operationId, CancellationToken ct = default)
+    {
+        var response = await _httpClient.GetAsync($"/api/projects/{projectId}/testplans/{Uri.EscapeDataString(operationId)}", ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<TestPlanResponse>(cancellationToken: ct);
+        if (payload is null)
+        {
+            throw new InvalidOperationException("Empty response when loading test plan.");
+        }
+
+        return payload;
+    }
+
+    public async Task<TestPlanResponse> GenerateTestPlan(Guid projectId, string operationId, CancellationToken ct = default)
+    {
+        var response = await _httpClient.PostAsync($"/api/projects/{projectId}/testplans/{Uri.EscapeDataString(operationId)}/generate", null, ct);
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadFromJsonAsync<TestPlanResponse>(cancellationToken: ct);
+        if (payload is null)
+        {
+            throw new InvalidOperationException("Empty response when generating test plan.");
+        }
+
+        return payload;
+    }
+
     public async Task<OpenApiSpecMetadataDto> ImportOpenApiSpec(Guid projectId, Stream? fileStream, string? fileName, string? path, CancellationToken ct = default)
     {
         HttpResponseMessage response;
@@ -188,4 +220,10 @@ public sealed record OpenApiSpecMetadataDto(
     Guid ProjectId,
     string Title,
     string Version,
+    DateTime CreatedUtc);
+
+public sealed record TestPlanResponse(
+    Guid ProjectId,
+    string OperationId,
+    string PlanJson,
     DateTime CreatedUtc);

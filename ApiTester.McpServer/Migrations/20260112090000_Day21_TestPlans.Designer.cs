@@ -4,6 +4,7 @@ using ApiTester.McpServer.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApiTester.McpServer.Migrations
 {
     [DbContext(typeof(ApiTesterDbContext))]
-    partial class ApiTesterDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260112090000_Day21_TestPlans")]
+    partial class Day21_TestPlans
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

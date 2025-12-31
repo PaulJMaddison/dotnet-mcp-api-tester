@@ -4,10 +4,13 @@ using ApiTester.Web;
 using ApiTester.McpServer.Options;
 using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Stores;
+using ApiTester.McpServer.Services;
 using ApiTester.Web.Contracts;
 using ApiTester.Web.Mapping;
 using ApiTester.Web.Validation;
 using Microsoft.Extensions.Options;
+using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi.Readers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -190,6 +193,68 @@ app.MapGet("/api/projects/{projectId}/openapi", async (string projectId, IOpenAp
         : Results.Ok(OpenApiMapping.ToMetadataDto(record));
 });
 
+app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async (
+    string projectId,
+    string operationId,
+    IProjectStore projectStore,
+    IOpenApiSpecStore specStore,
+    ITestPlanStore planStore,
+    CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (string.IsNullOrWhiteSpace(operationId))
+        return InvalidRequest("operationId is required.");
+
+    var project = await projectStore.GetAsync(id, ct);
+    if (project is null)
+        return Results.NotFound();
+
+    var spec = await specStore.GetAsync(id, ct);
+    if (spec is null)
+        return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before generating a test plan.", statusCode: StatusCodes.Status409Conflict);
+
+    var reader = new OpenApiStringReader();
+    var doc = reader.Read(spec.SpecJson, out _);
+    if (doc is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Stored OpenAPI spec could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var match = FindOperation(doc, operationId);
+    if (match is null)
+        return Results.NotFound();
+
+    var (path, method, op) = match.Value;
+    var plan = TestPlanFactory.Create(op, method, path, operationId.Trim());
+    var planJson = JsonSerializer.Serialize(plan, new JsonSerializerOptions { WriteIndented = true });
+
+    var record = await planStore.UpsertAsync(id, operationId.Trim(), planJson, DateTime.UtcNow, ct);
+    return Results.Ok(new TestPlanResponse(record.ProjectId, record.OperationId, record.PlanJson, record.CreatedUtc));
+});
+
+app.MapGet("/api/projects/{projectId}/testplans/{operationId}", async (
+    string projectId,
+    string operationId,
+    IProjectStore projectStore,
+    ITestPlanStore planStore,
+    CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (string.IsNullOrWhiteSpace(operationId))
+        return InvalidRequest("operationId is required.");
+
+    var project = await projectStore.GetAsync(id, ct);
+    if (project is null)
+        return Results.NotFound();
+
+    var record = await planStore.GetAsync(id, operationId.Trim(), ct);
+    return record is null
+        ? Results.NotFound()
+        : Results.Ok(new TestPlanResponse(record.ProjectId, record.OperationId, record.PlanJson, record.CreatedUtc));
+});
+
 app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredKey(projectKey, "projectKey", out var keyError))
@@ -235,5 +300,20 @@ app.Run();
 
 static IResult InvalidRequest(string detail)
     => Results.Problem(title: "Invalid request", detail: detail, statusCode: StatusCodes.Status400BadRequest);
+
+static (string path, OperationType method, OpenApiOperation op)? FindOperation(OpenApiDocument doc, string operationId)
+{
+    foreach (var path in doc.Paths)
+    {
+        foreach (var kv in path.Value.Operations)
+        {
+            var op = kv.Value;
+            if (string.Equals(op.OperationId, operationId, StringComparison.OrdinalIgnoreCase))
+                return (path.Key, kv.Key, op);
+        }
+    }
+
+    return null;
+}
 
 public partial class Program { }
