@@ -62,6 +62,10 @@ dotnet run --project ApiTester.Ui --launch-profile "ApiTester.Ui"
 
 The Web API defaults to `http://localhost:5000` and the UI defaults to `http://localhost:5171`.
 
+## Marketing site assets
+
+The marketing site lives in `ApiTester.Site`. Static assets are stored under `ApiTester.Site/wwwroot/images` (for example `logo-mark.svg`, `hero-illustration.svg`, and `pattern-grid.svg`). Replace those files when updating the logo, hero illustration, or background patterns, and keep references in `ApiTester.Site/Components/App.razor` and the marketing page components in sync with the filenames.
+
 ## UI usage
 
 1. Start both the Web API and UI.
