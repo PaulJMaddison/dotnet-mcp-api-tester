@@ -1,0 +1,32 @@
+<svg width="720" height="360" viewBox="0 0 720 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="720" height="360" rx="28" fill="#F8FAFC" />
+  <rect x="32" y="32" width="656" height="296" rx="20" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2" />
+  <text x="64" y="82" font-family="Inter, sans-serif" font-size="20" font-weight="700" fill="#0F172A">Integration map</text>
+  <text x="64" y="112" font-family="Inter, sans-serif" font-size="14" fill="#475569">Connect specs, pipelines, and alerts to one hub.</text>
+
+  <rect x="80" y="150" width="150" height="64" rx="16" fill="#DBEAFE" stroke="#60A5FA" stroke-width="2" />
+  <text x="110" y="186" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#1E3A8A">Spec sources</text>
+  <text x="104" y="206" font-family="Inter, sans-serif" font-size="11" fill="#475569">OpenAPI · GraphQL</text>
+
+  <rect x="285" y="138" width="150" height="88" rx="18" fill="#EEF2FF" stroke="#818CF8" stroke-width="2" />
+  <text x="314" y="184" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#312E81">ApiTester hub</text>
+  <text x="304" y="204" font-family="Inter, sans-serif" font-size="11" fill="#475569">Run orchestration</text>
+
+  <rect x="490" y="150" width="150" height="64" rx="16" fill="#ECFDF3" stroke="#34D399" stroke-width="2" />
+  <text x="524" y="186" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#065F46">Alerts + analytics</text>
+  <text x="520" y="206" font-family="Inter, sans-serif" font-size="11" fill="#475569">Slack · Email · BI</text>
+
+  <g stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M230 182H275" />
+    <path d="M435 182H480" />
+    <path d="M265 174L275 182L265 190" />
+    <path d="M470 174L480 182L470 190" />
+  </g>
+
+  <g fill="#CBD5F5">
+    <circle cx="120" cy="260" r="12" />
+    <circle cx="155" cy="260" r="12" />
+    <circle cx="190" cy="260" r="12" />
+  </g>
+  <text x="95" y="292" font-family="Inter, sans-serif" font-size="11" fill="#64748B">CI/CD · Jira · GitHub</text>
+</svg>
