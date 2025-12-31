@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420" role="img" aria-labelledby="title desc">
+  <title id="title">Security icon set</title>
+  <desc id="desc">Six rounded icon tiles for encryption, key vault, audit trails, rate limits, data masking, and compliance.</desc>
+  <rect width="720" height="420" fill="#f8fafc" />
+  <g font-family="'Segoe UI', sans-serif" fill="none" stroke="#0f172a" stroke-width="3">
+    <g transform="translate(72 84)">
+      <rect width="160" height="120" rx="20" fill="#ffffff" stroke="#e2e8f0" />
+      <circle cx="80" cy="52" r="24" fill="#eff6ff" stroke="none" />
+      <path d="M80 40v24" />
+      <path d="M68 52h24" />
+      <text x="80" y="98" text-anchor="middle" font-size="12" fill="#334155" stroke="none">Encryption</text>
+    </g>
+    <g transform="translate(280 84)">
+      <rect width="160" height="120" rx="20" fill="#ffffff" stroke="#e2e8f0" />
+      <rect x="58" y="32" width="44" height="36" rx="8" fill="#fef3c7" stroke="none" />
+      <path d="M66 68v-12c0-10 8-18 18-18s18 8 18 18v12" />
+      <text x="80" y="98" text-anchor="middle" font-size="12" fill="#334155" stroke="none">Key vault</text>
+    </g>
+    <g transform="translate(488 84)">
+      <rect width="160" height="120" rx="20" fill="#ffffff" stroke="#e2e8f0" />
+      <path d="M54 42h52" />
+      <path d="M54 60h52" />
+      <circle cx="118" cy="48" r="12" fill="#e0f2fe" stroke="none" />
+      <text x="80" y="98" text-anchor="middle" font-size="12" fill="#334155" stroke="none">Audit trails</text>
+    </g>
+    <g transform="translate(72 228)">
+      <rect width="160" height="120" rx="20" fill="#ffffff" stroke="#e2e8f0" />
+      <path d="M52 62h56" />
+      <path d="M64 50h32" />
+      <path d="M64 74h32" />
+      <text x="80" y="98" text-anchor="middle" font-size="12" fill="#334155" stroke="none">Rate limits</text>
+    </g>
+    <g transform="translate(280 228)">
+      <rect width="160" height="120" rx="20" fill="#ffffff" stroke="#e2e8f0" />
+      <path d="M60 50h40" />
+      <path d="M60 66h24" />
+      <circle cx="112" cy="54" r="10" fill="#dcfce7" stroke="none" />
+      <text x="80" y="98" text-anchor="middle" font-size="12" fill="#334155" stroke="none">Data masking</text>
+    </g>
+    <g transform="translate(488 228)">
+      <rect width="160" height="120" rx="20" fill="#ffffff" stroke="#e2e8f0" />
+      <path d="M68 64l14 14 28-28" />
+      <text x="80" y="98" text-anchor="middle" font-size="12" fill="#334155" stroke="none">Compliance</text>
+    </g>
+  </g>
+</svg>
