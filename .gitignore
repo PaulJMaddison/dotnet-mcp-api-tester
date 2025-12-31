@@ -7,6 +7,7 @@
 # Build output
 bin/
 obj/
+.nuget/
 
 # Rider / JetBrains
 .idea/
