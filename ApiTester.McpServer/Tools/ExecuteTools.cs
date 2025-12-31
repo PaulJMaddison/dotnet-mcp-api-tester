@@ -39,7 +39,8 @@ public sealed class ExecuteTools
         string? pathParamsJson = null,
         string? queryParamsJson = null,
         string? headersJson = null,
-        string? bodyJson = null)
+        string? bodyJson = null,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(operationId))
             throw new ArgumentException("operationId is required", nameof(operationId));
@@ -127,7 +128,7 @@ public sealed class ExecuteTools
             uri,
             blockLocalhost: policy.BlockLocalhost,
             blockPrivateNetworks: policy.BlockPrivateNetworks,
-            ct: CancellationToken.None);
+            ct: ct);
 
         if (!allowed && !policy.DryRun)
         {
@@ -191,10 +192,10 @@ public sealed class ExecuteTools
         client.Timeout = policy.Timeout;
 
         var sw = Stopwatch.StartNew();
-        using var response = await client.SendAsync(request);
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         sw.Stop();
 
-        var (responseBody, truncated) = await ReadBodyCappedAsync(response.Content, policy.MaxResponseBodyBytes);
+        var (responseBody, truncated) = await ReadBodyCappedAsync(response.Content, policy.MaxResponseBodyBytes, ct);
 
         if (truncated)
             responseBody += "\n... (truncated)";
@@ -242,9 +243,12 @@ public sealed class ExecuteTools
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    private static async Task<(string Text, bool Truncated)> ReadBodyCappedAsync(HttpContent content, int maxBytes)
+    private static async Task<(string Text, bool Truncated)> ReadBodyCappedAsync(
+        HttpContent content,
+        int maxBytes,
+        CancellationToken ct)
     {
-        await using var stream = await content.ReadAsStreamAsync();
+        await using var stream = await content.ReadAsStreamAsync(ct);
         using var ms = new MemoryStream();
 
         var buffer = new byte[8192];
@@ -252,7 +256,7 @@ public sealed class ExecuteTools
 
         while (true)
         {
-            var read = await stream.ReadAsync(buffer, 0, buffer.Length);
+            var read = await stream.ReadAsync(buffer, 0, buffer.Length, ct);
             if (read <= 0) break;
 
             var remaining = maxBytes - total;

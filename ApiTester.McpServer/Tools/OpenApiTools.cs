@@ -11,18 +11,27 @@ namespace ApiTester.McpServer.Tools;
 public sealed class OpenApiTools
 {
     private readonly OpenApiStore _store;
+    private readonly ApiRuntimeConfig _runtime;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly SsrfGuard _ssrfGuard;
     private readonly ILogger<OpenApiTools> _logger;
 
-    public OpenApiTools(OpenApiStore store, IHttpClientFactory httpClientFactory, ILogger<OpenApiTools> logger)
+    public OpenApiTools(
+        OpenApiStore store,
+        ApiRuntimeConfig runtime,
+        IHttpClientFactory httpClientFactory,
+        SsrfGuard ssrfGuard,
+        ILogger<OpenApiTools> logger)
     {
         _store = store;
+        _runtime = runtime;
         _httpClientFactory = httpClientFactory;
+        _ssrfGuard = ssrfGuard;
         _logger = logger;
     }
 
     [McpServerTool, Description("Import an OpenAPI (Swagger) specification from a URL or local file path.")]
-    public async Task<string> ApiImportOpenApi(string specUrlOrPath)
+    public async Task<string> ApiImportOpenApi(string specUrlOrPath, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(specUrlOrPath))
             throw new ArgumentException("specUrlOrPath is required.", nameof(specUrlOrPath));
@@ -35,12 +44,33 @@ public sealed class OpenApiTools
 
         if (isRemote)
         {
+            var (allowed, reason) = await _ssrfGuard.CheckAsync(
+                uri!,
+                _runtime.Policy.BlockLocalhost,
+                _runtime.Policy.BlockPrivateNetworks,
+                ct);
+
+            if (!allowed)
+                throw new InvalidOperationException($"Blocked OpenAPI URL: {reason}");
+
             var client = _httpClientFactory.CreateClient();
-            specText = await client.GetStringAsync(uri!);
+            client.Timeout = _runtime.Policy.Timeout;
+
+            using var response = await client.GetAsync(uri!, HttpCompletionOption.ResponseHeadersRead, ct);
+            response.EnsureSuccessStatusCode();
+
+            if (response.Content.Headers.ContentLength > OpenApiImportLimits.MaxSpecBytes)
+                throw new InvalidOperationException($"OpenAPI spec exceeds {OpenApiImportLimits.MaxSpecBytes} bytes.");
+
+            specText = await ReadBodyCappedAsync(response.Content, OpenApiImportLimits.MaxSpecBytes, ct);
         }
         else
         {
-            specText = await File.ReadAllTextAsync(specUrlOrPath);
+            var fileInfo = new FileInfo(specUrlOrPath);
+            if (fileInfo.Length > OpenApiImportLimits.MaxSpecBytes)
+                throw new InvalidOperationException($"OpenAPI spec exceeds {OpenApiImportLimits.MaxSpecBytes} bytes.");
+
+            specText = await File.ReadAllTextAsync(specUrlOrPath, ct);
         }
 
         var reader = new OpenApiStringReader();
@@ -82,5 +112,33 @@ public sealed class OpenApiTools
         sb.AppendLine($"Title: {title}, Version: {version}, Paths: {paths}");
 
         return sb.ToString().Trim();
+    }
+
+    private static async Task<string> ReadBodyCappedAsync(HttpContent content, int maxBytes, CancellationToken ct)
+    {
+        await using var stream = await content.ReadAsStreamAsync(ct);
+        using var ms = new MemoryStream();
+
+        var buffer = new byte[8192];
+        var total = 0;
+
+        while (true)
+        {
+            var read = await stream.ReadAsync(buffer, 0, buffer.Length, ct);
+            if (read <= 0) break;
+
+            var remaining = maxBytes - total;
+            if (remaining <= 0)
+                throw new InvalidOperationException($"OpenAPI spec exceeds {maxBytes} bytes.");
+
+            var toWrite = Math.Min(read, remaining);
+            ms.Write(buffer, 0, toWrite);
+            total += toWrite;
+
+            if (toWrite < read)
+                throw new InvalidOperationException($"OpenAPI spec exceeds {maxBytes} bytes.");
+        }
+
+        return Encoding.UTF8.GetString(ms.ToArray());
     }
 }
