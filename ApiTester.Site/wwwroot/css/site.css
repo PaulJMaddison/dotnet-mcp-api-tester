@@ -104,3 +104,10 @@ body {
 .diagram-visual img {
     width: 100%;
 }
+
+.visual-asset {
+    background: #ffffff;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    display: block;
+    padding: 12px;
+}
