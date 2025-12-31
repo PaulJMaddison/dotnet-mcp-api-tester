@@ -144,6 +144,60 @@
             color: #991b1b;
         }
 
+        .plan-panel {
+            margin: 1.5rem 0;
+            padding: 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        .plan-panel h2 {
+            margin-top: 0;
+        }
+
+        .plan-panel form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: end;
+        }
+
+        .plan-panel input[type="text"] {
+            padding: 0.5rem;
+            border: 1px solid #cbd2d9;
+            border-radius: 6px;
+            min-width: 240px;
+        }
+
+        .plan-panel button {
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            border: none;
+            background: #1d4ed8;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .plan-message {
+            margin-top: 0.75rem;
+            padding: 0.75rem;
+            border-radius: 6px;
+        }
+
+        .plan-message.success {
+            background: #ecfdf3;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+        }
+
+        .plan-message.error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -247,6 +301,39 @@
             <div class="import-message @Model.ImportMessageKind">
                 @Model.ImportMessage
             </div>
+        }
+    </section>
+
+    <section class="plan-panel" aria-label="Test Plan">
+        <h2>Test Plan</h2>
+        <p>Generate and store a deterministic test plan per operation.</p>
+
+        <form method="post" asp-page-handler="GeneratePlan">
+            <div>
+                <label for="testplan-operation">OperationId</label>
+                <input id="testplan-operation" type="text" name="TestPlanOperationId" value="@(Model.OperationId ?? string.Empty)" />
+            </div>
+            <button type="submit">Generate plan</button>
+        </form>
+
+        @if (!string.IsNullOrWhiteSpace(Model.TestPlanMessage))
+        {
+            <div class="plan-message @Model.TestPlanMessageKind">
+                @Model.TestPlanMessage
+            </div>
+        }
+
+        @if (Model.TestPlan is not null)
+        {
+            <p>
+                Stored plan for <strong>@Model.TestPlan.OperationId</strong>
+                generated @DisplayFormatters.FormatUtc(Model.TestPlan.CreatedUtc).
+            </p>
+            <pre>@Model.TestPlan.PlanJson</pre>
+        }
+        else if (!string.IsNullOrWhiteSpace(Model.OperationId))
+        {
+            <p>No stored test plan for this operation yet.</p>
         }
     </section>
 

@@ -213,6 +213,56 @@ public class ApiEndpointsTests
     }
 
     [Fact]
+    public async Task GenerateTestPlan_ReturnsConflict_WhenNoSpecImported()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "NoSpec", "nospec");
+        var client = factory.CreateClient();
+
+        var response = await client.PostAsync($"/api/projects/{project.ProjectId}/testplans/op-1/generate", null);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GenerateTestPlan_ReturnsNotFound_WhenOperationMissing()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "MissingOp", "missingop");
+        await SeedSpecAsync(factory, project, BuildSpecJson("op-1"));
+
+        var client = factory.CreateClient();
+        var response = await client.PostAsync($"/api/projects/{project.ProjectId}/testplans/op-404/generate", null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GenerateTestPlan_OverwritesExistingPlan()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "Overwrite", "overwrite");
+        await SeedSpecAsync(factory, project, BuildSpecJson("op-1"));
+
+        var oldCreatedUtc = DateTime.UtcNow.AddHours(-1);
+        await SeedTestPlanAsync(factory, project, "op-1", "old-plan", oldCreatedUtc);
+
+        var client = factory.CreateClient();
+        var response = await client.PostAsync($"/api/projects/{project.ProjectId}/testplans/op-1/generate", null);
+        var payload = await response.Content.ReadFromJsonAsync<TestPlanResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.NotEqual("old-plan", payload!.PlanJson);
+        Assert.True(payload.CreatedUtc > oldCreatedUtc);
+
+        var fetched = await client.GetFromJsonAsync<TestPlanResponse>($"/api/projects/{project.ProjectId}/testplans/op-1");
+        Assert.NotNull(fetched);
+        Assert.Equal(payload.CreatedUtc, fetched!.CreatedUtc);
+        Assert.Equal(payload.PlanJson, fetched.PlanJson);
+    }
+
+    [Fact]
     public async Task GetProjects_PaginatesWithNextPageToken()
     {
         using var factory = new ApiTesterWebFactory();
@@ -336,6 +386,46 @@ public class ApiEndpointsTests
         return run;
     }
 
+    private static async Task<OpenApiSpecEntity> SeedSpecAsync(ApiTesterWebFactory factory, ProjectEntity project, string specJson, DateTime? createdUtc = null)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var spec = new OpenApiSpecEntity
+        {
+            SpecId = Guid.NewGuid(),
+            ProjectId = project.ProjectId,
+            Title = "Spec",
+            Version = "1.0",
+            SpecJson = specJson,
+            CreatedUtc = createdUtc ?? DateTime.UtcNow
+        };
+
+        db.OpenApiSpecs.Add(spec);
+        await db.SaveChangesAsync();
+        return spec;
+    }
+
+    private static async Task<TestPlanEntity> SeedTestPlanAsync(ApiTesterWebFactory factory, ProjectEntity project, string operationId, string planJson, DateTime? createdUtc = null)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var plan = new TestPlanEntity
+        {
+            ProjectId = project.ProjectId,
+            OperationId = operationId,
+            PlanJson = planJson,
+            CreatedUtc = createdUtc ?? DateTime.UtcNow
+        };
+
+        db.TestPlans.Add(plan);
+        await db.SaveChangesAsync();
+        return plan;
+    }
+
     private static MultipartFormDataContent BuildMultipartSpec(string specJson)
     {
         var content = new MultipartFormDataContent();
@@ -343,6 +433,31 @@ public class ApiEndpointsTests
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         content.Add(fileContent, "file", "openapi.json");
         return content;
+    }
+
+    private static string BuildSpecJson(string operationId)
+    {
+        return $$"""
+                 {
+                   "openapi": "3.0.0",
+                   "info": {
+                     "title": "Sample API",
+                     "version": "1.0.0"
+                   },
+                   "paths": {
+                     "/sample": {
+                       "get": {
+                         "operationId": "{{operationId}}",
+                         "responses": {
+                           "200": {
+                             "description": "ok"
+                           }
+                         }
+                       }
+                     }
+                   }
+                 }
+                 """;
     }
 
     public sealed record ProjectListResponse(
@@ -385,5 +500,11 @@ public class ApiEndpointsTests
         [property: JsonPropertyName("projectId")] Guid ProjectId,
         [property: JsonPropertyName("title")] string Title,
         [property: JsonPropertyName("version")] string Version,
+        [property: JsonPropertyName("createdUtc")] DateTime CreatedUtc);
+
+    public sealed record TestPlanResponse(
+        [property: JsonPropertyName("projectId")] Guid ProjectId,
+        [property: JsonPropertyName("operationId")] string OperationId,
+        [property: JsonPropertyName("planJson")] string PlanJson,
         [property: JsonPropertyName("createdUtc")] DateTime CreatedUtc);
 }
