@@ -2,6 +2,7 @@
 using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Runtime;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
 namespace ApiTester.McpServer.Tools;
@@ -11,11 +12,13 @@ public sealed class ProjectTools
 {
     private readonly IProjectStore _projects;
     private readonly ProjectContext _ctx;
+    private readonly ILogger<ProjectTools> _logger;
 
-    public ProjectTools(IProjectStore projects, ProjectContext ctx)
+    public ProjectTools(IProjectStore projects, ProjectContext ctx, ILogger<ProjectTools> logger)
     {
         _projects = projects;
         _ctx = ctx;
+        _logger = logger;
     }
 
     [McpServerTool, Description("Create a new project. Returns projectId.")]
@@ -23,6 +26,7 @@ public sealed class ProjectTools
     {
         var project = await _projects.CreateAsync(OwnerKeyDefaults.Default, name, ct);
         _ctx.SetCurrentProject(project.ProjectId);
+        _logger.LogInformation("Created project {ProjectId} with name {ProjectName}", project.ProjectId, project.Name);
         return new { projectId = project.ProjectId, currentProjectId = project.ProjectId };
     }
 

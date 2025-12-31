@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
+using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 
 namespace ApiTester.McpServer.Services;
@@ -14,19 +15,22 @@ public sealed class TestPlanRunner
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITestRunStore _runStore;
     private readonly SsrfGuard _ssrfGuard;
+    private readonly ILogger<TestPlanRunner> _logger;
 
     public TestPlanRunner(
         OpenApiStore store,
         ApiRuntimeConfig cfg,
         IHttpClientFactory httpClientFactory,
         ITestRunStore runStore,
-        SsrfGuard ssrfGuard)
+        SsrfGuard ssrfGuard,
+        ILogger<TestPlanRunner> logger)
     {
         _store = store;
         _cfg = cfg;
         _httpClientFactory = httpClientFactory;
         _runStore = runStore;
         _ssrfGuard = ssrfGuard;
+        _logger = logger;
     }
 
     // Backwards compatible entry point
@@ -69,6 +73,13 @@ public sealed class TestPlanRunner
 
         var startedUtc = DateTimeOffset.UtcNow;
 
+        _logger.LogInformation(
+            "Executing test plan {OperationId} for owner {OwnerKey} project {ProjectKey} with {CaseCount} cases",
+            plan.OperationId,
+            ownerKey,
+            projectKey,
+            plan.Cases.Count);
+
         var swTotal = Stopwatch.StartNew();
         var results = new List<TestCaseResult>();
 
@@ -110,6 +121,15 @@ public sealed class TestPlanRunner
 
         // Day 14 store interface: SaveAsync(record) (no CancellationToken)
         await _runStore.SaveAsync(record);
+
+        _logger.LogInformation(
+            "Stored test run {RunId} for operation {OperationId} in {DurationMs}ms (passed {Passed}, failed {Failed}, blocked {Blocked})",
+            record.RunId,
+            record.OperationId,
+            swTotal.ElapsedMilliseconds,
+            result.Passed,
+            result.Failed,
+            result.Blocked);
 
         return record;
     }

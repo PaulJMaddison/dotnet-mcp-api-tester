@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
 namespace ApiTester.McpServer.Tools;
@@ -9,10 +10,12 @@ namespace ApiTester.McpServer.Tools;
 public sealed class RunHistoryTools
 {
     private readonly ITestRunStore _store;
+    private readonly ILogger<RunHistoryTools> _logger;
 
-    public RunHistoryTools(ITestRunStore store)
+    public RunHistoryTools(ITestRunStore store, ILogger<RunHistoryTools> logger)
     {
         _store = store;
+        _logger = logger;
     }
 
     [McpServerTool, Description("List recent test runs (most recent first). Optional filters: projectKey, operationId.")]
@@ -20,6 +23,12 @@ public sealed class RunHistoryTools
     {
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
         operationId = string.IsNullOrWhiteSpace(operationId) ? null : operationId.Trim();
+
+        _logger.LogInformation(
+            "Listing runs for project {ProjectKey} with operation {OperationId} (take {Take})",
+            projectKey,
+            operationId ?? "(all)",
+            take);
 
         // Day 14: store supports filtering (file store folder today, SQL WHERE later)
         var result = await _store.ListAsync(

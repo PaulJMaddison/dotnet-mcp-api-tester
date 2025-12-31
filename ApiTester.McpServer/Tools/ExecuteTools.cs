@@ -1,4 +1,5 @@
 ﻿using ApiTester.McpServer.Services;
+using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
@@ -16,13 +17,20 @@ public sealed class ExecuteTools
     private readonly ApiRuntimeConfig _runtime;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly SsrfGuard _ssrfGuard;
+    private readonly ILogger<ExecuteTools> _logger;
 
-    public ExecuteTools(OpenApiStore store, ApiRuntimeConfig runtime, IHttpClientFactory httpClientFactory, SsrfGuard ssrfGuard)
+    public ExecuteTools(
+        OpenApiStore store,
+        ApiRuntimeConfig runtime,
+        IHttpClientFactory httpClientFactory,
+        SsrfGuard ssrfGuard,
+        ILogger<ExecuteTools> logger)
     {
         _store = store;
         _runtime = runtime;
         _httpClientFactory = httpClientFactory;
         _ssrfGuard = ssrfGuard;
+        _logger = logger;
     }
 
     [McpServerTool, Description("Execute an OpenAPI operation by operationId. Optional JSON: pathParamsJson, queryParamsJson, headersJson, bodyJson.")]
@@ -45,12 +53,18 @@ public sealed class ExecuteTools
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new InvalidOperationException("No base URL available. Call api_set_base_url or ensure the spec contains servers[].");
 
+        _logger.LogInformation("Executing operation {OperationId} {Method} {PathTemplate}", operationId, method, pathTemplate);
+
         // ---- Day 4 Step 5: Policy enforcement ----
         var policy = _runtime.Policy;
 
         // A) Method allowlist
         if (!policy.AllowedMethods.Contains(method))
         {
+            _logger.LogWarning(
+                "Blocked operation {OperationId} due to disallowed method {Method}",
+                operationId,
+                method);
             return JsonSerializer.Serialize(new
             {
                 blocked = true,
@@ -68,6 +82,7 @@ public sealed class ExecuteTools
 
         if (policy.AllowedBaseUrls.Count == 0 && !policy.DryRun)
         {
+            _logger.LogWarning("Blocked operation {OperationId} due to empty allowed base URLs", operationId);
             return JsonSerializer.Serialize(new
             {
                 blocked = true,
@@ -83,6 +98,10 @@ public sealed class ExecuteTools
             !policy.AllowedBaseUrls.Any(allowed =>
                 normalisedBaseUrl.StartsWith(allowed.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase)))
         {
+            _logger.LogWarning(
+                "Blocked operation {OperationId} due to base URL {BaseUrl} not in allow list",
+                operationId,
+                normalisedBaseUrl);
             return JsonSerializer.Serialize(new
             {
                 blocked = true,
@@ -112,6 +131,7 @@ public sealed class ExecuteTools
 
         if (!allowed && !policy.DryRun)
         {
+            _logger.LogWarning("Blocked operation {OperationId} due to SSRF policy: {Reason}", operationId, reason);
             return JsonSerializer.Serialize(new
             {
                 blocked = true,
@@ -148,6 +168,7 @@ public sealed class ExecuteTools
         // C) Dry run mode (build request, do not send)
         if (policy.DryRun)
         {
+            _logger.LogInformation("Dry run for operation {OperationId} {Method} {Url}", operationId, method, url);
             var dryRunResult = new
             {
                 dryRun = true,
@@ -210,6 +231,13 @@ public sealed class ExecuteTools
             contentHeaders = response.Content.Headers.ToDictionary(h => h.Key, h => string.Join(", ", h.Value)),
             body = responseBody
         };
+
+        _logger.LogInformation(
+            "Executed operation {OperationId} {Method} {StatusCode} in {DurationMs}ms",
+            operationId,
+            method,
+            (int)response.StatusCode,
+            sw.ElapsedMilliseconds);
 
         return JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
     }

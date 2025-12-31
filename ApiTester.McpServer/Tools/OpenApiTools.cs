@@ -1,4 +1,5 @@
 ﻿using ApiTester.McpServer.Services;
+using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Readers;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
@@ -11,11 +12,13 @@ public sealed class OpenApiTools
 {
     private readonly OpenApiStore _store;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<OpenApiTools> _logger;
 
-    public OpenApiTools(OpenApiStore store, IHttpClientFactory httpClientFactory)
+    public OpenApiTools(OpenApiStore store, IHttpClientFactory httpClientFactory, ILogger<OpenApiTools> logger)
     {
         _store = store;
         _httpClientFactory = httpClientFactory;
+        _logger = logger;
     }
 
     [McpServerTool, Description("Import an OpenAPI (Swagger) specification from a URL or local file path.")]
@@ -26,11 +29,14 @@ public sealed class OpenApiTools
 
         string specText;
 
-        if (Uri.TryCreate(specUrlOrPath, UriKind.Absolute, out var uri) &&
-            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        var isRemote = Uri.TryCreate(specUrlOrPath, UriKind.Absolute, out var uri) &&
+            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+        _logger.LogInformation("Importing OpenAPI spec from {SpecSource} ({Location})", isRemote ? "url" : "path", specUrlOrPath);
+
+        if (isRemote)
         {
             var client = _httpClientFactory.CreateClient();
-            specText = await client.GetStringAsync(uri);
+            specText = await client.GetStringAsync(uri!);
         }
         else
         {
@@ -65,6 +71,13 @@ public sealed class OpenApiTools
         var title = doc.Info?.Title ?? "(no title)";
         var version = doc.Info?.Version ?? "(no version)";
         var paths = doc.Paths?.Count ?? 0;
+
+        _logger.LogInformation(
+            "OpenAPI spec loaded {Title} {Version} with {PathCount} paths and {ErrorCount} validation error(s)",
+            title,
+            version,
+            paths,
+            diag.Errors.Count);
 
         sb.AppendLine($"Title: {title}, Version: {version}, Paths: {paths}");
 
