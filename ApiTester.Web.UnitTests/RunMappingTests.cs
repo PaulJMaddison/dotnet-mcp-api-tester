@@ -11,13 +11,14 @@ public class RunMappingTests
     {
         var record = BuildRunRecord();
 
-        var response = RunMapping.ToSummaryResponse(record.ProjectKey, 20, new[] { record });
+        var metadata = new ApiTester.Web.Contracts.PageMetadata(10, 20, "next");
+        var response = RunMapping.ToSummaryResponse(record.ProjectKey, metadata, new[] { record });
 
         Assert.Equal(record.ProjectKey, response.ProjectKey);
-        Assert.Equal(20, response.Take);
+        Assert.Equal(metadata, response.Metadata);
         Assert.Single(response.Runs);
         Assert.Equal(record.RunId, response.Runs[0].RunId);
-        Assert.Equal(record.Result.TotalCases, response.Runs[0].Summary.TotalCases);
+        Assert.Equal(record.Result.TotalCases, response.Runs[0].Snapshot.TotalCases);
     }
 
     [Fact]
@@ -25,7 +26,7 @@ public class RunMappingTests
     {
         var record = BuildRunRecord();
 
-        var response = RunMapping.ToDetailResponse(record);
+        var response = RunMapping.ToDetailDto(record);
 
         Assert.Equal(record.RunId, response.RunId);
         Assert.Equal(record.Result.Results.Count, response.Result.Results.Count);
