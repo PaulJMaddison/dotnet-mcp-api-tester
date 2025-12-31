@@ -126,6 +126,20 @@ public sealed class ApiTesterWebClient
         return payload;
     }
 
+    public async Task<RunDetailDto> ExecuteTestPlan(Guid projectId, string operationId, CancellationToken ct = default)
+    {
+        var response = await _httpClient.PostAsync($"/api/projects/{projectId}/runs/execute/{Uri.EscapeDataString(operationId)}", null, ct);
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadFromJsonAsync<RunDetailDto>(cancellationToken: ct);
+        if (payload is null)
+        {
+            throw new InvalidOperationException("Empty response when executing test plan.");
+        }
+
+        return payload;
+    }
+
     public async Task<OpenApiSpecMetadataDto> ImportOpenApiSpec(Guid projectId, Stream? fileStream, string? fileName, string? path, CancellationToken ct = default)
     {
         HttpResponseMessage response;

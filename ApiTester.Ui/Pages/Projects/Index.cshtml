@@ -323,12 +323,23 @@
             </div>
         }
 
+        @if (!string.IsNullOrWhiteSpace(Model.RunMessage))
+        {
+            <div class="plan-message @Model.RunMessageKind">
+                @Model.RunMessage
+            </div>
+        }
+
         @if (Model.TestPlan is not null)
         {
             <p>
                 Stored plan for <strong>@Model.TestPlan.OperationId</strong>
                 generated @DisplayFormatters.FormatUtc(Model.TestPlan.CreatedUtc).
             </p>
+            <form method="post" asp-page-handler="RunPlan">
+                <input type="hidden" name="RunOperationId" value="@Model.TestPlan.OperationId" />
+                <button type="submit">Run now</button>
+            </form>
             <pre>@Model.TestPlan.PlanJson</pre>
         }
         else if (!string.IsNullOrWhiteSpace(Model.OperationId))

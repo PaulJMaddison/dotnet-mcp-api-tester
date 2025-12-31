@@ -1,11 +1,13 @@
 ﻿using System.Text;
 using System.Text.Json;
 using ApiTester.Web;
+using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Options;
 using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Services;
 using ApiTester.Web.Contracts;
+using ApiTester.Web.Execution;
 using ApiTester.Web.Mapping;
 using ApiTester.Web.Validation;
 using Microsoft.Extensions.Options;
@@ -18,6 +20,54 @@ var appConfig = AppConfig.Load(builder.Configuration);
 builder.Services.AddSingleton(appConfig);
 
 builder.Services.AddApiTesterPersistence(builder.Configuration);
+
+builder.Services.Configure<ExecutionOptions>(builder.Configuration.GetSection("Execution"));
+builder.Services.AddSingleton<OpenApiStore>();
+builder.Services.AddSingleton<SsrfGuard>();
+builder.Services.AddScoped<ApiRuntimeConfig>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<ExecutionOptions>>().Value;
+    var runtime = new ApiRuntimeConfig();
+
+    ApiPolicyDefaults.ApplySafeDefaults(runtime.Policy);
+    runtime.Policy.DryRun = options.DryRun ?? false;
+
+    if (options.AllowedBaseUrls.Count > 0)
+    {
+        runtime.Policy.AllowedBaseUrls.Clear();
+        foreach (var url in options.AllowedBaseUrls.Where(u => !string.IsNullOrWhiteSpace(u)))
+            runtime.Policy.AllowedBaseUrls.Add(url.Trim());
+    }
+
+    if (options.AllowedMethods.Count > 0)
+    {
+        runtime.Policy.AllowedMethods.Clear();
+        foreach (var method in options.AllowedMethods.Where(m => !string.IsNullOrWhiteSpace(m)))
+            runtime.Policy.AllowedMethods.Add(method.Trim());
+    }
+
+    if (options.BlockLocalhost.HasValue)
+        runtime.Policy.BlockLocalhost = options.BlockLocalhost.Value;
+
+    if (options.BlockPrivateNetworks.HasValue)
+        runtime.Policy.BlockPrivateNetworks = options.BlockPrivateNetworks.Value;
+
+    if (options.TimeoutSeconds.HasValue && options.TimeoutSeconds.Value > 0)
+        runtime.Policy.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds.Value);
+
+    if (options.MaxRequestBodyBytes.HasValue && options.MaxRequestBodyBytes.Value > 0)
+        runtime.Policy.MaxRequestBodyBytes = options.MaxRequestBodyBytes.Value;
+
+    if (options.MaxResponseBodyBytes.HasValue && options.MaxResponseBodyBytes.Value > 0)
+        runtime.Policy.MaxResponseBodyBytes = options.MaxResponseBodyBytes.Value;
+
+    if (!string.IsNullOrWhiteSpace(options.BaseUrl))
+        runtime.SetBaseUrl(options.BaseUrl);
+
+    return runtime;
+});
+builder.Services.AddScoped<TestPlanRunner>();
+builder.Services.AddHttpClient();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -255,6 +305,76 @@ app.MapGet("/api/projects/{projectId}/testplans/{operationId}", async (
         : Results.Ok(new TestPlanResponse(record.ProjectId, record.OperationId, record.PlanJson, record.CreatedUtc));
 });
 
+app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
+    string projectId,
+    string operationId,
+    IProjectStore projectStore,
+    IOpenApiSpecStore specStore,
+    ITestPlanStore planStore,
+    TestPlanRunner runner,
+    ApiRuntimeConfig runtime,
+    CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (string.IsNullOrWhiteSpace(operationId))
+        return InvalidRequest("operationId is required.");
+
+    var project = await projectStore.GetAsync(id, ct);
+    if (project is null)
+        return Results.NotFound();
+
+    var spec = await specStore.GetAsync(id, ct);
+    if (spec is null)
+        return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before executing runs.", statusCode: StatusCodes.Status409Conflict);
+
+    var reader = new OpenApiStringReader();
+    var doc = reader.Read(spec.SpecJson, out _);
+    if (doc is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Stored OpenAPI spec could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    if (string.IsNullOrWhiteSpace(runtime.BaseUrl))
+    {
+        var baseUrl = ResolveBaseUrl(doc);
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            return Results.Problem(title: "Base URL missing", detail: "OpenAPI spec does not define servers and no runtime base URL is configured.", statusCode: StatusCodes.Status409Conflict);
+
+        runtime.SetBaseUrl(baseUrl);
+    }
+
+    var trimmedOperationId = operationId.Trim();
+    TestPlan plan;
+
+    var existingPlan = await planStore.GetAsync(id, trimmedOperationId, ct);
+    if (existingPlan is null)
+    {
+        var match = FindOperation(doc, trimmedOperationId);
+        if (match is null)
+            return Results.NotFound();
+
+        var (path, method, op) = match.Value;
+        plan = TestPlanFactory.Create(op, method, path, trimmedOperationId);
+        var planJson = JsonSerializer.Serialize(plan, new JsonSerializerOptions { WriteIndented = true });
+        await planStore.UpsertAsync(id, trimmedOperationId, planJson, DateTime.UtcNow, ct);
+    }
+    else
+    {
+        try
+        {
+            plan = JsonSerializer.Deserialize<TestPlan>(existingPlan.PlanJson)
+                ?? throw new JsonException("Stored test plan was empty.");
+        }
+        catch (JsonException)
+        {
+            return Results.Problem(title: "Stored test plan invalid", detail: "Stored test plan could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+    }
+
+    var run = await runner.RunPlanAsync(plan, project.ProjectKey, ct);
+    return Results.Ok(RunMapping.ToDetailDto(run));
+});
+
 app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredKey(projectKey, "projectKey", out var keyError))
@@ -300,6 +420,15 @@ app.Run();
 
 static IResult InvalidRequest(string detail)
     => Results.Problem(title: "Invalid request", detail: detail, statusCode: StatusCodes.Status400BadRequest);
+
+static string? ResolveBaseUrl(OpenApiDocument doc)
+{
+    if (doc.Servers is null || doc.Servers.Count == 0)
+        return null;
+
+    var serverUrl = doc.Servers[0].Url;
+    return string.IsNullOrWhiteSpace(serverUrl) ? null : serverUrl.Trim().TrimEnd('/');
+}
 
 static (string path, OperationType method, OpenApiOperation op)? FindOperation(OpenApiDocument doc, string operationId)
 {

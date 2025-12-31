@@ -54,8 +54,17 @@ public class IndexModel : PageModel
     [TempData]
     public string? TestPlanMessageKind { get; set; }
 
+    [TempData]
+    public string? RunMessage { get; set; }
+
+    [TempData]
+    public string? RunMessageKind { get; set; }
+
     [BindProperty]
     public string? TestPlanOperationId { get; set; }
+
+    [BindProperty]
+    public string? RunOperationId { get; set; }
 
     public async Task OnGetAsync(Guid projectId, string? operationId, int? take)
     {
@@ -138,6 +147,31 @@ public class IndexModel : PageModel
         {
             TestPlanMessage = "We couldn't generate the test plan. Verify the OpenAPI spec and operationId.";
             TestPlanMessageKind = "error";
+            ErrorDetails = $"{ex.GetType().Name}: {ex.Message}";
+        }
+
+        return RedirectToPage(new { projectId, operationId });
+    }
+
+    public async Task<IActionResult> OnPostRunPlanAsync(Guid projectId)
+    {
+        var operationId = string.IsNullOrWhiteSpace(RunOperationId) ? null : RunOperationId.Trim();
+        if (string.IsNullOrWhiteSpace(operationId))
+        {
+            RunMessage = "Provide an operationId to execute.";
+            RunMessageKind = "error";
+            return RedirectToPage(new { projectId });
+        }
+
+        try
+        {
+            var run = await _apiTesterWebClient.ExecuteTestPlan(projectId, operationId, HttpContext.RequestAborted);
+            return Redirect($"/runs/{run.RunId}");
+        }
+        catch (Exception ex)
+        {
+            RunMessage = "We couldn't execute the test plan. Verify the execution policy and try again.";
+            RunMessageKind = "error";
             ErrorDetails = $"{ex.GetType().Name}: {ex.Message}";
         }
 
