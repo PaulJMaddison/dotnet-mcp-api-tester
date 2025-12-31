@@ -71,3 +71,25 @@ body {
 .footer-link:hover {
     text-decoration: underline;
 }
+
+.diagram-placeholder {
+    background: #f8fafc;
+    border: 1px dashed #cbd5f5;
+    border-radius: 16px;
+    padding: 24px;
+    color: #475569;
+    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+}
+
+.diagram-placeholder .placeholder-grid {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.3);
+    font-weight: 600;
+    text-align: center;
+}
