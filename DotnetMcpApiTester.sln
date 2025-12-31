@@ -20,6 +20,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.Web.UnitTests", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.Web.IntegrationTests", "ApiTester.Web.IntegrationTests\ApiTester.Web.IntegrationTests.csproj", "{93885EE6-E280-41F4-91D3-F1CAD370E927}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.Ui", "ApiTester.Ui\ApiTester.Ui.csproj", "{AF3D86DD-2F1C-4648-90C1-0CDBF256BF0D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -50,6 +52,10 @@ Global
 		{93885EE6-E280-41F4-91D3-F1CAD370E927}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{93885EE6-E280-41F4-91D3-F1CAD370E927}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{93885EE6-E280-41F4-91D3-F1CAD370E927}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF3D86DD-2F1C-4648-90C1-0CDBF256BF0D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF3D86DD-2F1C-4648-90C1-0CDBF256BF0D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF3D86DD-2F1C-4648-90C1-0CDBF256BF0D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF3D86DD-2F1C-4648-90C1-0CDBF256BF0D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
