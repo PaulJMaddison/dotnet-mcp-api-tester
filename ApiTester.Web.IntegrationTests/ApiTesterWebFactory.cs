@@ -21,7 +21,9 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
             var settings = new Dictionary<string, string?>
             {
                 ["Persistence:Provider"] = "Sqlite",
-                ["Persistence:ConnectionString"] = $"Data Source={_databasePath}"
+                ["Persistence:ConnectionString"] = $"Data Source={_databasePath}",
+                ["Execution:AllowedBaseUrls:0"] = "https://httpbin.org",
+                ["Execution:DryRun"] = "false"
             };
             config.AddInMemoryCollection(settings);
         });
