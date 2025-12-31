@@ -25,8 +25,11 @@ public sealed class UiAuthGateMiddleware : IMiddleware
 
         if (!_sessionStore.TryGetApiKey(out var apiKey))
         {
-            RedirectToSignIn(context);
-            return;
+            if (!TryAuthenticateFromHeader(context, out apiKey))
+            {
+                RedirectToSignIn(context);
+                return;
+            }
         }
 
         context.Items[ApiKeyAuthDefaults.OwnerKeyItemName] = apiKey;
@@ -38,6 +41,29 @@ public sealed class UiAuthGateMiddleware : IMiddleware
         }
 
         await next(context);
+    }
+
+    private bool TryAuthenticateFromHeader(HttpContext context, out string apiKey)
+    {
+        apiKey = string.Empty;
+
+        if (!context.Request.Headers.TryGetValue(ApiKeyAuthDefaults.HeaderName, out var headerKey))
+        {
+            return false;
+        }
+
+        if (!_sessionStore.TrySignIn(headerKey.ToString(), out _))
+        {
+            return false;
+        }
+
+        if (!_sessionStore.TryGetApiKey(out apiKey))
+        {
+            return false;
+        }
+
+        _onboardingStore.MarkComplete();
+        return true;
     }
 
     private static bool IsAnonymousPath(HttpContext context)

@@ -1,0 +1,86 @@
+@page "/projects/{projectId:guid}"
+@model ApiTester.Ui.Pages.Projects.DetailsModel
+
+@{
+    ViewData["Title"] = "Runs";
+}
+
+@section Breadcrumb {
+    <a href="/">Projects</a>
+    <span>/</span>
+    <span>Runs</span>
+}
+
+<h1>Runs</h1>
+
+@if (Model.HasError)
+{
+    <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
+}
+else if (Model.IsLoading)
+{
+    <div class="loading-state" role="status">Loading runs…</div>
+}
+else if (Model.NotFound)
+{
+    <partial name="Shared/_EmptyState" model='new EmptyStateModel("Project not found.")' />
+}
+else if (Model.Project is not null)
+{
+    <section class="filter-summary">
+        <h2>Filters</h2>
+        <div class="summary-grid">
+            <div class="summary-card">
+                <span>Project</span>
+                <strong>@(string.IsNullOrWhiteSpace(Model.Project.Name) ? Model.Project.ProjectKey : Model.Project.Name)</strong>
+            </div>
+            <div class="summary-card">
+                <span>Project Key</span>
+                <strong>@Model.Project.ProjectKey</strong>
+            </div>
+            <div class="summary-card">
+                <span>Operation ID</span>
+                <strong>@(string.IsNullOrWhiteSpace(Model.OperationId) ? "Any operation" : Model.OperationId)</strong>
+            </div>
+            <div class="summary-card">
+                <span>Take</span>
+                <strong>@Model.Take</strong>
+            </div>
+        </div>
+    </section>
+
+    if (Model.Runs.Count == 0)
+    {
+        <partial name="Shared/_EmptyState" model='new EmptyStateModel("No runs have been recorded for this project yet.")' />
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Run ID</th>
+                    <th>Operation ID</th>
+                    <th>Started UTC</th>
+                    <th>Completed UTC</th>
+                    <th>Passed</th>
+                    <th>Failed</th>
+                    <th>Blocked</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var run in Model.Runs)
+                {
+                    <tr>
+                        <td><a href="/Runs/@run.RunId">@run.RunId</a></td>
+                        <td>@run.OperationId</td>
+                        <td>@DisplayFormatters.FormatUtc(run.StartedUtc)</td>
+                        <td>@DisplayFormatters.FormatUtc(run.CompletedUtc)</td>
+                        <td>@run.Snapshot.Passed</td>
+                        <td>@run.Snapshot.Failed</td>
+                        <td>@run.Snapshot.Blocked</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
