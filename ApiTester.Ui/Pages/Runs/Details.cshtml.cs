@@ -1,18 +1,20 @@
 using ApiTester.Ui.Clients;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
-namespace ApiTester.Ui.Pages.Projects;
+namespace ApiTester.Ui.Pages.Runs;
 
-public class IndexModel : PageModel
+public class DetailsModel : PageModel
 {
     private readonly ApiTesterWebClient _apiTesterWebClient;
 
-    public IndexModel(ApiTesterWebClient apiTesterWebClient)
+    public DetailsModel(ApiTesterWebClient apiTesterWebClient)
     {
         _apiTesterWebClient = apiTesterWebClient;
     }
 
-    public IReadOnlyList<ProjectDto> Projects { get; private set; } = Array.Empty<ProjectDto>();
+    public RunDetailDto? Run { get; private set; }
+
+    public bool NotFound { get; private set; }
 
     public string? ErrorMessage { get; private set; }
 
@@ -22,17 +24,23 @@ public class IndexModel : PageModel
 
     public bool IsLoading { get; private set; }
 
-    public async Task OnGetAsync()
+    public async Task OnGetAsync(Guid runId)
     {
         try
         {
             IsLoading = true;
-            var response = await _apiTesterWebClient.ListProjects(50, HttpContext.RequestAborted);
-            Projects = response.Projects;
+            var run = await _apiTesterWebClient.GetRun(runId, HttpContext.RequestAborted);
+            if (run is null)
+            {
+                NotFound = true;
+                return;
+            }
+
+            Run = run;
         }
         catch (Exception ex)
         {
-            ErrorMessage = "We couldn't load projects right now. Please try again.";
+            ErrorMessage = "We couldn't load this run right now. Please try again.";
             ErrorDetails = $"{ex.GetType().Name}: {ex.Message}";
         }
         finally

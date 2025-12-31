@@ -1,0 +1,128 @@
+@page "/Runs/{runId:guid}"
+@model ApiTester.Ui.Pages.Runs.DetailsModel
+
+@{
+    ViewData["Title"] = "Run Details";
+}
+
+@section Breadcrumb {
+    <a href="/Projects">Projects</a>
+    <span>/</span>
+    <a href="/Runs">Runs</a>
+    <span>/</span>
+    <span>Run Details</span>
+}
+
+<h1>Run Details</h1>
+
+@if (Model.HasError)
+{
+    <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
+}
+else if (Model.IsLoading)
+{
+    <div class="loading-state" role="status">Loading run details…</div>
+}
+else if (Model.NotFound)
+{
+    <partial name="Shared/_EmptyState" model='new EmptyStateModel("Run not found.")' />
+}
+else if (Model.Run is not null)
+{
+    <h2>Run Summary</h2>
+    <div class="summary-grid">
+        <div class="summary-card">
+            <span>Project Key</span>
+            <strong>@Model.Run.ProjectKey</strong>
+        </div>
+        <div class="summary-card">
+            <span>Operation ID</span>
+            <strong>@Model.Run.OperationId</strong>
+        </div>
+        <div class="summary-card">
+            <span>Started UTC</span>
+            <strong>@DisplayFormatters.FormatUtc(Model.Run.StartedUtc)</strong>
+        </div>
+        <div class="summary-card">
+            <span>Completed UTC</span>
+            <strong>@DisplayFormatters.FormatUtc(Model.Run.CompletedUtc)</strong>
+        </div>
+        <div class="summary-card">
+            <span>Total Cases</span>
+            <strong>@Model.Run.Result.TotalCases</strong>
+        </div>
+        <div class="summary-card">
+            <span>Passed</span>
+            <strong>@Model.Run.Result.Passed</strong>
+        </div>
+        <div class="summary-card">
+            <span>Failed</span>
+            <strong>@Model.Run.Result.Failed</strong>
+        </div>
+        <div class="summary-card">
+            <span>Blocked</span>
+            <strong>@Model.Run.Result.Blocked</strong>
+        </div>
+        <div class="summary-card">
+            <span>Total Duration (ms)</span>
+            <strong>@DisplayFormatters.FormatDurationMs(Model.Run.Result.TotalDurationMs)</strong>
+        </div>
+    </div>
+
+    <h2>Case Results</h2>
+    @if (Model.Run.Result.Results.Count == 0)
+    {
+        <partial name="Shared/_EmptyState" model='new EmptyStateModel("No case results recorded.")' />
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Passed</th>
+                    <th>Blocked</th>
+                    <th>Status Code</th>
+                    <th>Duration (ms)</th>
+                    <th>Method</th>
+                    <th>URL</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var result in Model.Run.Result.Results)
+                {
+                    <tr>
+                        <td>@result.Name</td>
+                        <td>@(result.Pass ? "Yes" : "No")</td>
+                        <td>@(result.Blocked ? "Yes" : "No")</td>
+                        <td>@(result.StatusCode?.ToString() ?? "—")</td>
+                        <td>@DisplayFormatters.FormatDurationMs(result.DurationMs)</td>
+                        <td>@(string.IsNullOrWhiteSpace(result.Method) ? "—" : result.Method)</td>
+                        <td>@(string.IsNullOrWhiteSpace(result.Url) ? "—" : result.Url)</td>
+                    </tr>
+                    <tr class="details-row">
+                        <td colspan="7">
+                            <details>
+                                <summary>Details</summary>
+                                <div class="details-grid">
+                                    <div>
+                                        <strong>Failure Reason</strong>
+                                        <p>@(string.IsNullOrWhiteSpace(result.FailureReason) ? "None" : result.FailureReason)</p>
+                                    </div>
+                                    <div>
+                                        <strong>Block Reason</strong>
+                                        <p>@(string.IsNullOrWhiteSpace(result.BlockReason) ? "None" : result.BlockReason)</p>
+                                    </div>
+                                    <div>
+                                        <strong>Response Snippet</strong>
+                                        <pre>@(string.IsNullOrWhiteSpace(result.ResponseSnippet) ? "None" : result.ResponseSnippet)</pre>
+                                    </div>
+                                </div>
+                            </details>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}

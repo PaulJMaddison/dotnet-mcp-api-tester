@@ -12,10 +12,83 @@ body {
     line-height: 1.5;
 }
 
+.app-shell {
+    display: flex;
+    min-height: 100vh;
+}
+
+.app-sidebar {
+    width: 240px;
+    background: #0f172a;
+    color: #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem 1rem;
+    gap: 1.5rem;
+}
+
+.sidebar-header {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.85rem;
+}
+
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.sidebar-nav a {
+    color: #e2e8f0;
+    font-weight: 600;
+}
+
+.sidebar-nav a:hover {
+    color: #fff;
+}
+
+.sidebar-footer {
+    margin-top: auto;
+    font-size: 0.85rem;
+    color: #94a3b8;
+}
+
+.app-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.app-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.topbar-left,
+.topbar-right {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    font-size: 0.9rem;
+    color: #1f2933;
+}
+
+.app-content {
+    flex: 1;
+    padding: 2rem;
+}
+
 .page {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 2rem;
+    padding: 0;
 }
 
 a {
@@ -25,16 +98,6 @@ a {
 
 a:hover {
     text-decoration: underline;
-}
-
-.top-nav {
-    margin-bottom: 1rem;
-    font-size: 0.95rem;
-}
-
-.top-nav a {
-    font-weight: 600;
-    color: #111827;
 }
 
 .breadcrumbs {
@@ -48,6 +111,11 @@ a:hover {
 
 h1 {
     margin: 0 0 1rem;
+}
+
+.page-intro {
+    margin-top: 0;
+    color: #52606d;
 }
 
 h2 {
@@ -99,6 +167,15 @@ tbody tr:hover {
     color: #991b1b;
 }
 
+.loading-state {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px dashed #cbd2d9;
+    color: #52606d;
+    background: #fff;
+}
+
 details {
     margin-top: 0.5rem;
 }
@@ -113,117 +190,6 @@ pre {
     padding: 0.75rem;
     border-radius: 6px;
     border: 1px solid #e2e8f0;
-}
-
-form {
-    margin: 0;
-}
-
-label {
-    display: block;
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-}
-
-input,
-select,
-button {
-    font: inherit;
-}
-
-input[type="text"],
-input[type="file"],
-select {
-    padding: 0.5rem;
-    border: 1px solid #cbd2d9;
-    border-radius: 6px;
-    min-width: 200px;
-    background: #fff;
-}
-
-button {
-    padding: 0.6rem 1.2rem;
-    border-radius: 6px;
-    border: none;
-    background: #2563eb;
-    color: #fff;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-button:hover {
-    background: #1d4ed8;
-}
-
-.filter-form {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: end;
-    margin: 1.5rem 0 1rem;
-    padding: 1rem;
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
-    background: #f8fafc;
-}
-
-.filter-form button {
-    margin-top: 0.5rem;
-}
-
-.import-panel,
-.plan-panel {
-    margin: 1.5rem 0;
-    padding: 1rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    background: #fff;
-}
-
-.import-panel form,
-.plan-panel form {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    align-items: end;
-}
-
-.import-panel button {
-    background: #0f766e;
-}
-
-.import-panel button:hover {
-    background: #0b5f59;
-}
-
-.plan-panel button {
-    background: #1d4ed8;
-}
-
-.import-message,
-.plan-message {
-    margin-top: 0.75rem;
-    padding: 0.75rem;
-    border-radius: 6px;
-}
-
-.import-message.success,
-.plan-message.success {
-    background: #ecfdf3;
-    border: 1px solid #bbf7d0;
-    color: #166534;
-}
-
-.import-message.error,
-.plan-message.error {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    color: #991b1b;
-}
-
-.project-meta {
-    margin-top: 0;
-    color: #52606d;
 }
 
 .summary-grid {
@@ -264,4 +230,22 @@ button:hover {
     display: block;
     margin-bottom: 0.25rem;
     color: #1f2933;
+}
+
+.filter-summary {
+    margin: 1.5rem 0;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+}
+
+.filter-summary h2 {
+    margin-top: 0;
+}
+
+.filter-hint {
+    margin-bottom: 0;
+    color: #52606d;
+    font-size: 0.9rem;
 }
