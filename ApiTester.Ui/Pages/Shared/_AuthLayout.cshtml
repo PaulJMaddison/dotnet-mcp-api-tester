@@ -11,9 +11,18 @@
 </head>
 <body>
     <div class="auth-shell">
-        <main class="auth-card">
-            @RenderBody()
-        </main>
+        <div class="auth-panel">
+            <main class="auth-card">
+                @RenderBody()
+            </main>
+            <aside class="auth-visual" aria-hidden="true">
+                <img src="~/images/auth-illustration.svg" alt="" />
+                <div class="auth-visual-copy">
+                    <span class="eyebrow">Secure access</span>
+                    <p>Connect your workspace key once to unlock projects, runs, and onboarding guidance.</p>
+                </div>
+            </aside>
+        </div>
     </div>
 </body>
 </html>
