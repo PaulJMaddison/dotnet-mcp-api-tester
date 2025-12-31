@@ -4,6 +4,7 @@ using ApiTester.McpServer.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApiTester.McpServer.Migrations
 {
     [DbContext(typeof(ApiTesterDbContext))]
-    partial class ApiTesterDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260119090000_Day23_OwnerKey")]
+    partial class Day23_OwnerKey
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -173,13 +176,13 @@ namespace ApiTester.McpServer.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<int>("Blocked")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CompletedUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("Failed")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Blocked")
                         .HasColumnType("int");
 
                     b.Property<string>("OperationId")
@@ -196,11 +199,11 @@ namespace ApiTester.McpServer.Migrations
                     b.Property<DateTime>("StartedUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("TotalCases")
-                        .HasColumnType("int");
-
                     b.Property<long>("TotalDurationMs")
                         .HasColumnType("bigint");
+
+                    b.Property<int>("TotalCases")
+                        .HasColumnType("int");
 
                     b.HasKey("RunId");
 
@@ -260,11 +263,6 @@ namespace ApiTester.McpServer.Migrations
                     b.Navigation("Runs");
 
                     b.Navigation("TestPlans");
-                });
-
-            modelBuilder.Entity("ApiTester.McpServer.Persistence.Entities.TestRunEntity", b =>
-                {
-                    b.Navigation("Results");
                 });
 #pragma warning restore 612, 618
         }

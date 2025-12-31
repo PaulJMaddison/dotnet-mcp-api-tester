@@ -19,32 +19,42 @@ public sealed class FileTestRunStore : ITestRunStore
 
     private string RootPath => Path.Combine(_cfg.WorkingDirectory, "run-history");
 
-    private string ProjectPath(string projectKey)
-        => Path.Combine(RootPath, Sanitize(projectKey));
+    private string OwnerPath(string ownerKey)
+        => Path.Combine(RootPath, Sanitize(ownerKey));
 
-    private string RunFilePath(string projectKey, Guid runId)
-        => Path.Combine(ProjectPath(projectKey), $"{runId:D}.json");
+    private string ProjectPath(string ownerKey, string projectKey)
+        => Path.Combine(OwnerPath(ownerKey), Sanitize(projectKey));
+
+    private string RunFilePath(string ownerKey, string projectKey, Guid runId)
+        => Path.Combine(ProjectPath(ownerKey, projectKey), $"{runId:D}.json");
 
     public async Task SaveAsync(TestRunRecord record)
     {
         Console.Error.WriteLine("[server] Saving to file store...");
+        var ownerKey = string.IsNullOrWhiteSpace(record.OwnerKey) ? OwnerKeyDefaults.Default : record.OwnerKey.Trim();
         var projectKey = string.IsNullOrWhiteSpace(record.ProjectKey) ? "default" : record.ProjectKey.Trim();
 
-        Directory.CreateDirectory(ProjectPath(projectKey));
+        Directory.CreateDirectory(ProjectPath(ownerKey, projectKey));
 
-        var path = RunFilePath(projectKey, record.RunId);
+        var path = RunFilePath(ownerKey, projectKey, record.RunId);
         var json = JsonSerializer.Serialize(record, JsonOptions);
 
         await File.WriteAllTextAsync(path, json);
     }
 
-    public async Task<TestRunRecord?> GetAsync(Guid runId)
+    public async Task<TestRunRecord?> GetAsync(string ownerKey, Guid runId)
     {
+        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
+
         if (!Directory.Exists(RootPath))
             return null;
 
+        var ownerDir = OwnerPath(ownerKey);
+        if (!Directory.Exists(ownerDir))
+            return null;
+
         // Search all projects for the runId file
-        foreach (var projectDir in Directory.EnumerateDirectories(RootPath))
+        foreach (var projectDir in Directory.EnumerateDirectories(ownerDir))
         {
             var candidate = Path.Combine(projectDir, $"{runId:D}.json");
             if (!File.Exists(candidate))
@@ -58,16 +68,18 @@ public sealed class FileTestRunStore : ITestRunStore
     }
 
     public async Task<PagedResult<TestRunRecord>> ListAsync(
+        string ownerKey,
         string projectKey,
         PageRequest request,
         SortField sortField,
         SortDirection direction,
         string? operationId = null)
     {
+        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
         operationId = string.IsNullOrWhiteSpace(operationId) ? null : operationId.Trim();
 
-        var dir = ProjectPath(projectKey);
+        var dir = ProjectPath(ownerKey, projectKey);
         if (!Directory.Exists(dir))
             return new PagedResult<TestRunRecord>(Array.Empty<TestRunRecord>(), 0, null);
 
@@ -84,6 +96,20 @@ public sealed class FileTestRunStore : ITestRunStore
             if (record is null)
                 continue;
 
+            if (string.IsNullOrWhiteSpace(record.OwnerKey))
+            {
+                record = new TestRunRecord
+                {
+                    RunId = record.RunId,
+                    OwnerKey = ownerKey,
+                    ProjectKey = record.ProjectKey,
+                    OperationId = record.OperationId,
+                    StartedUtc = record.StartedUtc,
+                    CompletedUtc = record.CompletedUtc,
+                    Result = record.Result
+                };
+            }
+
             if (operationId is not null &&
                 !string.Equals(record.OperationId, operationId, StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -94,6 +120,7 @@ public sealed class FileTestRunStore : ITestRunStore
                 record = new TestRunRecord
                 {
                     RunId = record.RunId,
+                    OwnerKey = ownerKey,
                     ProjectKey = projectKey,
                     OperationId = record.OperationId,
                     StartedUtc = record.StartedUtc,

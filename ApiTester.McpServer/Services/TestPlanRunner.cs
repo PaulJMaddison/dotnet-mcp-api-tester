@@ -54,6 +54,9 @@ public sealed class TestPlanRunner
     }
 
     public async Task<TestRunRecord> RunPlanAsync(TestPlan plan, string projectKey, CancellationToken ct = default)
+        => await RunPlanAsync(plan, projectKey, OwnerKeyDefaults.Default, ct);
+
+    public async Task<TestRunRecord> RunPlanAsync(TestPlan plan, string projectKey, string ownerKey, CancellationToken ct = default)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
@@ -61,6 +64,7 @@ public sealed class TestPlanRunner
         if (string.IsNullOrWhiteSpace(plan.OperationId))
             throw new InvalidOperationException("Test plan missing operationId.");
 
+        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
 
         var startedUtc = DateTimeOffset.UtcNow;
@@ -96,6 +100,7 @@ public sealed class TestPlanRunner
         var record = new TestRunRecord
         {
             RunId = Guid.NewGuid(),
+            OwnerKey = ownerKey,
             ProjectKey = projectKey,
             OperationId = plan.OperationId.Trim(),
             StartedUtc = startedUtc,

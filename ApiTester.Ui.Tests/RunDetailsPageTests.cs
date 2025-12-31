@@ -2,7 +2,9 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using ApiTester.Ui.Clients;
+using ApiTester.Ui.Auth;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -10,6 +12,8 @@ namespace ApiTester.Ui.Tests;
 
 public class RunDetailsPageTests
 {
+    private const string ApiKey = "dev-local-key";
+
     [Fact]
     public async Task GetRunDetails_ReturnsSummaryHeading()
     {
@@ -17,7 +21,7 @@ public class RunDetailsPageTests
         var handler = new FakeHttpMessageHandler(request => BuildResponse(request, runId));
 
         await using var factory = CreateFactory(handler);
-        var client = factory.CreateClient();
+        var client = CreateClient(factory);
 
         var response = await client.GetAsync($"/runs/{runId}");
         var content = await response.Content.ReadAsStringAsync();
@@ -34,7 +38,7 @@ public class RunDetailsPageTests
         var handler = new FakeHttpMessageHandler(request => BuildResponse(request, runId));
 
         await using var factory = CreateFactory(handler);
-        var client = factory.CreateClient();
+        var client = CreateClient(factory);
 
         var response = await client.GetAsync($"/runs/{runId}");
         var content = await response.Content.ReadAsStringAsync();
@@ -50,7 +54,7 @@ public class RunDetailsPageTests
         var handler = new FakeHttpMessageHandler(request => BuildResponse(request, runId));
 
         await using var factory = CreateFactory(handler);
-        var client = factory.CreateClient();
+        var client = CreateClient(factory);
 
         var response = await client.GetAsync($"/runs/{runId}");
         var content = await response.Content.ReadAsStringAsync();
@@ -72,7 +76,7 @@ public class RunDetailsPageTests
         var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
 
         await using var factory = CreateFactory(handler);
-        var client = factory.CreateClient();
+        var client = CreateClient(factory);
 
         var response = await client.GetAsync($"/runs/{runId}");
         var content = await response.Content.ReadAsStringAsync();
@@ -85,6 +89,15 @@ public class RunDetailsPageTests
     {
         return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Auth:ApiKey"] = ApiKey
+                };
+                config.AddInMemoryCollection(settings);
+            });
+
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<ApiTesterWebClient>();
@@ -97,6 +110,13 @@ public class RunDetailsPageTests
                 services.AddSingleton(new ApiTesterWebClient(httpClient));
             });
         });
+    }
+
+    private static HttpClient CreateClient(WebApplicationFactory<Program> factory)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(ApiKeyAuthDefaults.HeaderName, ApiKey);
+        return client;
     }
 
     private static HttpResponseMessage BuildResponse(HttpRequestMessage request, Guid runId)

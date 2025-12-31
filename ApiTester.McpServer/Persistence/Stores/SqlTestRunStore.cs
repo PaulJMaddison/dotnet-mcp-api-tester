@@ -20,8 +20,9 @@ public sealed class SqlTestRunStore : ITestRunStore
         if (record is null) throw new ArgumentNullException(nameof(record));
 
         var projectKey = string.IsNullOrWhiteSpace(record.ProjectKey) ? "default" : record.ProjectKey.Trim();
+        var ownerKey = string.IsNullOrWhiteSpace(record.OwnerKey) ? OwnerKeyDefaults.Default : record.OwnerKey.Trim();
 
-        var project = await EnsureProjectAsync(projectKey);
+        var project = await EnsureProjectAsync(projectKey, ownerKey);
 
         var run = new TestRunEntity
         {
@@ -56,19 +57,22 @@ public sealed class SqlTestRunStore : ITestRunStore
         await _db.SaveChangesAsync();
     }
 
-    public async Task<TestRunRecord?> GetAsync(Guid runId)
+    public async Task<TestRunRecord?> GetAsync(string ownerKey, Guid runId)
     {
+        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
+
         var run = await _db.TestRuns
             .AsNoTracking()
             .Include(x => x.Results)
             .Include(x => x.Project)
-            .FirstOrDefaultAsync(x => x.RunId == runId);
+            .FirstOrDefaultAsync(x => x.RunId == runId && x.Project.OwnerKey == ownerKey);
 
         if (run is null) return null;
 
         return new TestRunRecord
         {
             RunId = run.RunId,
+            OwnerKey = run.Project?.OwnerKey ?? OwnerKeyDefaults.Default,
             ProjectKey = run.Project?.ProjectKey ?? "default",
             OperationId = run.OperationId,
             StartedUtc = new DateTimeOffset(run.StartedUtc, TimeSpan.Zero),
@@ -102,18 +106,20 @@ public sealed class SqlTestRunStore : ITestRunStore
     }
 
     public async Task<PagedResult<TestRunRecord>> ListAsync(
+        string ownerKey,
         string projectKey,
         PageRequest request,
         SortField sortField,
         SortDirection direction,
         string? operationId = null)
     {
+        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
 
         var q = _db.TestRuns
             .AsNoTracking()
             .Include(x => x.Project)
-            .Where(x => x.Project.ProjectKey == projectKey);
+            .Where(x => x.Project.ProjectKey == projectKey && x.Project.OwnerKey == ownerKey);
 
         if (!string.IsNullOrWhiteSpace(operationId))
         {
@@ -141,6 +147,7 @@ public sealed class SqlTestRunStore : ITestRunStore
         var items = runs.Select(run => new TestRunRecord
         {
             RunId = run.RunId,
+            OwnerKey = run.Project?.OwnerKey ?? ownerKey,
             ProjectKey = run.Project?.ProjectKey ?? projectKey,
             OperationId = run.OperationId,
             StartedUtc = new DateTimeOffset(run.StartedUtc, TimeSpan.Zero),
@@ -165,14 +172,15 @@ public sealed class SqlTestRunStore : ITestRunStore
         return new PagedResult<TestRunRecord>(items, total, nextOffset);
     }
 
-    private async Task<ProjectEntity> EnsureProjectAsync(string projectKey)
+    private async Task<ProjectEntity> EnsureProjectAsync(string projectKey, string ownerKey)
     {
-        var existing = await _db.Projects.FirstOrDefaultAsync(p => p.ProjectKey == projectKey);
+        var existing = await _db.Projects.FirstOrDefaultAsync(p => p.ProjectKey == projectKey && p.OwnerKey == ownerKey);
         if (existing is not null) return existing;
 
         var created = new ProjectEntity
         {
             ProjectId = Guid.NewGuid(),
+            OwnerKey = ownerKey,
             ProjectKey = projectKey,
             Name = projectKey,
             CreatedUtc = DateTime.UtcNow

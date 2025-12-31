@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
 using ModelContextProtocol.Server;
 
@@ -22,6 +23,7 @@ public sealed class RunHistoryTools
 
         // Day 14: store supports filtering (file store folder today, SQL WHERE later)
         var result = await _store.ListAsync(
+            OwnerKeyDefaults.Default,
             projectKey,
             new PageRequest(take, 0),
             SortField.StartedUtc,
@@ -59,7 +61,7 @@ public sealed class RunHistoryTools
         if (!Guid.TryParse(runId, out var id))
             return new { isError = true, error = "Invalid runId, expected a GUID." };
 
-        var run = await _store.GetAsync(id);
+        var run = await _store.GetAsync(OwnerKeyDefaults.Default, id);
         if (run is null)
             return new { isError = true, error = $"Run not found: {runId}" };
 

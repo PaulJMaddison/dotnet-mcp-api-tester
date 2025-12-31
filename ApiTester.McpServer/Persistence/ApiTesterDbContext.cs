@@ -38,11 +38,16 @@ public sealed class ApiTesterDbContext : DbContext
         {
             b.HasKey(x => x.ProjectId);
 
+            b.Property(x => x.OwnerKey)
+                .HasMaxLength(100)
+                .IsRequired();
+
             b.Property(x => x.ProjectKey)
                 .HasMaxLength(100)
                 .IsRequired();
 
-            b.HasIndex(x => x.ProjectKey).IsUnique();
+            b.HasIndex(x => new { x.OwnerKey, x.ProjectKey }).IsUnique();
+            b.HasIndex(x => x.OwnerKey);
         });
 
         modelBuilder.Entity<TestCaseResultEntity>(b =>

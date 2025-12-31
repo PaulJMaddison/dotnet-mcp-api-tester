@@ -3,7 +3,10 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using ApiTester.Ui.Clients;
+using ApiTester.Ui.Auth;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -11,11 +14,13 @@ namespace ApiTester.Ui.Tests;
 
 public class ProjectsPageTests
 {
+    private const string ApiKey = "dev-local-key";
+
     [Fact]
     public async Task GetRoot_ReturnsProjectsHeading()
     {
-        await using var factory = new WebApplicationFactory<Program>();
-        var client = factory.CreateClient();
+        await using var factory = CreateFactory();
+        var client = CreateClient(factory);
 
         var response = await client.GetAsync("/");
         var content = await response.Content.ReadAsStringAsync();
@@ -27,8 +32,8 @@ public class ProjectsPageTests
     [Fact]
     public async Task GetRoot_RendersTopNavigation()
     {
-        await using var factory = new WebApplicationFactory<Program>();
-        var client = factory.CreateClient();
+        await using var factory = CreateFactory();
+        var client = CreateClient(factory);
 
         var response = await client.GetAsync("/");
         var content = await response.Content.ReadAsStringAsync();
@@ -40,7 +45,7 @@ public class ProjectsPageTests
     [Fact]
     public async Task GetRoot_WithEmptyProjects_ShowsEmptyState()
     {
-        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        await using var factory = CreateFactory(builder =>
         {
             builder.ConfigureServices(services =>
             {
@@ -65,7 +70,7 @@ public class ProjectsPageTests
             });
         });
 
-        var client = factory.CreateClient();
+        var client = CreateClient(factory);
 
         var response = await client.GetAsync("/");
         var content = await response.Content.ReadAsStringAsync();
@@ -77,7 +82,7 @@ public class ProjectsPageTests
     [Fact]
     public async Task GetRoot_WhenApiFails_ShowsErrorPanel()
     {
-        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        await using var factory = CreateFactory(builder =>
         {
             builder.ConfigureServices(services =>
             {
@@ -93,7 +98,7 @@ public class ProjectsPageTests
             });
         });
 
-        var client = factory.CreateClient();
+        var client = CreateClient(factory);
 
         var response = await client.GetAsync("/");
         var content = await response.Content.ReadAsStringAsync();
@@ -117,5 +122,31 @@ public class ProjectsPageTests
         {
             return Task.FromResult(_handler(request));
         }
+    }
+
+    private static WebApplicationFactory<Program> CreateFactory(Action<IWebHostBuilder>? configure = null)
+    {
+        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Auth:ApiKey"] = ApiKey
+                };
+                config.AddInMemoryCollection(settings);
+            });
+
+            configure?.Invoke(builder);
+        });
+
+        return factory;
+    }
+
+    private static HttpClient CreateClient(WebApplicationFactory<Program> factory)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add(ApiKeyAuthDefaults.HeaderName, ApiKey);
+        return client;
     }
 }
