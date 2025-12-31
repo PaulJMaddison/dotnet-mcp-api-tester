@@ -79,6 +79,8 @@ Your API
 
 The AI never talks to your API directly.
 
+![MCP server flow](../docs/diagrams/mcp-server-flow.svg)
+
 ---
 
 ## Current status
