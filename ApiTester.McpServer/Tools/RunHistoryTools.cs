@@ -21,14 +21,20 @@ public sealed class RunHistoryTools
         operationId = string.IsNullOrWhiteSpace(operationId) ? null : operationId.Trim();
 
         // Day 14: store supports filtering (file store folder today, SQL WHERE later)
-        var runs = await _store.ListAsync(projectKey, take, operationId);
+        var result = await _store.ListAsync(
+            projectKey,
+            new PageRequest(take, 0),
+            SortField.StartedUtc,
+            SortDirection.Desc,
+            operationId);
 
         return new
         {
             projectKey,
-            take,
-            total = runs.Count,
-            runs = runs.Select(r => new
+            pageSize = take,
+            total = result.Total,
+            nextPageToken = result.NextOffset?.ToString(),
+            runs = result.Items.Select(r => new
             {
                 r.RunId,
                 r.ProjectKey,

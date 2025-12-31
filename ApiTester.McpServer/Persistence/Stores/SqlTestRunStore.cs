@@ -101,10 +101,14 @@ public sealed class SqlTestRunStore : ITestRunStore
         };
     }
 
-    public async Task<IReadOnlyList<TestRunRecord>> ListAsync(string projectKey, int take, string? operationId = null)
+    public async Task<PagedResult<TestRunRecord>> ListAsync(
+        string projectKey,
+        PageRequest request,
+        SortField sortField,
+        SortDirection direction,
+        string? operationId = null)
     {
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
-        take = take <= 0 ? 20 : Math.Min(take, 200);
 
         var q = _db.TestRuns
             .AsNoTracking()
@@ -117,12 +121,24 @@ public sealed class SqlTestRunStore : ITestRunStore
             q = q.Where(x => x.OperationId == op);
         }
 
-        var runs = await q
-            .OrderByDescending(x => x.StartedUtc)
-            .Take(take)
-            .ToListAsync();
+        var total = await q.CountAsync(ct);
 
-        return runs.Select(run => new TestRunRecord
+        var ordered = sortField switch
+        {
+            SortField.CreatedUtc => direction == SortDirection.Asc
+                ? q.OrderBy(x => x.StartedUtc)
+                : q.OrderByDescending(x => x.StartedUtc),
+            _ => direction == SortDirection.Asc
+                ? q.OrderBy(x => x.StartedUtc)
+                : q.OrderByDescending(x => x.StartedUtc)
+        };
+
+        var runs = await ordered
+            .Skip(request.Offset)
+            .Take(request.PageSize)
+            .ToListAsync(ct);
+
+        var items = runs.Select(run => new TestRunRecord
         {
             RunId = run.RunId,
             ProjectKey = run.Project?.ProjectKey ?? projectKey,
@@ -140,6 +156,12 @@ public sealed class SqlTestRunStore : ITestRunStore
                 Results = new List<TestCaseResult>() // summaries don’t need case results
             }
         }).ToList();
+
+        var nextOffset = request.Offset + items.Count < total
+            ? request.Offset + items.Count
+            : null;
+
+        return new PagedResult<TestRunRecord>(items, total, nextOffset);
     }
 
     private async Task<ProjectEntity> EnsureProjectAsync(string projectKey)

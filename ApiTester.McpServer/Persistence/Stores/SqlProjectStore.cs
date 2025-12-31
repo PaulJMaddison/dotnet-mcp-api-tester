@@ -39,18 +39,32 @@ public sealed class SqlProjectStore : IProjectStore
         return new ProjectRecord(entity.ProjectId, entity.Name, entity.ProjectKey, entity.CreatedUtc);
     }
 
-    public async Task<IReadOnlyList<ProjectRecord>> ListAsync(int take, CancellationToken ct)
+    public async Task<PagedResult<ProjectRecord>> ListAsync(PageRequest request, SortField sortField, SortDirection direction, CancellationToken ct)
     {
-        take = take <= 0 ? 50 : Math.Min(take, 200);
+        var baseQuery = _db.Projects.AsNoTracking();
+        var total = await baseQuery.CountAsync(ct);
 
-        var projects = await _db.Projects
-            .AsNoTracking()
-            .OrderByDescending(x => x.CreatedUtc)
-            .Take(take)
+        var ordered = sortField switch
+        {
+            SortField.StartedUtc => direction == SortDirection.Asc
+                ? baseQuery.OrderBy(x => x.CreatedUtc)
+                : baseQuery.OrderByDescending(x => x.CreatedUtc),
+            _ => direction == SortDirection.Asc
+                ? baseQuery.OrderBy(x => x.CreatedUtc)
+                : baseQuery.OrderByDescending(x => x.CreatedUtc)
+        };
+
+        var projects = await ordered
+            .Skip(request.Offset)
+            .Take(request.PageSize)
             .Select(x => new ProjectRecord(x.ProjectId, x.Name, x.ProjectKey, x.CreatedUtc))
             .ToListAsync(ct);
 
-        return projects;
+        var nextOffset = request.Offset + projects.Count < total
+            ? request.Offset + projects.Count
+            : null;
+
+        return new PagedResult<ProjectRecord>(projects, total, nextOffset);
     }
 
     public async Task<ProjectRecord?> GetAsync(Guid projectId, CancellationToken ct)
