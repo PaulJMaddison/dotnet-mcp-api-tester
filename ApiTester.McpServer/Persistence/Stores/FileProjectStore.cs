@@ -32,8 +32,9 @@ public sealed class FileProjectStore : IProjectStore
         try
         {
             var list = await LoadAsync(ct);
-            if (list.Any(p => p.ProjectKey.Equals(key, StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException($"ProjectKey already exists: {key}");
+            var existing = list.FirstOrDefault(p => p.ProjectKey.Equals(key, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+                return existing;
 
             var record = new ProjectRecord(Guid.NewGuid(), name, key, DateTime.UtcNow);
             list.Add(record);
