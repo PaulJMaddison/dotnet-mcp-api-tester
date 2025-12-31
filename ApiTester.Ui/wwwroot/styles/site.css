@@ -28,10 +28,20 @@ body {
 }
 
 .sidebar-header {
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+}
+
+.sidebar-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sidebar-brand img {
+    display: block;
+    max-width: 100%;
+    height: auto;
 }
 
 .sidebar-nav {
@@ -80,6 +90,16 @@ body {
     color: #1f2933;
 }
 
+.topbar-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.topbar-brand img {
+    display: block;
+}
+
 .app-content {
     flex: 1;
     padding: 2rem;
@@ -107,6 +127,11 @@ a:hover {
     font-size: 0.9rem;
     color: #52606d;
     margin-bottom: 1.5rem;
+}
+
+.breadcrumb-icon {
+    display: inline-block;
+    opacity: 0.8;
 }
 
 h1 {
