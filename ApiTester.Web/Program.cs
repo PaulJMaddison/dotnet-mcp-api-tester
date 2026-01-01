@@ -761,6 +761,108 @@ app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, 
         : Results.Ok(RunMapping.ToAuditResponse(run));
 });
 
+app.MapGet("/api/runs/{runId}/annotations", async (string runId, ITestRunStore runStore, IRunAnnotationStore annotationStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var run = await runStore.GetAsync(ownerKey, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var annotations = await annotationStore.ListAsync(ownerKey, id, ct);
+    return Results.Ok(RunAnnotationMapping.ToListResponse(id, annotations));
+});
+
+app.MapPost("/api/runs/{runId}/annotations", async (string runId, RunAnnotationCreateRequest request, ITestRunStore runStore, IRunAnnotationStore annotationStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (!RequestValidation.TryNormalizeAnnotationNote(request?.Note, out var normalizedNote, out var noteError))
+        return InvalidRequest(noteError);
+
+    if (!RequestValidation.TryNormalizeOptionalJiraLink(request?.JiraLink, out var normalizedJiraLink, out var jiraError))
+        return InvalidRequest(jiraError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var run = await runStore.GetAsync(ownerKey, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var annotation = await annotationStore.CreateAsync(ownerKey, id, normalizedNote, normalizedJiraLink, ct);
+    logger.LogInformation("Created annotation {AnnotationId} for run {RunId}", annotation.AnnotationId, id);
+    return Results.Ok(RunAnnotationMapping.ToDto(annotation));
+});
+
+app.MapGet("/api/runs/{runId}/annotations/{annotationId}", async (string runId, string annotationId, ITestRunStore runStore, IRunAnnotationStore annotationStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (!RequestValidation.TryParseGuid(annotationId, out var annotationGuid, out var annotationError))
+        return InvalidRequest(annotationError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var run = await runStore.GetAsync(ownerKey, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var annotation = await annotationStore.GetAsync(ownerKey, id, annotationGuid, ct);
+    return annotation is null
+        ? Results.NotFound()
+        : Results.Ok(RunAnnotationMapping.ToDto(annotation));
+});
+
+app.MapPut("/api/runs/{runId}/annotations/{annotationId}", async (string runId, string annotationId, RunAnnotationUpdateRequest request, ITestRunStore runStore, IRunAnnotationStore annotationStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (!RequestValidation.TryParseGuid(annotationId, out var annotationGuid, out var annotationError))
+        return InvalidRequest(annotationError);
+
+    if (!RequestValidation.TryNormalizeAnnotationNote(request?.Note, out var normalizedNote, out var noteError))
+        return InvalidRequest(noteError);
+
+    if (!RequestValidation.TryNormalizeOptionalJiraLink(request?.JiraLink, out var normalizedJiraLink, out var jiraError))
+        return InvalidRequest(jiraError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var run = await runStore.GetAsync(ownerKey, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var annotation = await annotationStore.UpdateAsync(ownerKey, id, annotationGuid, normalizedNote, normalizedJiraLink, ct);
+    if (annotation is null)
+        return Results.NotFound();
+
+    logger.LogInformation("Updated annotation {AnnotationId} for run {RunId}", annotationGuid, id);
+    return Results.Ok(RunAnnotationMapping.ToDto(annotation));
+});
+
+app.MapDelete("/api/runs/{runId}/annotations/{annotationId}", async (string runId, string annotationId, ITestRunStore runStore, IRunAnnotationStore annotationStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (!RequestValidation.TryParseGuid(annotationId, out var annotationGuid, out var annotationError))
+        return InvalidRequest(annotationError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var run = await runStore.GetAsync(ownerKey, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var removed = await annotationStore.DeleteAsync(ownerKey, id, annotationGuid, ct);
+    if (!removed)
+        return Results.NotFound();
+
+    logger.LogInformation("Deleted annotation {AnnotationId} for run {RunId}", annotationGuid, id);
+    return Results.NoContent();
+});
+
 app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITestRunStore store, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!entitlements.CanExport)

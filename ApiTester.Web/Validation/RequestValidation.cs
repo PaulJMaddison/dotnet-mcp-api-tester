@@ -4,6 +4,9 @@ namespace ApiTester.Web.Validation;
 
 public static class RequestValidation
 {
+    public const int MaxAnnotationNoteLength = 2000;
+    public const int MaxJiraLinkLength = 2048;
+
     public static bool TryNormalizePageSize(
         int? pageSize,
         int? take,
@@ -189,6 +192,65 @@ public static class RequestValidation
             return false;
         }
 
+        error = string.Empty;
+        return true;
+    }
+
+    public static bool TryNormalizeAnnotationNote(string? note, out string normalized, out string error)
+    {
+        if (string.IsNullOrWhiteSpace(note))
+        {
+            normalized = string.Empty;
+            error = "note is required.";
+            return false;
+        }
+
+        var trimmed = note.Trim();
+        if (trimmed.Length > MaxAnnotationNoteLength)
+        {
+            normalized = string.Empty;
+            error = $"note must be {MaxAnnotationNoteLength} characters or fewer.";
+            return false;
+        }
+
+        normalized = trimmed;
+        error = string.Empty;
+        return true;
+    }
+
+    public static bool TryNormalizeOptionalJiraLink(string? jiraLink, out string? normalized, out string error)
+    {
+        if (jiraLink is null)
+        {
+            normalized = null;
+            error = string.Empty;
+            return true;
+        }
+
+        var trimmed = jiraLink.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            normalized = null;
+            error = "jiraLink cannot be empty.";
+            return false;
+        }
+
+        if (trimmed.Length > MaxJiraLinkLength)
+        {
+            normalized = null;
+            error = $"jiraLink must be {MaxJiraLinkLength} characters or fewer.";
+            return false;
+        }
+
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            normalized = null;
+            error = "jiraLink must be an absolute http or https URL.";
+            return false;
+        }
+
+        normalized = trimmed;
         error = string.Empty;
         return true;
     }

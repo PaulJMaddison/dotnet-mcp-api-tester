@@ -87,4 +87,76 @@ public class RequestValidationTests
         Assert.Equal(string.Empty, error);
         Assert.Equal("https://example.com/api", normalized);
     }
+
+    [Fact]
+    public void TryNormalizeAnnotationNote_ReturnsError_WhenMissing()
+    {
+        var ok = RequestValidation.TryNormalizeAnnotationNote("   ", out var normalized, out var error);
+
+        Assert.False(ok);
+        Assert.Equal(string.Empty, normalized);
+        Assert.Equal("note is required.", error);
+    }
+
+    [Fact]
+    public void TryNormalizeAnnotationNote_ReturnsError_WhenTooLong()
+    {
+        var note = new string('a', RequestValidation.MaxAnnotationNoteLength + 1);
+
+        var ok = RequestValidation.TryNormalizeAnnotationNote(note, out var normalized, out var error);
+
+        Assert.False(ok);
+        Assert.Equal(string.Empty, normalized);
+        Assert.Contains("note must be", error);
+    }
+
+    [Fact]
+    public void TryNormalizeAnnotationNote_NormalizesText()
+    {
+        var ok = RequestValidation.TryNormalizeAnnotationNote("  Looks good  ", out var normalized, out var error);
+
+        Assert.True(ok);
+        Assert.Equal(string.Empty, error);
+        Assert.Equal("Looks good", normalized);
+    }
+
+    [Fact]
+    public void TryNormalizeOptionalJiraLink_ReturnsError_WhenWhitespace()
+    {
+        var ok = RequestValidation.TryNormalizeOptionalJiraLink("   ", out var normalized, out var error);
+
+        Assert.False(ok);
+        Assert.Null(normalized);
+        Assert.Equal("jiraLink cannot be empty.", error);
+    }
+
+    [Fact]
+    public void TryNormalizeOptionalJiraLink_ReturnsError_WhenInvalid()
+    {
+        var ok = RequestValidation.TryNormalizeOptionalJiraLink("ftp://jira.example.com/TIX-1", out var normalized, out var error);
+
+        Assert.False(ok);
+        Assert.Null(normalized);
+        Assert.Equal("jiraLink must be an absolute http or https URL.", error);
+    }
+
+    [Fact]
+    public void TryNormalizeOptionalJiraLink_AllowsNull()
+    {
+        var ok = RequestValidation.TryNormalizeOptionalJiraLink(null, out var normalized, out var error);
+
+        Assert.True(ok);
+        Assert.Null(normalized);
+        Assert.Equal(string.Empty, error);
+    }
+
+    [Fact]
+    public void TryNormalizeOptionalJiraLink_NormalizesUrl()
+    {
+        var ok = RequestValidation.TryNormalizeOptionalJiraLink(" https://jira.example.com/browse/TIX-1 ", out var normalized, out var error);
+
+        Assert.True(ok);
+        Assert.Equal(string.Empty, error);
+        Assert.Equal("https://jira.example.com/browse/TIX-1", normalized);
+    }
 }

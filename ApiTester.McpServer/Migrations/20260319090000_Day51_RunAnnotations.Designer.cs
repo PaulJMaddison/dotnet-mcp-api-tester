@@ -4,6 +4,7 @@ using ApiTester.McpServer.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApiTester.McpServer.Migrations
 {
     [DbContext(typeof(ApiTesterDbContext))]
-    partial class ApiTesterDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260319090000_Day51_RunAnnotations")]
+    partial class Day51_RunAnnotations
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -250,11 +253,11 @@ namespace ApiTester.McpServer.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<int>("Passed")
-                        .HasColumnType("int");
-
                     b.Property<string>("PolicySnapshotJson")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Passed")
+                        .HasColumnType("int");
 
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uniqueidentifier");
@@ -265,11 +268,11 @@ namespace ApiTester.McpServer.Migrations
                     b.Property<DateTime>("StartedUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("TotalCases")
-                        .HasColumnType("int");
-
                     b.Property<long>("TotalDurationMs")
                         .HasColumnType("bigint");
+
+                    b.Property<int>("TotalCases")
+                        .HasColumnType("int");
 
                     b.HasKey("RunId");
 
@@ -282,11 +285,51 @@ namespace ApiTester.McpServer.Migrations
                     b.ToTable("TestRuns");
                 });
 
+            modelBuilder.Entity("ApiTester.McpServer.Persistence.Entities.EnvironmentEntity", b =>
+                {
+                    b.Property<Guid>("EnvironmentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("BaseUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("nvarchar(2048)");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("OwnerKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("EnvironmentId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.HasIndex("OwnerKey", "ProjectId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("Environments");
+                });
+
             modelBuilder.Entity("ApiTester.McpServer.Persistence.Entities.OpenApiSpecEntity", b =>
                 {
                     b.HasOne("ApiTester.McpServer.Persistence.Entities.ProjectEntity", "Project")
                         .WithMany("OpenApiSpecs")
-                        .HasForeignKey("ApiTester.McpServer.Persistence.Entities.OpenApiSpecEntity", "ProjectId")
+                        .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -328,11 +371,6 @@ namespace ApiTester.McpServer.Migrations
 
             modelBuilder.Entity("ApiTester.McpServer.Persistence.Entities.TestRunEntity", b =>
                 {
-                    b.HasOne("ApiTester.McpServer.Persistence.Entities.OpenApiSpecEntity", "Spec")
-                        .WithMany()
-                        .HasForeignKey("SpecId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("ApiTester.McpServer.Persistence.Entities.TestRunEntity", "BaselineRun")
                         .WithMany()
                         .HasForeignKey("BaselineRunId")
@@ -344,11 +382,33 @@ namespace ApiTester.McpServer.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("ApiTester.McpServer.Persistence.Entities.OpenApiSpecEntity", "Spec")
+                        .WithMany()
+                        .HasForeignKey("SpecId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("BaselineRun");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("Spec");
+                });
+
+            modelBuilder.Entity("ApiTester.McpServer.Persistence.Entities.EnvironmentEntity", b =>
+                {
+                    b.HasOne("ApiTester.McpServer.Persistence.Entities.ProjectEntity", "Project")
+                        .WithMany("Environments")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("Project");
                 });
 
             modelBuilder.Entity("ApiTester.McpServer.Persistence.Entities.ProjectEntity", b =>
                 {
+                    b.Navigation("Environments");
+
                     b.Navigation("OpenApiSpecs");
 
                     b.Navigation("Runs");
