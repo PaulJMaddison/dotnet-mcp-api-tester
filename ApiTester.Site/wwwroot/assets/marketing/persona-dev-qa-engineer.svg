@@ -1,0 +1,26 @@
+<svg width="960" height="640" viewBox="0 0 960 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="960" height="640" rx="32" fill="#0B1220"/>
+  <rect x="48" y="56" width="864" height="528" rx="24" fill="#121B2F" stroke="#2F3B5C" stroke-width="2"/>
+  <circle cx="196" cy="188" r="76" fill="#1E2A44" stroke="#6D7BA8" stroke-width="4"/>
+  <path d="M148 192C164 160 228 160 244 192" stroke="#8FA2D6" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="170" cy="168" r="8" fill="#8FA2D6"/>
+  <circle cx="222" cy="168" r="8" fill="#8FA2D6"/>
+  <rect x="120" y="284" width="152" height="148" rx="24" fill="#1A2440" stroke="#3E4E7A" stroke-width="3"/>
+  <path d="M148 336H244" stroke="#6D7BA8" stroke-width="6" stroke-linecap="round"/>
+  <path d="M148 364H218" stroke="#6D7BA8" stroke-width="6" stroke-linecap="round"/>
+  <rect x="320" y="128" width="560" height="88" rx="20" fill="#15213B" stroke="#2F3B5C" stroke-width="2"/>
+  <text x="352" y="184" fill="#E6EEFF" font-size="28" font-family="Segoe UI, sans-serif">Dev QA Engineer</text>
+  <rect x="320" y="240" width="560" height="104" rx="20" fill="#151F36"/>
+  <text x="352" y="284" fill="#B7C6F1" font-size="20" font-family="Segoe UI, sans-serif">Owns API validation, test harnesses, and release confidence.</text>
+  <text x="352" y="316" fill="#B7C6F1" font-size="20" font-family="Segoe UI, sans-serif">Needs repeatable evidence for compliance-ready QA.</text>
+  <rect x="320" y="368" width="272" height="168" rx="20" fill="#182546" stroke="#2F3B5C" stroke-width="2"/>
+  <rect x="608" y="368" width="272" height="168" rx="20" fill="#182546" stroke="#2F3B5C" stroke-width="2"/>
+  <text x="350" y="412" fill="#E6EEFF" font-size="18" font-family="Segoe UI, sans-serif">Primary goals</text>
+  <text x="350" y="446" fill="#B7C6F1" font-size="16" font-family="Segoe UI, sans-serif">• Fast coverage checks</text>
+  <text x="350" y="470" fill="#B7C6F1" font-size="16" font-family="Segoe UI, sans-serif">• Audit-ready logs</text>
+  <text x="350" y="494" fill="#B7C6F1" font-size="16" font-family="Segoe UI, sans-serif">• Release gates</text>
+  <text x="638" y="412" fill="#E6EEFF" font-size="18" font-family="Segoe UI, sans-serif">Key pain</text>
+  <text x="638" y="446" fill="#B7C6F1" font-size="16" font-family="Segoe UI, sans-serif">• Manual evidence</text>
+  <text x="638" y="470" fill="#B7C6F1" font-size="16" font-family="Segoe UI, sans-serif">• Drift in test data</text>
+  <text x="638" y="494" fill="#B7C6F1" font-size="16" font-family="Segoe UI, sans-serif">• Slow audits</text>
+</svg>
