@@ -1,5 +1,9 @@
 @page "/pricing"
 
+@code {
+    private PricingPageContent Content { get; } = MarketingContent.Current.Pricing;
+}
+
 <section class="page-hero bg-light py-5">
     <div class="container">
         <h1 class="display-5 fw-bold">@Content.HeroTitle</h1>
@@ -19,7 +23,6 @@
                 <div class="col-lg-4">
                     <div class="card pricing-card h-100 @(plan.IsFeatured ? "featured" : string.Empty)">
                         <div class="card-body d-flex flex-column">
-                            <img class="img-fluid mb-3 visual-asset" src="@plan.ImageUrl" alt="@plan.ImageAlt" loading="lazy" decoding="async" />
                             @if (!string.IsNullOrWhiteSpace(plan.Badge))
                             {
                                 <div class="badge bg-primary">@plan.Badge</div>
@@ -57,7 +60,10 @@
                 </ul>
             </div>
             <div class="col-md-6">
-                <img class="img-fluid rounded-4 shadow-sm visual-asset" src="images/pricing-hero.svg" alt="Illustration of pricing analytics and plan comparison" loading="lazy" decoding="async" />
+                <div class="diagram-placeholder">
+                    <div class="placeholder-grid">@Content.ValuePropsPlaceholder.Title</div>
+                    <p class="mb-0">@Content.ValuePropsPlaceholder.Description</p>
+                </div>
             </div>
         </div>
     </div>
@@ -151,166 +157,3 @@
         </div>
     </div>
 </section>
-
-@code {
-    private PricingContent Content { get; } = PricingContent.Build();
-
-    private sealed record PricingContent(
-        string HeroTitle,
-        string HeroSubtitle,
-        string PrimaryCtaLabel,
-        string PrimaryCtaLink,
-        string SecondaryCtaLabel,
-        string SecondaryCtaLink,
-        IReadOnlyList<PlanDefinition> Plans,
-        string ValuePropsTitle,
-        IReadOnlyList<string> ValueProps,
-        string ComparisonTitle,
-        string ComparisonSubtitle,
-        string ComparisonHeader,
-        string ComparisonCtaLabel,
-        string ComparisonCtaLink,
-        IReadOnlyList<FeatureComparison> FeatureMatrix,
-        string UseCasesTitle,
-        string UseCasesSubtitle,
-        IReadOnlyList<UseCaseDefinition> UseCases,
-        string FaqTitle,
-        string FaqSubtitle,
-        IReadOnlyList<FaqDefinition> Faqs)
-    {
-        public static PricingContent Build()
-        {
-            var plans = new List<PlanDefinition>
-            {
-                new(
-                    "Free",
-                    "For individual engineers validating a new API or prototype.",
-                    "£0",
-                    "/month",
-                    "Start free",
-                    "/signup",
-                    false,
-                    string.Empty,
-                    "images/pricing-tier-starter.svg",
-                    "Illustration of the Free plan starter toolkit",
-                    new List<string>
-                    {
-                        "1 workspace with 2 environments",
-                        "Up to 250 checks per month",
-                        "Community support with response within 72 hours",
-                        "Manual test runs and basic reporting"
-                    }),
-                new(
-                    "Pro",
-                    "For product teams who need dependable release confidence every sprint.",
-                    "£79",
-                    "/user/month",
-                    "Upgrade",
-                    "/upgrade",
-                    true,
-                    "Most popular",
-                    "images/pricing-tier-pro.svg",
-                    "Illustration of the Pro plan growth toolkit",
-                    new List<string>
-                    {
-                        "Unlimited workspaces and environments",
-                        "5,000 checks per month with scheduled runs",
-                        "Contract diffing and regression alerts",
-                        "Slack, Teams, and email notifications"
-                    }),
-                new(
-                    "Team",
-                    "For regulated organisations scaling audit-ready API assurance.",
-                    "Custom",
-                    string.Empty,
-                    "Talk to sales",
-                    "/contact",
-                    false,
-                    string.Empty,
-                    "images/pattern-grid.svg",
-                    "Abstract grid pattern representing custom enterprise coverage",
-                    new List<string>
-                    {
-                        "Dedicated tenant and custom retention",
-                        "Compliance evidence packs and export controls",
-                        "SAML SSO, SCIM provisioning, and audit logs",
-                        "Priority response with named success lead"
-                    })
-            };
-
-            var featureMatrix = new List<FeatureComparison>
-            {
-                new("Run API tests on demand", new List<string> { "✔", "✔", "✔" }),
-                new("Scheduled regression runs", new List<string> { "Limited", "Every 15 minutes", "Every 5 minutes" }),
-                new("Checks per month", new List<string> { "250", "5,000", "Custom" }),
-                new("Team collaboration", new List<string> { "Up to 2 users", "Unlimited users", "Unlimited users" }),
-                new("Compliance evidence packs", new List<string> { "—", "Add-on", "Included" }),
-                new("Support response time", new List<string> { "72 hours", "24 hours", "4 hours" })
-            };
-
-            var useCases = new List<UseCaseDefinition>
-            {
-                new("API testing", "Validate endpoints, schemas, and authentication flows before every release."),
-                new("Regression checks", "Catch unexpected contract changes with automated diffing and alerts."),
-                new("Compliance evidence", "Generate traceable run histories for audit, SOC 2, and ISO reporting."),
-                new("CI smoke tests", "Prove deployments are healthy with lightweight checks in your pipeline.")
-            };
-
-            var faqs = new List<FaqDefinition>
-            {
-                new("Can we change plan as we grow?", "Yes. Upgrade or downgrade at any time and we will prorate the remaining billing period."),
-                new("What counts as a check?", "A check is a single API request with assertions. Retries within the same run count once."),
-                new("Do you offer discounts for annual billing?", "Annual billing is available on Pro and Team with a dedicated account manager and invoicing."),
-                new("How do you handle data residency?", "Team customers can select UK or EU data residency with dedicated retention settings.")
-            };
-
-            return new PricingContent(
-                "Pricing built for predictable API delivery",
-                "Start free and scale with confidence as your API estate grows across teams and environments.",
-                "Start free",
-                "/signup",
-                "Upgrade",
-                "/upgrade",
-                plans,
-                "Every plan includes",
-                new List<string>
-                {
-                    "Guided onboarding with API import and sample collections",
-                    "Shared dashboards for quality, performance, and coverage",
-                    "Role-based access with full audit logging",
-                    "Retention settings designed for regulated workloads"
-                },
-                "Compare plans at a glance",
-                "All plans include core API testing with flexible scaling options.",
-                "Feature",
-                "See enterprise options",
-                "/contact",
-                featureMatrix,
-                "Use cases",
-                "What teams deliver with consistent API testing.",
-                useCases,
-                "Frequently asked questions",
-                "Answers to the questions we hear most from engineering leaders.",
-                faqs);
-        }
-    }
-
-    private sealed record PlanDefinition(
-        string Name,
-        string Tagline,
-        string Price,
-        string PriceSuffix,
-        string CtaLabel,
-        string CtaLink,
-        bool IsFeatured,
-        string Badge,
-        string ImageUrl,
-        string ImageAlt,
-        IReadOnlyList<string> Highlights);
-
-    private sealed record FeatureComparison(string Feature, IReadOnlyList<string> Values);
-
-    private sealed record UseCaseDefinition(string Title, string Description);
-
-    private sealed record FaqDefinition(string Question, string Answer);
-}

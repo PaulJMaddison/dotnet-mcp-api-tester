@@ -1,0 +1,62 @@
+@page "/qa-reporting"
+
+@code {
+    private QaReportingContent Content { get; } = MarketingContent.Current.QaReporting;
+}
+
+<section class="page-hero bg-light py-5">
+    <div class="container">
+        <h1 class="display-5 fw-bold">@Content.HeroTitle</h1>
+        <p class="lead">@Content.HeroSubtitle</p>
+    </div>
+</section>
+
+<section class="py-5">
+    <div class="container">
+        <h2 class="h4 fw-bold">@Content.HighlightsTitle</h2>
+        <div class="row g-4 mt-2">
+            @foreach (var highlight in Content.Highlights)
+            {
+                <div class="col-md-6">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body">
+                            <h3 class="h6 text-uppercase">@highlight.Title</h3>
+                            <p class="mb-0">@highlight.Description</p>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+<section class="bg-white py-5">
+    <div class="container">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-6">
+                <h2 class="h4 fw-bold">@Content.WorkflowTitle</h2>
+                <p class="text-muted">@Content.WorkflowSubtitle</p>
+                <ol class="ps-3">
+                    @foreach (var step in Content.WorkflowSteps)
+                    {
+                        <li class="mb-2"><strong>@step.Title:</strong> @step.Description</li>
+                    }
+                </ol>
+            </div>
+            <div class="col-lg-6">
+                <div class="diagram-placeholder">
+                    <div class="placeholder-grid">@Content.WorkflowPlaceholder.Title</div>
+                    <p class="mb-0">@Content.WorkflowPlaceholder.Description</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="cta-section text-white py-5">
+    <div class="container text-center">
+        <h2 class="fw-bold">@Content.CtaTitle</h2>
+        <p class="lead">@Content.CtaSubtitle</p>
+        <a class="btn btn-light btn-lg" href="@Content.CtaLink">@Content.CtaLabel</a>
+    </div>
+</section>

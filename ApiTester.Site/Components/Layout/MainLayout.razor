@@ -1,20 +1,25 @@
 @inherits LayoutComponentBase
 
+@code {
+    private LayoutContent Content { get; } = MarketingContent.Current.Layout;
+}
+
 <div class="site-shell">
     <a class="skip-link" href="#main-content">Skip to main content</a>
     <header class="site-header border-bottom">
         <nav class="navbar navbar-expand-lg bg-white" aria-label="Primary">
             <div class="container">
                 <NavLink class="navbar-brand fw-bold d-flex align-items-center gap-2" href="/">
-                    <img src="images/logo-mark.svg" alt="ApiTester logo" width="32" height="32" decoding="async" />
-                    <span>ApiTester</span>
+                    <img src="images/logo-mark.svg" alt="@Content.BrandName logo" width="32" height="32" decoding="async" />
+                    <span>@Content.BrandName</span>
                 </NavLink>
                 <ul class="navbar-nav ms-auto mb-2 mb-lg-0 flex-row flex-wrap gap-3">
-                    <li class="nav-item"><NavLink class="nav-link" href="/features">Features</NavLink></li>
-                    <li class="nav-item"><NavLink class="nav-link" href="/pricing">Pricing</NavLink></li>
-                    <li class="nav-item"><NavLink class="nav-link" href="/security">Security</NavLink></li>
-                    <li class="nav-item"><NavLink class="nav-link" href="/docs">Docs</NavLink></li>
-                    <li class="nav-item"><NavLink class="nav-link" href="/contact">Contact</NavLink></li>
+                    @foreach (var item in Content.Navigation)
+                    {
+                        <li class="nav-item">
+                            <NavLink class="nav-link" href="@item.Url">@item.Label</NavLink>
+                        </li>
+                    }
                 </ul>
             </div>
         </nav>
@@ -28,27 +33,30 @@
         <div class="container py-5">
             <div class="row g-4">
                 <div class="col-md-4">
-                    <h5 class="fw-semibold">ApiTester</h5>
-                    <p class="text-white-50 mb-0">A modern API testing hub that helps teams ship with confidence, share coverage, and keep releases stable.</p>
+                    <h5 class="fw-semibold">@Content.BrandName</h5>
+                    <p class="text-white-50 mb-0">@Content.FooterSummary</p>
                 </div>
-                <div class="col-md-4">
-                    <h6 class="text-uppercase text-white-50">Resources</h6>
-                    <ul class="list-unstyled">
-                        <li><NavLink class="footer-link" href="/docs">Documentation</NavLink></li>
-                        <li><NavLink class="footer-link" href="/security">Security Center</NavLink></li>
-                        <li><NavLink class="footer-link" href="/status">Status</NavLink></li>
-                        <li><NavLink class="footer-link" href="/pricing">Pricing</NavLink></li>
-                    </ul>
-                </div>
+                @foreach (var group in Content.FooterGroups)
+                {
+                    <div class="col-md-4">
+                        <h6 class="text-uppercase text-white-50">@group.Title</h6>
+                        <ul class="list-unstyled">
+                            @foreach (var link in group.Links)
+                            {
+                                <li><NavLink class="footer-link" href="@link.Url">@link.Label</NavLink></li>
+                            }
+                        </ul>
+                    </div>
+                }
                 <div class="col-md-4">
                     <h6 class="text-uppercase text-white-50">Contact</h6>
-                    <p class="mb-1">Email: support@apitester.example.com</p>
-                    <p class="mb-1">Phone: +1 (555) 014-2200</p>
-                    <p class="mb-0">Location: 58 Harbor Lane, Seattle, WA</p>
+                    <p class="mb-1">@Content.ContactEmail</p>
+                    <p class="mb-1">@Content.ContactPhone</p>
+                    <p class="mb-0">@Content.ContactLocation</p>
                 </div>
             </div>
             <div class="border-top border-secondary mt-4 pt-3 text-white-50 small">
-                © 2024 ApiTester. All rights reserved.
+                @Content.Copyright
             </div>
         </div>
     </footer>
