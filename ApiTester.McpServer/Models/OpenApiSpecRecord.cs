@@ -6,4 +6,5 @@ public sealed record OpenApiSpecRecord(
     string Title,
     string Version,
     string SpecJson,
+    string SpecHash,
     DateTime CreatedUtc);

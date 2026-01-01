@@ -28,11 +28,17 @@ public sealed class ApiTesterDbContext : DbContext
             b.Property(x => x.OperationId).HasMaxLength(200).IsRequired();
             b.HasIndex(x => new { x.ProjectId, x.StartedUtc });
             b.HasIndex(x => x.BaselineRunId);
+            b.HasIndex(x => x.SpecId);
 
             b.HasOne(x => x.Project)
                 .WithMany(p => p.Runs)
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(x => x.Spec)
+                .WithMany()
+                .HasForeignKey(x => x.SpecId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             b.HasOne(x => x.BaselineRun)
                 .WithMany()
@@ -76,11 +82,13 @@ public sealed class ApiTesterDbContext : DbContext
             b.Property(x => x.Title).HasMaxLength(200).IsRequired();
             b.Property(x => x.Version).HasMaxLength(50).IsRequired();
             b.Property(x => x.SpecJson).IsRequired();
-            b.HasIndex(x => x.ProjectId).IsUnique();
+            b.Property(x => x.SpecHash).HasMaxLength(64).IsRequired();
+            b.HasIndex(x => x.ProjectId);
+            b.HasIndex(x => new { x.ProjectId, x.SpecHash }).IsUnique();
 
             b.HasOne(x => x.Project)
-                .WithOne(p => p.OpenApiSpec)
-                .HasForeignKey<OpenApiSpecEntity>(x => x.ProjectId)
+                .WithMany(p => p.OpenApiSpecs)
+                .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

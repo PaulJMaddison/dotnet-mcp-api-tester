@@ -4,6 +4,7 @@ using ApiTester.McpServer.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApiTester.McpServer.Migrations
 {
     [DbContext(typeof(ApiTesterDbContext))]
-    partial class ApiTesterDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260305090000_Day43_SpecHistory")]
+    partial class Day43_SpecHistory : Migration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -233,7 +235,7 @@ namespace ApiTester.McpServer.Migrations
                 {
                     b.HasOne("ApiTester.McpServer.Persistence.Entities.ProjectEntity", "Project")
                         .WithMany("OpenApiSpecs")
-                        .HasForeignKey("ApiTester.McpServer.Persistence.Entities.OpenApiSpecEntity", "ProjectId")
+                        .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

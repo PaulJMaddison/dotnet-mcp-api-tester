@@ -7,6 +7,7 @@ public sealed class OpenApiSpecEntity
     public string Title { get; set; } = "";
     public string Version { get; set; } = "";
     public string SpecJson { get; set; } = "";
+    public string SpecHash { get; set; } = "";
     public DateTime CreatedUtc { get; set; }
 
     public ProjectEntity Project { get; set; } = null!;

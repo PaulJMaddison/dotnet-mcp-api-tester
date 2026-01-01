@@ -9,6 +9,6 @@ public sealed class ProjectEntity
 
     public List<TestRunEntity> Runs { get; set; } = new();
     public List<TestPlanEntity> TestPlans { get; set; } = new();
-    public OpenApiSpecEntity? OpenApiSpec { get; set; }
+    public List<OpenApiSpecEntity> OpenApiSpecs { get; set; } = new();
     public string ProjectKey { get; set; } = "";
 }
