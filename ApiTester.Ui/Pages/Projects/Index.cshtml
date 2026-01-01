@@ -3,15 +3,16 @@
 
 @{
     ViewData["Title"] = "Projects";
+
+    var header = new PageHeaderModel(
+        "Projects",
+        "Browse all projects connected to the API tester service.",
+        new[] { new BreadcrumbItem("Projects", "/") }
+    );
 }
 
-@section Breadcrumb {
-    <a href="/">Projects</a>
-}
-
-<h1>Projects</h1>
-
-<p class="page-intro">Browse all projects connected to the API tester service.</p>
+<partial name="Shared/_PageHeader" model="header" />
+<p class="page-hint">Create a project by running the client or API against your workspace key.</p>
 
 @if (Model.HasError)
 {
@@ -27,27 +28,29 @@ else if (Model.Projects.Count == 0)
 }
 else
 {
-    <table>
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Project Key</th>
-                <th>Created UTC</th>
-                <th>Project ID</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var project in Model.Projects)
-            {
+    <div class="table-card">
+        <table>
+            <thead>
                 <tr>
-                    <td>@(string.IsNullOrWhiteSpace(project.Name) ? "Untitled Project" : project.Name)</td>
-                    <td>
-                        <a href="/projects/@project.ProjectId">@project.ProjectKey</a>
-                    </td>
-                    <td>@DisplayFormatters.FormatUtc(project.CreatedUtc)</td>
-                    <td>@project.ProjectId</td>
+                    <th scope="col">Name</th>
+                    <th scope="col">Project Key</th>
+                    <th scope="col">Created UTC</th>
+                    <th scope="col">Project ID</th>
                 </tr>
-            }
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                @foreach (var project in Model.Projects)
+                {
+                    <tr>
+                        <td>@(string.IsNullOrWhiteSpace(project.Name) ? "Untitled Project" : project.Name)</td>
+                        <td>
+                            <a href="/projects/@project.ProjectId">@project.ProjectKey</a>
+                        </td>
+                        <td>@DisplayFormatters.FormatUtc(project.CreatedUtc)</td>
+                        <td>@project.ProjectId</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 }

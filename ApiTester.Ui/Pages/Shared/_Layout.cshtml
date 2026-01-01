@@ -19,30 +19,19 @@
 </head>
 <body>
     <div class="app-shell">
-        <aside class="app-sidebar">
-            <div class="sidebar-header">
-                <a class="sidebar-brand" href="/">API Tester</a>
-            </div>
-            <nav class="sidebar-nav" aria-label="Primary">
-                <a href="/">Projects</a>
-                <a href="/Runs">Runs</a>
-                <a href="/Onboarding">Onboarding</a>
-            </nav>
-            <div class="sidebar-footer">
-                <p>@(onboardingComplete ? "Onboarding complete" : "Onboarding in progress")</p>
-            </div>
-        </aside>
-
-        <div class="app-main">
-            <header class="app-topbar">
-                <div class="topbar-left">
-                    <div class="topbar-brand">
-                        <strong>API Tester</strong>
-                    </div>
-                    <span>API key: @maskedKey</span>
+        <header class="app-header">
+            <div class="app-header-inner page-container">
+                <div class="nav-left">
+                    <a class="nav-brand" href="/">API Tester</a>
+                    <nav class="nav-links" aria-label="Primary">
+                        <a class="nav-link" href="/">Projects</a>
+                        <a class="nav-link" href="/Runs">Runs</a>
+                        <a class="nav-link" href="/Onboarding">Onboarding</a>
+                    </nav>
                 </div>
-                <div class="topbar-right">
-                    <span>Workspace: Local</span>
+                <div class="nav-meta">
+                    <span>Workspace: <strong>Local</strong></span>
+                    <span>API key: <strong>@maskedKey</strong></span>
                     @if (isSignedIn)
                     {
                         <form class="inline-form" method="post" asp-page="/Auth/SignOut">
@@ -51,20 +40,20 @@
                         </form>
                     }
                 </div>
-            </header>
-
-            <div class="app-content">
-                @if (IsSectionDefined("Breadcrumb"))
-                {
-                    <nav class="breadcrumbs" aria-label="Breadcrumb">
-                        @RenderSection("Breadcrumb")
-                    </nav>
-                }
-                <main class="page">
-                    @RenderBody()
-                </main>
             </div>
+        </header>
+
+        <div class="app-content">
+            <main class="page page-container">
+                @RenderBody()
+            </main>
         </div>
+
+        <footer class="app-footer">
+            <div class="page-container">
+                <span>@(onboardingComplete ? "Onboarding complete" : "Onboarding in progress")</span>
+            </div>
+        </footer>
     </div>
 </body>
 </html>
