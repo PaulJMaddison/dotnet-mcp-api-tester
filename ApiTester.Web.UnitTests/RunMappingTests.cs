@@ -33,6 +33,27 @@ public class RunMappingTests
         Assert.Equal(record.Result.Results[0].Name, response.Result.Results[0].Name);
     }
 
+    [Fact]
+    public void ToComplianceReport_MapsPolicyAuditAndLimits()
+    {
+        var record = BuildRunRecord();
+
+        var response = RunMapping.ToComplianceReport(record);
+
+        Assert.Equal(record.RunId, response.RunId);
+        Assert.Equal(record.Actor, response.Audit.Actor);
+        Assert.Equal(record.ProjectKey, response.Audit.ProjectKey);
+        Assert.Equal(record.OperationId, response.Audit.OperationId);
+        Assert.Equal(record.Environment?.Name, response.Audit.Environment?.Name);
+        Assert.Equal(record.PolicySnapshot?.DryRun, response.Policy?.DryRun);
+        Assert.Equal(record.PolicySnapshot?.AllowedMethods, response.Policy?.AllowedMethods);
+        Assert.Equal(record.PolicySnapshot?.AllowedBaseUrls, response.Ssrf?.AllowedBaseUrls);
+        Assert.Equal(record.PolicySnapshot?.BlockLocalhost, response.Ssrf?.BlockLocalhost);
+        Assert.Equal(record.PolicySnapshot?.TimeoutSeconds, response.Limits?.TimeoutSeconds);
+        Assert.Equal(record.PolicySnapshot?.MaxRequestBodyBytes, response.Limits?.MaxRequestBodyBytes);
+        Assert.Equal(record.PolicySnapshot?.MaxResponseBodyBytes, response.Limits?.MaxResponseBodyBytes);
+    }
+
     private static TestRunRecord BuildRunRecord()
     {
         var results = new List<TestCaseResult>
@@ -63,6 +84,17 @@ public class RunMappingTests
         return new TestRunRecord
         {
             RunId = Guid.NewGuid(),
+            Actor = "tester@example.com",
+            Environment = new TestRunEnvironmentSnapshot("Staging", "https://staging.example.test"),
+            PolicySnapshot = new ApiExecutionPolicySnapshot(
+                false,
+                new[] { "https://api.example.test" },
+                new[] { "GET", "POST" },
+                true,
+                true,
+                30,
+                1024,
+                2048),
             ProjectKey = "sample-project",
             OperationId = "op-1",
             StartedUtc = DateTimeOffset.UtcNow.AddMinutes(-5),

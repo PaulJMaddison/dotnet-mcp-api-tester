@@ -761,6 +761,18 @@ app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, 
         : Results.Ok(RunMapping.ToAuditResponse(run));
 });
 
+app.MapGet("/api/runs/{runId}/compliance-report", async (string runId, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var run = await store.GetAsync(ownerKey, id);
+    return run is null
+        ? Results.NotFound()
+        : Results.Ok(RunMapping.ToComplianceReport(run));
+});
+
 app.MapGet("/api/runs/{runId}/annotations", async (string runId, ITestRunStore runStore, IRunAnnotationStore annotationStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
