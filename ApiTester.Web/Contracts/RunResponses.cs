@@ -17,7 +17,8 @@ public sealed record RunSummary(
     int Passed,
     int Failed,
     int Blocked,
-    long TotalDurationMs);
+    long TotalDurationMs,
+    ResultClassificationSummary ClassificationSummary);
 
 public sealed record RunDetailDto(
     Guid RunId,
