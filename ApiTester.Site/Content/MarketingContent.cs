@@ -284,9 +284,14 @@ public sealed record MarketingContent(
                 "Proof points",
                 new List<ProofPoint>
                 {
-                    new("SSRF guard and policy allowlists", "Controls for where tests can call out."),
-                    new("Audit logs and project separation", "Every action is traceable and scoped."),
-                    new("Run history and CI readiness", "Clear evidence before release sign-off.")
+                    new("Deterministic plans", "Deterministic test plans from your OpenAPI, run them, store evidence."),
+                    new("Policy-first execution", "Policy-first execution: allowlist base URLs and methods, block localhost, block private networks."),
+                    new("SSRF guard", "SSRF guard included, metadata endpoints blocked by default."),
+                    new("Run history", "Run history per project, filter by operationId, export CSV, printable reports."),
+                    new("Audit trail", "Audit trail for compliance, who ran what, when, and what changed."),
+                    new("Built for CI", "Built for CI, no UI clicking required, run it headless."),
+                    new("Fast onboarding", "Fast onboarding for builders, load spec, set base URL, run."),
+                    new("AI driven testing", "AI driven testing and descriptions of your API")
                 },
                 "Move from tests to evidence in one workflow.",
                 "Create deterministic test plans, run them under policy, and share audit-ready proof.",
