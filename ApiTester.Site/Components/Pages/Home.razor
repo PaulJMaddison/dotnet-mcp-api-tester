@@ -2,6 +2,21 @@
 
 @code {
     private HomePageContent Content { get; } = MarketingContent.Current.Home;
+    private IReadOnlyList<(string Src, string Alt)> PersonaVisuals { get; } = new List<(string, string)>
+    {
+        (
+            "/assets/marketing/persona-dev-qa-engineer.svg",
+            "Illustration of a developer coordinating with QA on release readiness."
+        ),
+        (
+            "/assets/marketing/persona-dev-qa-engineer.svg",
+            "Illustration of a QA engineer reviewing a test run summary."
+        ),
+        (
+            "/assets/marketing/persona-security-compliance-lead.svg",
+            "Illustration of a security and compliance lead with governance controls."
+        )
+    };
 }
 
 <section class="hero-section bg-light py-5">
@@ -16,10 +31,13 @@
                 </div>
             </div>
             <div class="col-lg-6">
-                <div class="diagram-placeholder h-100">
-                    <div class="placeholder-grid">@Content.HeroPlaceholder.Title</div>
-                    <p class="mb-0">@Content.HeroPlaceholder.Description</p>
-                </div>
+                <figure class="diagram-visual h-100">
+                    <img class="img-fluid" src="/assets/marketing/og-devqa-compliance.svg" alt="Illustration of developer, QA, and compliance teams sharing evidence." loading="lazy" />
+                    <figcaption class="mt-3 text-muted small">
+                        <span class="fw-semibold d-block">@Content.HeroPlaceholder.Title</span>
+                        @Content.HeroPlaceholder.Description
+                    </figcaption>
+                </figure>
             </div>
         </div>
     </div>
@@ -29,11 +47,14 @@
     <div class="container">
         <h2 class="fw-bold">@Content.PersonaTitle</h2>
         <div class="row g-4 mt-2">
-            @foreach (var tile in Content.PersonaTiles)
+            @for (var index = 0; index < Content.PersonaTiles.Count; index++)
             {
+                var tile = Content.PersonaTiles[index];
+                var visual = PersonaVisuals[index % PersonaVisuals.Count];
                 <div class="col-md-4">
                     <div class="card h-100 border-0 shadow-sm">
                         <div class="card-body">
+                            <img class="img-fluid persona-visual mb-3" src="@visual.Src" alt="@visual.Alt" loading="lazy" />
                             <h3 class="h5">@tile.Title</h3>
                             <p class="mb-2">@tile.Outcome</p>
                             <p class="text-muted mb-0">@tile.Proof</p>
@@ -61,10 +82,13 @@
                 </ol>
             </div>
             <div class="col-lg-7">
-                <div class="diagram-placeholder">
-                    <div class="placeholder-grid">@Content.WorkflowPlaceholder.Title</div>
-                    <p class="mb-0">@Content.WorkflowPlaceholder.Description</p>
-                </div>
+                <figure class="diagram-visual">
+                    <img class="img-fluid" src="/assets/marketing/workflow-dev-qa-validation.svg" alt="Workflow illustrating plan definition, controlled execution, and evidence sharing." loading="lazy" />
+                    <figcaption class="mt-3 text-muted small">
+                        <span class="fw-semibold d-block">@Content.WorkflowPlaceholder.Title</span>
+                        @Content.WorkflowPlaceholder.Description
+                    </figcaption>
+                </figure>
             </div>
         </div>
     </div>
