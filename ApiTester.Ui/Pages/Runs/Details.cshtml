@@ -3,17 +3,20 @@
 
 @{
     ViewData["Title"] = "Run Details";
+
+    var header = new PageHeaderModel(
+        "Run Details",
+        "Review the results and diagnostics captured for this run.",
+        new[]
+        {
+            new BreadcrumbItem("Projects", "/"),
+            new BreadcrumbItem("Runs", "/Runs"),
+            new BreadcrumbItem("Run Details")
+        }
+    );
 }
 
-@section Breadcrumb {
-    <a href="/">Projects</a>
-    <span>/</span>
-    <a href="/Runs">Runs</a>
-    <span>/</span>
-    <span>Run Details</span>
-}
-
-<h1>Run Details</h1>
+<partial name="Shared/_PageHeader" model="header" />
 
 @if (Model.HasError)
 {
@@ -29,24 +32,7 @@ else if (Model.NotFound)
 }
 else if (Model.Run is not null)
 {
-    <h2>Run Summary</h2>
     <div class="summary-grid">
-        <div class="summary-card">
-            <span>Project Key</span>
-            <strong>@Model.Run.ProjectKey</strong>
-        </div>
-        <div class="summary-card">
-            <span>Operation ID</span>
-            <strong>@Model.Run.OperationId</strong>
-        </div>
-        <div class="summary-card">
-            <span>Started UTC</span>
-            <strong>@DisplayFormatters.FormatUtc(Model.Run.StartedUtc)</strong>
-        </div>
-        <div class="summary-card">
-            <span>Completed UTC</span>
-            <strong>@DisplayFormatters.FormatUtc(Model.Run.CompletedUtc)</strong>
-        </div>
         <div class="summary-card">
             <span>Total Cases</span>
             <strong>@Model.Run.Result.TotalCases</strong>
@@ -67,6 +53,22 @@ else if (Model.Run is not null)
             <span>Total Duration (ms)</span>
             <strong>@DisplayFormatters.FormatDurationMs(Model.Run.Result.TotalDurationMs)</strong>
         </div>
+        <div class="summary-card">
+            <span>Project Key</span>
+            <strong>@Model.Run.ProjectKey</strong>
+        </div>
+        <div class="summary-card">
+            <span>Operation ID</span>
+            <strong>@Model.Run.OperationId</strong>
+        </div>
+        <div class="summary-card">
+            <span>Started UTC</span>
+            <strong>@DisplayFormatters.FormatUtc(Model.Run.StartedUtc)</strong>
+        </div>
+        <div class="summary-card">
+            <span>Completed UTC</span>
+            <strong>@DisplayFormatters.FormatUtc(Model.Run.CompletedUtc)</strong>
+        </div>
     </div>
 
     <h2>Case Results</h2>
@@ -76,53 +78,52 @@ else if (Model.Run is not null)
     }
     else
     {
-        <table>
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Passed</th>
-                    <th>Blocked</th>
-                    <th>Status Code</th>
-                    <th>Duration (ms)</th>
-                    <th>Method</th>
-                    <th>URL</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var result in Model.Run.Result.Results)
-                {
+        <div class="table-card">
+            <table>
+                <thead>
                     <tr>
-                        <td>@result.Name</td>
-                        <td>@(result.Pass ? "Yes" : "No")</td>
-                        <td>@(result.Blocked ? "Yes" : "No")</td>
-                        <td>@(result.StatusCode?.ToString() ?? "—")</td>
-                        <td>@DisplayFormatters.FormatDurationMs(result.DurationMs)</td>
-                        <td>@(string.IsNullOrWhiteSpace(result.Method) ? "—" : result.Method)</td>
-                        <td>@(string.IsNullOrWhiteSpace(result.Url) ? "—" : result.Url)</td>
+                        <th scope="col">Name</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Status Code</th>
+                        <th scope="col" class="table-number">Duration (ms)</th>
+                        <th scope="col">Method</th>
+                        <th scope="col">URL</th>
                     </tr>
-                    <tr class="details-row">
-                        <td colspan="7">
-                            <details>
-                                <summary>Details</summary>
-                                <div class="details-grid">
-                                    <div>
-                                        <strong>Failure Reason</strong>
+                </thead>
+                <tbody>
+                    @foreach (var result in Model.Run.Result.Results)
+                    {
+                        var statusText = result.Pass ? "Pass" : result.Blocked ? "Blocked" : "Fail";
+                        var badgeClass = result.Pass ? "badge-pass" : result.Blocked ? "badge-blocked" : "badge-fail";
+                        <tr>
+                            <td>@result.Name</td>
+                            <td><span class="badge @badgeClass">@statusText</span></td>
+                            <td>@(result.StatusCode?.ToString() ?? "—")</td>
+                            <td class="table-number">@DisplayFormatters.FormatDurationMs(result.DurationMs)</td>
+                            <td>@(string.IsNullOrWhiteSpace(result.Method) ? "—" : result.Method)</td>
+                            <td>@(string.IsNullOrWhiteSpace(result.Url) ? "—" : result.Url)</td>
+                        </tr>
+                        <tr class="details-row">
+                            <td colspan="6">
+                                <div class="details-stack">
+                                    <details>
+                                        <summary>Failure Reason</summary>
                                         <p>@(string.IsNullOrWhiteSpace(result.FailureReason) ? "None" : result.FailureReason)</p>
-                                    </div>
-                                    <div>
-                                        <strong>Block Reason</strong>
+                                    </details>
+                                    <details>
+                                        <summary>Block Reason</summary>
                                         <p>@(string.IsNullOrWhiteSpace(result.BlockReason) ? "None" : result.BlockReason)</p>
-                                    </div>
-                                    <div>
-                                        <strong>Response Snippet</strong>
-                                        <pre>@(string.IsNullOrWhiteSpace(result.ResponseSnippet) ? "None" : result.ResponseSnippet)</pre>
-                                    </div>
+                                    </details>
+                                    <details>
+                                        <summary>Response Snippet</summary>
+                                        <pre class="code-block">@(string.IsNullOrWhiteSpace(result.ResponseSnippet) ? "None" : result.ResponseSnippet)</pre>
+                                    </details>
                                 </div>
-                            </details>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
     }
 }

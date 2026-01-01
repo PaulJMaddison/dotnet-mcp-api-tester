@@ -1,0 +1,31 @@
+@model ApiTester.Ui.Components.PageHeaderModel
+
+<header class="page-header">
+    @if (Model.Breadcrumbs.Count > 0)
+    {
+        <nav class="breadcrumbs" aria-label="Breadcrumb">
+            <ol>
+                @foreach (var crumb in Model.Breadcrumbs)
+                {
+                    <li>
+                        @if (!string.IsNullOrWhiteSpace(crumb.Url))
+                        {
+                            <a href="@crumb.Url">@crumb.Text</a>
+                        }
+                        else
+                        {
+                            <span>@crumb.Text</span>
+                        }
+                    </li>
+                }
+            </ol>
+        </nav>
+    }
+    <div class="page-title">
+        <h1>@Model.Title</h1>
+        @if (!string.IsNullOrWhiteSpace(Model.Subtitle))
+        {
+            <p class="page-subtitle">@Model.Subtitle</p>
+        }
+    </div>
+</header>
