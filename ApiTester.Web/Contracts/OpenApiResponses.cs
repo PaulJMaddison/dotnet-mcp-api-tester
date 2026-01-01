@@ -15,3 +15,15 @@ public sealed record OpenApiSpecDetailDto(
     string SpecJson,
     string SpecHash,
     DateTime CreatedUtc);
+
+public sealed record OpenApiDiffItemDto(
+    string Classification,
+    string Change,
+    string? Path,
+    string? Method,
+    string Detail);
+
+public sealed record OpenApiDiffResponse(
+    Guid SpecAId,
+    Guid SpecBId,
+    IReadOnlyList<OpenApiDiffItemDto> Differences);
