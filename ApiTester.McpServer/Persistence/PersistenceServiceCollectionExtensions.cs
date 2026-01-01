@@ -21,6 +21,8 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<FileTestPlanStore>();
         services.AddSingleton<FileEnvironmentStore>();
         services.AddSingleton<FileRunAnnotationStore>();
+        services.AddScoped<SqlTestRunStore>();
+        services.AddScoped<SqlProjectStore>();
 
         if (selection.UseSqlProvider)
         {
@@ -28,18 +30,12 @@ public static class PersistenceServiceCollectionExtensions
             {
                 if (selection.Provider == PersistenceProvider.SqlServer)
                     opt.UseSqlServer(selection.ConnectionString);
-                else if (selection.Provider == PersistenceProvider.Sqlite)
-                    opt.UseSqlite(selection.ConnectionString);
             });
 
-            services.AddScoped<SqlTestRunStore>();
-            services.AddScoped<SqlProjectStore>();
             services.AddScoped<SqlOpenApiSpecStore>();
             services.AddScoped<SqlTestPlanStore>();
             services.AddScoped<SqlEnvironmentStore>();
             services.AddScoped<SqlRunAnnotationStore>();
-            services.AddScoped<ITestRunStore>(sp => sp.GetRequiredService<SqlTestRunStore>());
-            services.AddScoped<IProjectStore>(sp => sp.GetRequiredService<SqlProjectStore>());
             services.AddScoped<IOpenApiSpecStore>(sp => sp.GetRequiredService<SqlOpenApiSpecStore>());
             services.AddScoped<ITestPlanStore>(sp => sp.GetRequiredService<SqlTestPlanStore>());
             services.AddScoped<IEnvironmentStore>(sp => sp.GetRequiredService<SqlEnvironmentStore>());
@@ -47,14 +43,25 @@ public static class PersistenceServiceCollectionExtensions
         }
         else
         {
-            services.AddSingleton<ITestRunStore>(sp => sp.GetRequiredService<FileTestRunStore>());
-            services.AddSingleton<IProjectStore>(sp => sp.GetRequiredService<FileProjectStore>());
             services.AddSingleton<IOpenApiSpecStore>(sp => sp.GetRequiredService<FileOpenApiSpecStore>());
             services.AddSingleton<ITestPlanStore>(sp => sp.GetRequiredService<FileTestPlanStore>());
             services.AddSingleton<IEnvironmentStore>(sp => sp.GetRequiredService<FileEnvironmentStore>());
             services.AddSingleton<IRunAnnotationStore>(sp => sp.GetRequiredService<FileRunAnnotationStore>());
         }
 
+        services.AddScoped<ITestRunStore>(sp => UseSqlServer(sp)
+            ? sp.GetRequiredService<SqlTestRunStore>()
+            : sp.GetRequiredService<FileTestRunStore>());
+        services.AddScoped<IProjectStore>(sp => UseSqlServer(sp)
+            ? sp.GetRequiredService<SqlProjectStore>()
+            : sp.GetRequiredService<FileProjectStore>());
+
         return services;
+    }
+
+    private static bool UseSqlServer(IServiceProvider services)
+    {
+        var options = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<PersistenceOptions>>().Value;
+        return PersistenceProviderSelector.Select(options).UseSqlProvider;
     }
 }

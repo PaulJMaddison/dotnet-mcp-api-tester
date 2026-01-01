@@ -5,13 +5,12 @@ namespace ApiTester.McpServer.Persistence;
 public enum PersistenceProvider
 {
     File,
-    SqlServer,
-    Sqlite
+    SqlServer
 }
 
 public sealed record PersistenceSelection(PersistenceProvider Provider, string ConnectionString)
 {
-    public bool UseSqlProvider => Provider != PersistenceProvider.File && !string.IsNullOrWhiteSpace(ConnectionString);
+    public bool UseSqlProvider => Provider == PersistenceProvider.SqlServer && !string.IsNullOrWhiteSpace(ConnectionString);
 }
 
 public static class PersistenceProviderSelector
@@ -28,11 +27,6 @@ public static class PersistenceProviderSelector
             return string.IsNullOrWhiteSpace(connectionString)
                 ? new PersistenceSelection(PersistenceProvider.File, string.Empty)
                 : new PersistenceSelection(PersistenceProvider.SqlServer, connectionString);
-
-        if (provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
-            return string.IsNullOrWhiteSpace(connectionString)
-                ? new PersistenceSelection(PersistenceProvider.File, string.Empty)
-                : new PersistenceSelection(PersistenceProvider.Sqlite, connectionString);
 
         return new PersistenceSelection(PersistenceProvider.File, string.Empty);
     }

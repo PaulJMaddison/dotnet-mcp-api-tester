@@ -14,7 +14,7 @@ public sealed class FileProjectStore : IProjectStore
         _cfg = cfg;
     }
 
-    private string FilePath => Path.Combine(_cfg.WorkingDirectory, "projects.json");
+    private string FilePath => Path.Combine(_cfg.WorkingDirectory, "run-history", "projects.json");
 
     public async Task<ProjectRecord> CreateAsync(string ownerKey, string name, CancellationToken ct)
     {
@@ -109,6 +109,10 @@ public sealed class FileProjectStore : IProjectStore
 
     private async Task SaveAsync(List<ProjectRecord> list, CancellationToken ct)
     {
+        var dir = Path.GetDirectoryName(FilePath);
+        if (!string.IsNullOrWhiteSpace(dir))
+            Directory.CreateDirectory(dir);
+
         var json = JsonSerializer.Serialize(list, JsonDefaults.Default);
         await File.WriteAllTextAsync(FilePath, json, ct);
     }
