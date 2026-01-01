@@ -181,10 +181,12 @@ public class ApiEndpointsTests
         Assert.NotNull(payload);
         Assert.Equal("Sample API", payload!.Title);
         Assert.Equal("1.2.3", payload.Version);
+        Assert.NotEqual(Guid.Empty, payload.SpecId);
 
         var fetched = await client.GetFromJsonAsync<OpenApiSpecMetadataDto>($"/api/projects/{project.ProjectId}/openapi");
         Assert.NotNull(fetched);
         Assert.Equal(payload.ProjectId, fetched!.ProjectId);
+        Assert.Equal(payload.SpecId, fetched.SpecId);
     }
 
     [Fact]
@@ -746,6 +748,7 @@ public class ApiEndpointsTests
         [property: JsonPropertyName("result")] JsonElement Result);
 
     public sealed record OpenApiSpecMetadataDto(
+        [property: JsonPropertyName("specId")] Guid SpecId,
         [property: JsonPropertyName("projectId")] Guid ProjectId,
         [property: JsonPropertyName("title")] string Title,
         [property: JsonPropertyName("version")] string Version,
