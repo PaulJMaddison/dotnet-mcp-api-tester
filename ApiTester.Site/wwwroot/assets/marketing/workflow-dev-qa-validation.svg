@@ -1,0 +1,28 @@
+<svg width="1200" height="560" viewBox="0 0 1200 560" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="560" rx="28" fill="#0B1220"/>
+  <rect x="56" y="84" width="220" height="120" rx="20" fill="#16203A" stroke="#2F3B5C" stroke-width="2"/>
+  <rect x="336" y="84" width="220" height="120" rx="20" fill="#16203A" stroke="#2F3B5C" stroke-width="2"/>
+  <rect x="616" y="84" width="220" height="120" rx="20" fill="#16203A" stroke="#2F3B5C" stroke-width="2"/>
+  <rect x="896" y="84" width="220" height="120" rx="20" fill="#16203A" stroke="#2F3B5C" stroke-width="2"/>
+  <text x="90" y="148" fill="#E6EEFF" font-size="20" font-family="Segoe UI, sans-serif">Define</text>
+  <text x="90" y="176" fill="#B7C6F1" font-size="16" font-family="Segoe UI, sans-serif">API objectives</text>
+  <text x="370" y="148" fill="#E6EEFF" font-size="20" font-family="Segoe UI, sans-serif">Generate</text>
+  <text x="370" y="176" fill="#B7C6F1" font-size="16" font-family="Segoe UI, sans-serif">Test matrix</text>
+  <text x="650" y="148" fill="#E6EEFF" font-size="20" font-family="Segoe UI, sans-serif">Run</text>
+  <text x="650" y="176" fill="#B7C6F1" font-size="16" font-family="Segoe UI, sans-serif">QA scenarios</text>
+  <text x="930" y="148" fill="#E6EEFF" font-size="20" font-family="Segoe UI, sans-serif">Review</text>
+  <text x="930" y="176" fill="#B7C6F1" font-size="16" font-family="Segoe UI, sans-serif">Evidence pack</text>
+  <path d="M276 144H336" stroke="#6D7BA8" stroke-width="6" stroke-linecap="round"/>
+  <path d="M556 144H616" stroke="#6D7BA8" stroke-width="6" stroke-linecap="round"/>
+  <path d="M836 144H896" stroke="#6D7BA8" stroke-width="6" stroke-linecap="round"/>
+  <rect x="120" y="276" width="960" height="200" rx="24" fill="#11192E" stroke="#283354" stroke-width="2"/>
+  <text x="168" y="332" fill="#E6EEFF" font-size="22" font-family="Segoe UI, sans-serif">Continuous validation loop</text>
+  <text x="168" y="366" fill="#B7C6F1" font-size="18" font-family="Segoe UI, sans-serif">Signals from runtime logs, spec drift, and policy updates feed back into the matrix.</text>
+  <path d="M212 408C280 438 348 446 416 432" stroke="#6D7BA8" stroke-width="4" stroke-linecap="round"/>
+  <path d="M418 432L402 420" stroke="#6D7BA8" stroke-width="4" stroke-linecap="round"/>
+  <path d="M418 432L402 444" stroke="#6D7BA8" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="200" cy="408" r="16" fill="#182546" stroke="#3E4E7A" stroke-width="3"/>
+  <circle cx="416" cy="432" r="16" fill="#182546" stroke="#3E4E7A" stroke-width="3"/>
+  <circle cx="632" cy="408" r="16" fill="#182546" stroke="#3E4E7A" stroke-width="3"/>
+  <circle cx="848" cy="432" r="16" fill="#182546" stroke="#3E4E7A" stroke-width="3"/>
+</svg>

@@ -1,0 +1,25 @@
+<svg width="960" height="640" viewBox="0 0 960 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="960" height="640" rx="32" fill="#0F111A"/>
+  <rect x="52" y="56" width="856" height="528" rx="24" fill="#171A27" stroke="#373D55" stroke-width="2"/>
+  <rect x="96" y="108" width="256" height="356" rx="28" fill="#1E2235" stroke="#3F4665" stroke-width="2"/>
+  <path d="M224 140C198 154 180 178 180 206V252C180 290 202 320 224 332C246 320 268 290 268 252V206C268 178 250 154 224 140Z" fill="#2B324C" stroke="#6E78A0" stroke-width="3"/>
+  <path d="M224 186L224 250" stroke="#B8C4F6" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="224" cy="266" r="10" fill="#B8C4F6"/>
+  <text x="128" y="410" fill="#E9EDFF" font-size="20" font-family="Segoe UI, sans-serif">Security &amp; Compliance</text>
+  <text x="150" y="438" fill="#E9EDFF" font-size="20" font-family="Segoe UI, sans-serif">Lead</text>
+  <rect x="392" y="108" width="472" height="96" rx="20" fill="#1B1F31" stroke="#373D55" stroke-width="2"/>
+  <text x="424" y="168" fill="#E9EDFF" font-size="26" font-family="Segoe UI, sans-serif">Risk-first evidence reviews</text>
+  <rect x="392" y="224" width="472" height="120" rx="20" fill="#1B1F31"/>
+  <text x="424" y="266" fill="#C8D2FF" font-size="18" font-family="Segoe UI, sans-serif">Needs traceable QA artifacts for SOC 2, ISO 27001,</text>
+  <text x="424" y="292" fill="#C8D2FF" font-size="18" font-family="Segoe UI, sans-serif">HIPAA, and internal change control.</text>
+  <rect x="392" y="360" width="228" height="176" rx="18" fill="#1F253A" stroke="#373D55" stroke-width="2"/>
+  <rect x="636" y="360" width="228" height="176" rx="18" fill="#1F253A" stroke="#373D55" stroke-width="2"/>
+  <text x="416" y="400" fill="#E9EDFF" font-size="18" font-family="Segoe UI, sans-serif">Focus</text>
+  <text x="416" y="432" fill="#C8D2FF" font-size="16" font-family="Segoe UI, sans-serif">• Evidence integrity</text>
+  <text x="416" y="456" fill="#C8D2FF" font-size="16" font-family="Segoe UI, sans-serif">• Access controls</text>
+  <text x="416" y="480" fill="#C8D2FF" font-size="16" font-family="Segoe UI, sans-serif">• Audit timelines</text>
+  <text x="660" y="400" fill="#E9EDFF" font-size="18" font-family="Segoe UI, sans-serif">Metrics</text>
+  <text x="660" y="432" fill="#C8D2FF" font-size="16" font-family="Segoe UI, sans-serif">• Review cycle time</text>
+  <text x="660" y="456" fill="#C8D2FF" font-size="16" font-family="Segoe UI, sans-serif">• Coverage maturity</text>
+  <text x="660" y="480" fill="#C8D2FF" font-size="16" font-family="Segoe UI, sans-serif">• Policy alignment</text>
+</svg>
