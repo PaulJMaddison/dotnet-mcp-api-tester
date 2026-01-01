@@ -67,4 +67,24 @@ public class RequestValidationTests
         Assert.Equal(Guid.Empty, parsed);
         Assert.Equal("Invalid GUID format.", error);
     }
+
+    [Fact]
+    public void TryNormalizeBaseUrl_ReturnsError_WhenMissing()
+    {
+        var ok = RequestValidation.TryNormalizeBaseUrl("  ", out var normalized, out var error);
+
+        Assert.False(ok);
+        Assert.Equal(string.Empty, normalized);
+        Assert.Equal("baseUrl is required.", error);
+    }
+
+    [Fact]
+    public void TryNormalizeBaseUrl_NormalizesHttpUrls()
+    {
+        var ok = RequestValidation.TryNormalizeBaseUrl("https://example.com/api/", out var normalized, out var error);
+
+        Assert.True(ok);
+        Assert.Equal(string.Empty, error);
+        Assert.Equal("https://example.com/api", normalized);
+    }
 }

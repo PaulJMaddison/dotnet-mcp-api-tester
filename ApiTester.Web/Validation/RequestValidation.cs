@@ -129,6 +129,29 @@ public static class RequestValidation
         return true;
     }
 
+    public static bool TryNormalizeBaseUrl(string? baseUrl, out string normalized, out string error)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl))
+        {
+            normalized = string.Empty;
+            error = "baseUrl is required.";
+            return false;
+        }
+
+        var trimmed = baseUrl.Trim();
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            normalized = string.Empty;
+            error = "baseUrl must be an absolute http or https URL.";
+            return false;
+        }
+
+        normalized = trimmed.TrimEnd('/');
+        error = string.Empty;
+        return true;
+    }
+
     public static bool TryNormalizeOptionalValue(string? value, out string? normalized, out string error)
     {
         if (value is null)
