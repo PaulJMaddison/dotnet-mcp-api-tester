@@ -14,6 +14,7 @@ using ApiTester.Web.Execution;
 using ApiTester.Web.Auth;
 using ApiTester.Web.Diff;
 using ApiTester.Web.Mapping;
+using ApiTester.Web.Reports;
 using ApiTester.Web.Validation;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.Extensions.Options;
@@ -742,6 +743,26 @@ app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, HttpCo
         : Results.Ok(RunMapping.ToDetailDto(run));
 });
 
+app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (!TryParseReportFormat(format, out var reportFormat, out var formatError))
+        return InvalidRequest(formatError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var run = await store.GetAsync(ownerKey, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var report = RunReportGenerator.Generate(run, reportFormat);
+    var contentType = reportFormat == RunReportFormat.Markdown
+        ? "text/markdown; charset=utf-8"
+        : "text/html; charset=utf-8";
+    return Results.Text(report, contentType);
+});
+
 app.MapPost("/api/runs/{runId}/baseline/{baselineRunId}", async (string runId, string baselineRunId, ITestRunStore store, HttpContext httpContext) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
@@ -810,6 +831,35 @@ static string ComputeSpecHash(string specJson)
     var bytes = Encoding.UTF8.GetBytes(specJson);
     var hash = sha.ComputeHash(bytes);
     return Convert.ToHexString(hash).ToLowerInvariant();
+}
+
+static bool TryParseReportFormat(string? format, out RunReportFormat reportFormat, out string error)
+{
+    if (string.IsNullOrWhiteSpace(format))
+    {
+        reportFormat = RunReportFormat.Markdown;
+        error = "Format is required (md or html).";
+        return false;
+    }
+
+    if (string.Equals(format, "md", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(format, "markdown", StringComparison.OrdinalIgnoreCase))
+    {
+        reportFormat = RunReportFormat.Markdown;
+        error = string.Empty;
+        return true;
+    }
+
+    if (string.Equals(format, "html", StringComparison.OrdinalIgnoreCase))
+    {
+        reportFormat = RunReportFormat.Html;
+        error = string.Empty;
+        return true;
+    }
+
+    reportFormat = RunReportFormat.Markdown;
+    error = "Format must be 'md' or 'html'.";
+    return false;
 }
 
 public partial class Program { }
