@@ -1,248 +1,67 @@
 @page "/docs"
-@using System.Linq
+
+@code {
+    private DeveloperDocsContent Content { get; } = MarketingContent.Current.DeveloperDocs;
+}
 
 <section class="page-hero bg-light py-5">
     <div class="container">
-        <h1 class="display-5 fw-bold">Documentation hub</h1>
-        <p class="lead">Everything you need to connect, validate, and monitor APIs with ApiTester. Use the built-in search to find guides, reference topics, and troubleshooting advice.</p>
+        <h1 class="display-5 fw-bold">@Content.HeroTitle</h1>
+        <p class="lead">@Content.HeroSubtitle</p>
     </div>
 </section>
 
 <section class="py-5">
     <div class="container">
-        <div class="row mb-5">
-            <div class="col-lg-8">
-                <h2 class="h4 fw-bold">Search the docs</h2>
-                <p class="text-muted">Filter topics by keyword, endpoint name, or workflow. Results update instantly in your browser.</p>
-                <input class="form-control" type="search" placeholder="Search docs topics" @bind="SearchQuery" />
-            </div>
-            <div class="col-lg-4 mt-4 mt-lg-0">
-                <div class="doc-sidebar p-4 bg-light rounded-4">
-                    <h3 class="h6 text-uppercase">Docs at a glance</h3>
-                    <ul class="list-unstyled mb-0 small">
-                        <li class="mb-2"><strong>@FilteredEntries.Count()</strong> topics available</li>
-                        <li class="mb-2">Updated weekly with new API coverage</li>
-                        <li class="mb-0">Support response time: under 8 hours</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
         <div class="row g-4">
-            <div class="col-lg-8">
-                <div class="doc-section">
-                    <h2 class="h4 fw-bold">Getting started</h2>
-                    <p>Launch a new workspace in minutes. Start with a source of truth, define validation rules, and turn on monitoring in a single guided flow.</p>
-                    <ol class="doc-list">
-                        <li>Connect your first API spec (OpenAPI, GraphQL, or gRPC gateway) and map base URLs.</li>
-                        <li>Import existing Postman collections or create scenarios from scratch with fixture data.</li>
-                        <li>Schedule recurring monitors and attach alerts to your team channels.</li>
-                        <li>Share the release readiness report with stakeholders before every deployment.</li>
-                    </ol>
-                </div>
-                <div class="doc-section">
-                    <h2 class="h4 fw-bold">Core concepts</h2>
-                    <p>Understand the building blocks that power every run.</p>
-                    <ul class="list-unstyled">
-                        <li class="mb-2"><strong>Environments:</strong> Group base URLs, credentials, and secrets with strict role-based access.</li>
-                        <li class="mb-2"><strong>Scenarios:</strong> Multi-step flows that validate payloads, latency, and schema alignment.</li>
-                        <li class="mb-2"><strong>Monitors:</strong> Scheduled test suites with alert thresholds and incident timelines.</li>
-                        <li class="mb-2"><strong>Runbooks:</strong> Automated remediation guidance attached to every failure.</li>
-                    </ul>
-                </div>
-                <div class="doc-section">
-                    <h2 class="h4 fw-bold">Diagrams and system flows</h2>
-                    <p>Use the visual guides below to align teams on how specs, runs, and alerts move through ApiTester.</p>
-                    <div class="row g-4">
-                        <div class="col-md-6">
-                            <figure class="bg-light border rounded-4 p-3 h-100">
-                                <img class="img-fluid visual-asset" src="/images/docs/architecture-overview.svg" alt="Architecture overview diagram showing spec ingestion, scenario orchestration, monitoring, and reporting services." loading="lazy" decoding="async" />
-                                <figcaption class="small text-muted mt-2">Architecture overview for how source specs feed scenarios, monitors, and reports.</figcaption>
-                            </figure>
-                        </div>
-                        <div class="col-md-6">
-                            <figure class="bg-light border rounded-4 p-3 h-100">
-                                <img class="img-fluid visual-asset" src="/images/docs/mcp-server-flow.svg" alt="MCP server flow diagram depicting the client request path, validation, and response streaming back to the dashboard." loading="lazy" decoding="async" />
-                                <figcaption class="small text-muted mt-2">MCP server flow for real-time validation and response streaming.</figcaption>
-                            </figure>
-                        </div>
-                    </div>
-                </div>
-                <div class="doc-section">
-                    <h2 class="h4 fw-bold">Security visuals</h2>
-                    <p>Share these assets when explaining ApiTester’s security posture, controls, and response workflows.</p>
-                    <div class="row g-4">
-                        <div class="col-lg-6">
-                            <figure class="bg-light border rounded-4 p-3 h-100">
-                                <img class="img-fluid visual-asset" src="/images/docs/security-badges.svg" alt="Security badge set for SOC 2 Type II, ISO 27001, and continuous monitoring." loading="lazy" decoding="async" />
-                                <figcaption class="small text-muted mt-2">Use the badge collection to highlight certifications and monitoring coverage.</figcaption>
-                            </figure>
-                        </div>
-                        <div class="col-lg-6">
-                            <figure class="bg-light border rounded-4 p-3 h-100">
-                                <img class="img-fluid visual-asset" src="/images/docs/security-diagram.svg" alt="Security pipeline diagram showing spec intake, policy checks, runtime scans, and incident response." loading="lazy" decoding="async" />
-                                <figcaption class="small text-muted mt-2">Security pipeline diagram for onboarding and executive briefings.</figcaption>
-                            </figure>
-                        </div>
-                        <div class="col-12">
-                            <figure class="bg-light border rounded-4 p-3 h-100">
-                                <img class="img-fluid visual-asset" src="/images/docs/security-icons.svg" alt="Security icon set for encryption, key vault, audit trails, rate limits, data masking, and compliance." loading="lazy" decoding="async" />
-                                <figcaption class="small text-muted mt-2">Icon set for slides, runbooks, and partner documentation.</figcaption>
-                            </figure>
-                        </div>
-                    </div>
-                </div>
-                <div class="doc-section">
-                    <h2 class="h4 fw-bold">API reference</h2>
-                    <p>Developers can automate provisioning, manage environments, and sync results through the ApiTester REST API. The reference covers auth, pagination, and rate limits.</p>
-                    <div class="mb-4">
-                        <h3 class="h6 text-uppercase">Authentication</h3>
-                        <p class="mb-2">Use a personal access token in the <code>Authorization</code> header.</p>
-                        <pre class="bg-light p-3 rounded-3"><code>Authorization: Bearer &lt;token&gt;
-X-Workspace: api-team</code></pre>
-                    </div>
-                    <div class="mb-4">
-                        <h3 class="h6 text-uppercase">Create a monitor</h3>
-                        <p class="mb-2">POST <code>/v1/monitors</code> creates a new schedule attached to a scenario.</p>
-                        <pre class="bg-light p-3 rounded-3"><code>POST /v1/monitors
-{
-  "name": "Checkout Canary",
-  "scenarioId": "scn_4721",
-  "intervalMinutes": 10,
-  "alertChannels": ["slack:#api-alerts"]
-}</code></pre>
-                    </div>
-                    <div class="mb-4">
-                        <h3 class="h6 text-uppercase">List results</h3>
-                        <p class="mb-2">GET <code>/v1/runs</code> supports pagination and filtering.</p>
-                        <pre class="bg-light p-3 rounded-3"><code>GET /v1/runs?scenarioId=scn_4721&amp;status=failed&amp;limit=25
-{
-  "data": [
-    {
-      "id": "run_8892",
-      "status": "failed",
-      "startedAt": "2024-08-12T14:05:21Z",
-      "durationMs": 942
-    }
-  ],
-  "nextCursor": "run_8892"
-}</code></pre>
-                    </div>
-                    <p class="mb-0">Need additional endpoints? Contact support to enable beta resources like synthetic user journeys.</p>
-                </div>
-                <div class="doc-section">
-                    <h2 class="h4 fw-bold">Workflows</h2>
-                    <p>Common ways teams use ApiTester throughout the release cycle.</p>
-                    <ul class="list-unstyled">
-                        <li class="mb-2"><strong>Pre-merge validation:</strong> Run targeted suites on feature branches with per-PR reports.</li>
-                        <li class="mb-2"><strong>Release readiness:</strong> Compare today’s results against baseline and share the diff.</li>
-                        <li class="mb-2"><strong>Incident triage:</strong> Drill into run timelines, retry failed steps, and attach a runbook.</li>
-                        <li class="mb-2"><strong>Post-release audits:</strong> Export JSON summaries for compliance archives.</li>
-                    </ul>
-                </div>
-                <div class="doc-section">
-                    <h2 class="h4 fw-bold">Release readiness</h2>
-                    <p>Bring the most important launch signals together in one place. Use these notes to communicate scope, risk, and ownership before pushing to production.</p>
-                    <div class="row g-4">
-                        <div class="col-lg-6">
-                            <h3 class="h6 text-uppercase">Deployment notes</h3>
-                            <ul class="list-unstyled">
-                                <li class="mb-2"><strong>Version:</strong> Confirm the build number, artifact hash, and rollout window.</li>
-                                <li class="mb-2"><strong>Impact:</strong> Highlight API endpoints affected, data migrations, and client updates.</li>
-                                <li class="mb-2"><strong>Dependencies:</strong> Record upstream services, feature flags, and credentials that must be refreshed.</li>
-                                <li class="mb-2"><strong>Support:</strong> Assign on-call coverage, escalation contacts, and rollback owners.</li>
-                            </ul>
-                        </div>
-                        <div class="col-lg-6">
-                            <h3 class="h6 text-uppercase">Launch checklist</h3>
-                            <ol class="doc-list">
-                                <li>Validate the release readiness report is green for critical suites.</li>
-                                <li>Capture approval notes from security, compliance, and QA leads.</li>
-                                <li>Verify synthetic monitors are enabled in staging and production.</li>
-                                <li>Share the deployment plan and rollback steps in the incident channel.</li>
-                                <li>Schedule post-release review with metrics, latency, and error budgets.</li>
-                            </ol>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-4">
-                <div class="doc-sidebar p-4 border rounded-4">
-                    <h3 class="h6 text-uppercase">Popular topics</h3>
-                    <ul class="list-unstyled small">
-                        <li class="mb-2">Environment variables</li>
-                        <li class="mb-2">CI/CD integrations</li>
-                        <li class="mb-2">Security configuration</li>
-                        <li class="mb-2">Test data management</li>
-                        <li class="mb-2">Response schema validation</li>
-                        <li class="mb-2">Alert escalation paths</li>
-                        <li class="mb-2">Release readiness checklist</li>
-                        <li class="mb-0">Exporting compliance reports</li>
-                    </ul>
-                </div>
-                <div class="doc-sidebar p-4 border rounded-4 mt-4">
-                    <h3 class="h6 text-uppercase">Client SDKs</h3>
-                    <p class="small mb-3">Generate typed clients or integrate with existing test runners.</p>
-                    <ul class="list-unstyled small mb-0">
-                        <li class="mb-2">.NET: <code>dotnet add package ApiTester.Client</code></li>
-                        <li class="mb-2">Node.js: <code>npm install @@apitester/sdk</code></li>
-                        <li class="mb-0">Python: <code>pip install apitester-sdk</code></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-        <div class="row mt-5">
-            <div class="col-12">
-                <h2 class="h4 fw-bold">Browse all topics</h2>
-                <p class="text-muted">Search results update as you type. Select a topic to open the guide in the docs app.</p>
-                <div class="list-group">
-                    @foreach (var entry in FilteredEntries)
+            <div class="col-lg-6">
+                <h2 class="h4 fw-bold">@Content.QuickstartTitle</h2>
+                <ol class="ps-3">
+                    @foreach (var step in Content.QuickstartSteps)
                     {
-                        <div class="list-group-item list-group-item-action">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h3 class="h6 mb-1">@entry.Title</h3>
-                                <small class="text-muted">@entry.Category</small>
-                            </div>
-                            <p class="mb-1">@entry.Description</p>
-                            <small class="text-muted">@entry.Route</small>
-                        </div>
+                        <li class="mb-2">@step</li>
                     }
+                </ol>
+            </div>
+            <div class="col-lg-6">
+                <div class="diagram-placeholder">
+                    <div class="placeholder-grid">@Content.WorkflowPlaceholder.Title</div>
+                    <p class="mb-0">@Content.WorkflowPlaceholder.Description</p>
                 </div>
-                @if (!FilteredEntries.Any())
-                {
-                    <p class="text-muted mt-3 mb-0">No matches found. Try searching for “monitors”, “auth”, or “baseline”.</p>
-                }
             </div>
         </div>
     </div>
 </section>
 
-@code {
-    private string SearchQuery { get; set; } = string.Empty;
+<section class="bg-white py-5">
+    <div class="container">
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <h2 class="h4 fw-bold">@Content.McpTitle</h2>
+                <ul class="list-unstyled">
+                    @foreach (var highlight in Content.McpHighlights)
+                    {
+                        <li class="mb-2">@highlight</li>
+                    }
+                </ul>
+            </div>
+            <div class="col-lg-6">
+                <h2 class="h4 fw-bold">@Content.CiTitle</h2>
+                <ol class="ps-3">
+                    @foreach (var step in Content.CiSteps)
+                    {
+                        <li class="mb-2">@step</li>
+                    }
+                </ol>
+            </div>
+        </div>
+    </div>
+</section>
 
-    private IReadOnlyList<DocEntry> DocEntries { get; } = new List<DocEntry>
-    {
-        new("Quickstart checklist", "Connect specs, create scenarios, and ship your first report in under an hour.", "Getting started", "/docs/quickstart"),
-        new("Environment variables", "Store secrets and base URLs with role-based access and audit logs.", "Configuration", "/docs/environments"),
-        new("Scenario builder", "Design multi-step flows with data setup, assertions, and teardown actions.", "Guides", "/docs/scenarios"),
-        new("Contract diffing", "Detect breaking changes in OpenAPI and GraphQL schemas before release.", "Guides", "/docs/contract-diffing"),
-        new("Monitoring schedules", "Attach intervals, alert channels, and escalation policies to monitors.", "Monitoring", "/docs/monitors"),
-        new("Alert routing", "Configure Slack, PagerDuty, and email escalation paths.", "Monitoring", "/docs/alert-routing"),
-        new("Runbook templates", "Attach remediation steps to known failure signatures.", "Operations", "/docs/runbooks"),
-        new("Release readiness checklist", "Summarize deployment notes, approvals, and go-live criteria.", "Release", "/docs/release-readiness"),
-        new("API authentication", "Issue tokens, rotate keys, and enforce workspace scoping.", "API reference", "/docs/api/authentication"),
-        new("Pagination and filtering", "Cursor pagination and advanced filtering for large result sets.", "API reference", "/docs/api/pagination"),
-        new("Exporting results", "Download JSON, CSV, or PDF summaries for compliance.", "Reporting", "/docs/exporting-results"),
-        new("CI/CD integrations", "Trigger suites from GitHub Actions, Azure DevOps, and Jenkins.", "Integrations", "/docs/ci-cd"),
-        new("Test data management", "Seed and reset test fixtures across environments.", "Data management", "/docs/test-data")
-    };
-
-    private IEnumerable<DocEntry> FilteredEntries =>
-        string.IsNullOrWhiteSpace(SearchQuery)
-            ? DocEntries
-            : DocEntries.Where(entry =>
-                entry.Title.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ||
-                entry.Description.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase) ||
-                entry.Category.Contains(SearchQuery, StringComparison.OrdinalIgnoreCase));
-
-    private record DocEntry(string Title, string Description, string Category, string Route);
-}
+<section class="cta-section text-white py-5">
+    <div class="container text-center">
+        <h2 class="fw-bold">@Content.CtaTitle</h2>
+        <p class="lead">@Content.CtaSubtitle</p>
+        <a class="btn btn-light btn-lg" href="@Content.CtaLink">@Content.CtaLabel</a>
+    </div>
+</section>
