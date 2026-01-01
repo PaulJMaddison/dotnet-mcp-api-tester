@@ -38,4 +38,29 @@ public static class RunMapping
             record.StartedUtc,
             record.CompletedUtc,
             record.Result);
+
+    public static RunAuditResponse ToAuditResponse(TestRunRecord record)
+    {
+        var environment = record.Environment is null
+            ? null
+            : new RunEnvironmentSnapshot(record.Environment.Name, record.Environment.BaseUrl);
+
+        var policy = record.PolicySnapshot is null
+            ? null
+            : new RunPolicySnapshot(
+                record.PolicySnapshot.DryRun,
+                record.PolicySnapshot.AllowedBaseUrls,
+                record.PolicySnapshot.AllowedMethods,
+                record.PolicySnapshot.BlockLocalhost,
+                record.PolicySnapshot.BlockPrivateNetworks,
+                record.PolicySnapshot.TimeoutSeconds,
+                record.PolicySnapshot.MaxRequestBodyBytes,
+                record.PolicySnapshot.MaxResponseBodyBytes);
+
+        return new RunAuditResponse(
+            record.RunId,
+            record.Actor,
+            environment,
+            policy);
+    }
 }

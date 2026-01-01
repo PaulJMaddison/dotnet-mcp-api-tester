@@ -1,12 +1,13 @@
-﻿using System.Text.Json.Serialization;
-
-namespace ApiTester.McpServer.Models;
+﻿namespace ApiTester.McpServer.Models;
 
 public sealed class TestRunRecord
 {
   
 
     public Guid RunId { get; set; }
+    public string Actor { get; init; } = OwnerKeyDefaults.Default;
+    public TestRunEnvironmentSnapshot? Environment { get; init; }
+    public ApiExecutionPolicySnapshot? PolicySnapshot { get; init; }
     public string OwnerKey { get; init; } = OwnerKeyDefaults.Default;
     public string OperationId { get; set; } = "";
     public Guid? SpecId { get; set; }
