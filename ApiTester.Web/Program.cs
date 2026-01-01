@@ -12,10 +12,12 @@ using ApiTester.Web.Contracts;
 using ApiTester.Web.Comparison;
 using ApiTester.Web.Execution;
 using ApiTester.Web.Auth;
+using ApiTester.Web.AI;
 using ApiTester.Web.Diff;
 using ApiTester.Web.Mapping;
 using ApiTester.Web.Reports;
 using ApiTester.Web.Validation;
+using ApiTester.AI;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
@@ -82,6 +84,7 @@ builder.Services.AddScoped<ApiRuntimeConfig>(sp =>
 builder.Services.AddScoped<TestPlanRunner>();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<RunComparisonService>();
+builder.Services.AddSingleton<IAiClient, NullAiClient>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -807,6 +810,44 @@ app.MapGet("/api/runs/{runId}/compare/{baselineRunId}", async (string runId, str
 
     var response = comparison.Compare(run, baseline);
     return Results.Ok(response);
+});
+
+app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunStore store, IAiClient aiClient, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
+        return InvalidRequest(runError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var run = await store.GetAsync(ownerKey, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var context = AiContextFactory.BuildRunExplanationContext(run);
+    var runJson = JsonSerializer.Serialize(context, jsonOptions);
+    var prompt = AiPromptTemplates.BuildRunExplanationPrompt(runJson);
+    var aiResponse = await aiClient.GetResponseAsync(prompt, ct);
+    return Results.Ok(new AiRunExplanationResponse(run.RunId, aiResponse.Content));
+});
+
+app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, IAiClient aiClient, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(specId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var record = await specStore.GetByIdAsync(id, ct);
+    if (record is null)
+        return Results.NotFound();
+
+    var project = await projectStore.GetAsync(ownerKey, record.ProjectId, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, record.ProjectId, ct);
+
+    var context = AiContextFactory.BuildSpecSummaryContext(record);
+    var specJson = JsonSerializer.Serialize(context, jsonOptions);
+    var prompt = AiPromptTemplates.BuildSpecSummaryPrompt(specJson);
+    var aiResponse = await aiClient.GetResponseAsync(prompt, ct);
+    return Results.Ok(new AiSpecSummaryResponse(record.SpecId, aiResponse.Content));
 });
 
 app.Run();
