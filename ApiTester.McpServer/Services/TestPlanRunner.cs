@@ -58,9 +58,9 @@ public sealed class TestPlanRunner
     }
 
     public async Task<TestRunRecord> RunPlanAsync(TestPlan plan, string projectKey, CancellationToken ct = default)
-        => await RunPlanAsync(plan, projectKey, OwnerKeyDefaults.Default, ct);
+        => await RunPlanAsync(plan, projectKey, OwnerKeyDefaults.Default, null, ct);
 
-    public async Task<TestRunRecord> RunPlanAsync(TestPlan plan, string projectKey, string ownerKey, CancellationToken ct = default)
+    public async Task<TestRunRecord> RunPlanAsync(TestPlan plan, string projectKey, string ownerKey, Guid? specId, CancellationToken ct = default)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
@@ -116,6 +116,7 @@ public sealed class TestPlanRunner
             OwnerKey = ownerKey,
             ProjectKey = projectKey,
             OperationId = plan.OperationId.Trim(),
+            SpecId = specId,
             StartedUtc = startedUtc,
             CompletedUtc = completedUtc,
             Result = result

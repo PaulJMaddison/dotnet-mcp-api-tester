@@ -250,6 +250,7 @@ public enum ResultClassification
 }
 
 public sealed record OpenApiSpecMetadataDto(
+    Guid SpecId,
     Guid ProjectId,
     string Title,
     string Version,

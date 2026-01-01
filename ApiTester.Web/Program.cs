@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using ApiTester.Web;
 using ApiTester.McpServer.Models;
@@ -313,7 +314,8 @@ app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId,
         title = string.IsNullOrWhiteSpace(title) ? "Untitled API" : title.Trim();
         version = string.IsNullOrWhiteSpace(version) ? "unknown" : version.Trim();
 
-        var record = await specStore.UpsertAsync(project.ProjectId, title, version, specJson, DateTime.UtcNow, ct);
+        var specHash = ComputeSpecHash(specJson);
+        var record = await specStore.UpsertAsync(project.ProjectId, title, version, specJson, specHash, DateTime.UtcNow, ct);
         logger.LogInformation(
             "Imported OpenAPI spec for project {ProjectId} titled {Title} version {Version} from {SpecSource}",
             project.ProjectId,
@@ -338,6 +340,37 @@ app.MapGet("/api/projects/{projectId}/openapi", async (string projectId, IOpenAp
     return record is null
         ? Results.NotFound()
         : Results.Ok(OpenApiMapping.ToMetadataDto(record));
+});
+
+app.MapGet("/api/projects/{projectId}/specs", async (string projectId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    var records = await specStore.ListAsync(id, ct);
+    return Results.Ok(records.Select(OpenApiMapping.ToMetadataDto));
+});
+
+app.MapGet("/api/specs/{specId}", async (string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(specId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var record = await specStore.GetByIdAsync(id, ct);
+    if (record is null)
+        return Results.NotFound();
+
+    var project = await projectStore.GetAsync(ownerKey, record.ProjectId, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, record.ProjectId, ct);
+
+    return Results.Ok(OpenApiMapping.ToDetailDto(record));
 });
 
 app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async (
@@ -476,7 +509,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     }
 
     logger.LogInformation("Executing run for project {ProjectId} operation {OperationId}", project.ProjectId, trimmedOperationId);
-    var run = await runner.RunPlanAsync(plan, project.ProjectKey, ownerKey, ct);
+    var run = await runner.RunPlanAsync(plan, project.ProjectKey, ownerKey, spec.SpecId, ct);
     logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, trimmedOperationId);
     return Results.Ok(RunMapping.ToDetailDto(run));
 });
@@ -603,6 +636,14 @@ static (string path, OperationType method, OpenApiOperation op)? FindOperation(O
     }
 
     return null;
+}
+
+static string ComputeSpecHash(string specJson)
+{
+    using var sha = SHA256.Create();
+    var bytes = Encoding.UTF8.GetBytes(specJson);
+    var hash = sha.ComputeHash(bytes);
+    return Convert.ToHexString(hash).ToLowerInvariant();
 }
 
 public partial class Program { }
