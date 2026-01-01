@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Encodings.Web;
+using System.Text.Unicode;
 using ApiTester.McpServer.Models;
 
 namespace ApiTester.Web.Reports;
@@ -70,7 +71,10 @@ public static class RunReportGenerator
         var builder = new StringBuilder();
         var result = run.Result;
         var classificationSummary = result.ClassificationSummary;
-        var encoder = HtmlEncoder.Default;
+        var encoder = HtmlEncoder.Create(new TextEncoderSettings(
+            UnicodeRanges.BasicLatin,
+            UnicodeRanges.Latin1Supplement,
+            UnicodeRanges.GeneralPunctuation));
 
         builder.AppendLine("<!DOCTYPE html>");
         builder.AppendLine("<html lang=\"en\">");
