@@ -8,6 +8,7 @@ using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Entities;
 using ApiTester.Web;
 using ApiTester.Web.Auth;
+using ApiTester.Web.Contracts;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -438,6 +439,111 @@ public class ApiEndpointsTests
             return reason.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
                    reason.Contains("canceled", StringComparison.OrdinalIgnoreCase);
         });
+    }
+
+    [Fact]
+    public async Task AiEndpoint_ReturnsForbidden_ForFreeTier()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Free"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "FreeAi", "free-ai");
+        var run = await SeedRunAsync(factory, project, "op-free");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsync($"/api/ai/runs/{run.RunId}/explanation", null);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AiEndpoint_ReturnsOk_ForProTier()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "ProAi", "pro-ai");
+        var run = await SeedRunAsync(factory, project, "op-pro");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsync($"/api/ai/runs/{run.RunId}/explanation", null);
+        var payload = await response.Content.ReadFromJsonAsync<AiRunExplanationResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal(run.RunId, payload!.RunId);
+    }
+
+    [Fact]
+    public async Task RunReport_ReturnsForbidden_ForFreeTier()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Free"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "FreeReport", "free-report");
+        var run = await SeedRunAsync(factory, project, "op-free-report");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.GetAsync($"/api/runs/{run.RunId}/report?format=markdown");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RunReport_ReturnsReport_ForProTier()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "ProReport", "pro-report");
+        var run = await SeedRunAsync(factory, project, "op-pro-report");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.GetAsync($"/api/runs/{run.RunId}/report?format=markdown");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("# Test Run Report", body);
     }
 
     [Fact]

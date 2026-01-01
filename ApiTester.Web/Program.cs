@@ -14,6 +14,7 @@ using ApiTester.Web.Execution;
 using ApiTester.Web.Auth;
 using ApiTester.Web.AI;
 using ApiTester.Web.Diff;
+using ApiTester.Web.Entitlements;
 using ApiTester.Web.Mapping;
 using ApiTester.Web.Reports;
 using ApiTester.Web.Validation;
@@ -85,6 +86,8 @@ builder.Services.AddScoped<TestPlanRunner>();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<RunComparisonService>();
 builder.Services.AddSingleton<IAiClient, NullAiClient>();
+builder.Services.Configure<EntitlementOptions>(builder.Configuration.GetSection("Entitlements"));
+builder.Services.AddSingleton<EntitlementService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -758,8 +761,11 @@ app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, 
         : Results.Ok(RunMapping.ToAuditResponse(run));
 });
 
-app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITestRunStore store, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
 {
+    if (!entitlements.CanExport)
+        return FeatureNotAvailable("Export", entitlements);
+
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
@@ -812,8 +818,11 @@ app.MapGet("/api/runs/{runId}/compare/{baselineRunId}", async (string runId, str
     return Results.Ok(response);
 });
 
-app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunStore store, IAiClient aiClient, HttpContext httpContext, CancellationToken ct) =>
+app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunStore store, IAiClient aiClient, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
 {
+    if (!entitlements.CanUseAi)
+        return FeatureNotAvailable("AI", entitlements);
+
     if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
         return InvalidRequest(runError);
 
@@ -829,8 +838,11 @@ app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunSto
     return Results.Ok(new AiRunExplanationResponse(run.RunId, aiResponse.Content));
 });
 
-app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, IAiClient aiClient, HttpContext httpContext, CancellationToken ct) =>
+app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, IAiClient aiClient, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
 {
+    if (!entitlements.CanUseAi)
+        return FeatureNotAvailable("AI", entitlements);
+
     if (!RequestValidation.TryParseGuid(specId, out var id, out var error))
         return InvalidRequest(error);
 
@@ -854,6 +866,12 @@ app.Run();
 
 static IResult InvalidRequest(string detail)
     => Results.Problem(title: "Invalid request", detail: detail, statusCode: StatusCodes.Status400BadRequest);
+
+static IResult FeatureNotAvailable(string feature, EntitlementService entitlements)
+    => Results.Problem(
+        title: "Feature not available",
+        detail: $"{feature} features require a Pro subscription. Current tier: {entitlements.Tier}.",
+        statusCode: StatusCodes.Status403Forbidden);
 
 static async Task<IResult> NotFoundOrForbiddenAsync(IProjectStore store, Guid projectId, CancellationToken ct)
 {
