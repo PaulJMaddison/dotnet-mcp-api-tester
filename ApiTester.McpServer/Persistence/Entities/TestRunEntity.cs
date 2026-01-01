@@ -26,4 +26,5 @@ public sealed class TestRunEntity
     public long TotalDurationMs { get; set; }
 
     public List<TestCaseResultEntity> Results { get; set; } = new();
+    public List<RunAnnotationEntity> Annotations { get; set; } = new();
 }
