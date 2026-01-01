@@ -13,6 +13,7 @@ public sealed class ApiTesterDbContext : DbContext
     public DbSet<OpenApiSpecEntity> OpenApiSpecs => Set<OpenApiSpecEntity>();
     public DbSet<TestPlanEntity> TestPlans => Set<TestPlanEntity>();
     public DbSet<EnvironmentEntity> Environments => Set<EnvironmentEntity>();
+    public DbSet<RunAnnotationEntity> RunAnnotations => Set<RunAnnotationEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -121,6 +122,21 @@ public sealed class ApiTesterDbContext : DbContext
             b.HasOne(x => x.Project)
                 .WithMany(p => p.Environments)
                 .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RunAnnotationEntity>(b =>
+        {
+            b.HasKey(x => x.AnnotationId);
+            b.Property(x => x.OwnerKey).HasMaxLength(100).IsRequired();
+            b.Property(x => x.Note).HasMaxLength(2000).IsRequired();
+            b.Property(x => x.JiraLink).HasMaxLength(2048);
+            b.HasIndex(x => x.RunId);
+            b.HasIndex(x => new { x.OwnerKey, x.RunId });
+
+            b.HasOne(x => x.Run)
+                .WithMany(r => r.Annotations)
+                .HasForeignKey(x => x.RunId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
