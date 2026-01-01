@@ -12,6 +12,7 @@ using ApiTester.Web.Contracts;
 using ApiTester.Web.Comparison;
 using ApiTester.Web.Execution;
 using ApiTester.Web.Auth;
+using ApiTester.Web.Diff;
 using ApiTester.Web.Mapping;
 using ApiTester.Web.Validation;
 using Microsoft.AspNetCore.Diagnostics;
@@ -371,6 +372,55 @@ app.MapGet("/api/specs/{specId}", async (string specId, IOpenApiSpecStore specSt
         return await NotFoundOrForbiddenAsync(projectStore, record.ProjectId, ct);
 
     return Results.Ok(OpenApiMapping.ToDetailDto(record));
+});
+
+app.MapGet("/specs/{specA}/diff/{specB}", async (string specA, string specB, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(specA, out var specAId, out var specAError))
+        return InvalidRequest(specAError);
+
+    if (!RequestValidation.TryParseGuid(specB, out var specBId, out var specBError))
+        return InvalidRequest(specBError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+
+    var recordA = await specStore.GetByIdAsync(specAId, ct);
+    if (recordA is null)
+        return Results.NotFound();
+
+    var projectA = await projectStore.GetAsync(ownerKey, recordA.ProjectId, ct);
+    if (projectA is null)
+        return await NotFoundOrForbiddenAsync(projectStore, recordA.ProjectId, ct);
+
+    var recordB = await specStore.GetByIdAsync(specBId, ct);
+    if (recordB is null)
+        return Results.NotFound();
+
+    var projectB = await projectStore.GetAsync(ownerKey, recordB.ProjectId, ct);
+    if (projectB is null)
+        return await NotFoundOrForbiddenAsync(projectStore, recordB.ProjectId, ct);
+
+    var reader = new OpenApiStringReader();
+    var docA = reader.Read(recordA.SpecJson, out _);
+    if (docA is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Spec A could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var docB = reader.Read(recordB.SpecJson, out _);
+    if (docB is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Spec B could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var diff = OpenApiDiffEngine.Diff(docA, docB);
+    var response = new OpenApiDiffResponse(
+        recordA.SpecId,
+        recordB.SpecId,
+        diff.Items.Select(item => new OpenApiDiffItemDto(
+            item.Classification.ToString(),
+            item.Change,
+            item.Path,
+            item.Method,
+            item.Detail)).ToList());
+
+    return Results.Ok(response);
 });
 
 app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async (
