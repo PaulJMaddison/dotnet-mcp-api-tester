@@ -10,6 +10,11 @@ public sealed class TestRunEntity
     public Guid? BaselineRunId { get; set; }
     public TestRunEntity? BaselineRun { get; set; }
 
+    public string? Actor { get; set; }
+    public string? EnvironmentName { get; set; }
+    public string? EnvironmentBaseUrl { get; set; }
+    public string? PolicySnapshotJson { get; set; }
+
     public string OperationId { get; set; } = "";
     public DateTime StartedUtc { get; set; }
     public DateTime CompletedUtc { get; set; }

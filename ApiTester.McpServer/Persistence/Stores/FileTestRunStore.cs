@@ -144,6 +144,9 @@ public sealed class FileTestRunStore : ITestRunStore
                 record = new TestRunRecord
                 {
                     RunId = record.RunId,
+                    Actor = record.Actor,
+                    Environment = record.Environment,
+                    PolicySnapshot = record.PolicySnapshot,
                     OwnerKey = ownerKey,
                     ProjectKey = record.ProjectKey,
                     OperationId = record.OperationId,
@@ -164,6 +167,9 @@ public sealed class FileTestRunStore : ITestRunStore
                 record = new TestRunRecord
                 {
                     RunId = record.RunId,
+                    Actor = record.Actor,
+                    Environment = record.Environment,
+                    PolicySnapshot = record.PolicySnapshot,
                     OwnerKey = ownerKey,
                     ProjectKey = projectKey,
                     OperationId = record.OperationId,

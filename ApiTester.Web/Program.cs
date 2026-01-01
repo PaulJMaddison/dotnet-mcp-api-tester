@@ -685,7 +685,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     }
 
     logger.LogInformation("Executing run for project {ProjectId} operation {OperationId}", project.ProjectId, trimmedOperationId);
-    var run = await runner.RunPlanAsync(plan, project.ProjectKey, ownerKey, spec.SpecId, ct);
+    var run = await runner.RunPlanAsync(plan, project.ProjectKey, ownerKey, spec.SpecId, ownerKey, environmentName, ct);
     logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, trimmedOperationId);
     return Results.Ok(RunMapping.ToDetailDto(run));
 });
@@ -741,6 +741,18 @@ app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, HttpCo
     return run is null
         ? Results.NotFound()
         : Results.Ok(RunMapping.ToDetailDto(run));
+});
+
+app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var run = await store.GetAsync(ownerKey, id);
+    return run is null
+        ? Results.NotFound()
+        : Results.Ok(RunMapping.ToAuditResponse(run));
 });
 
 app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>

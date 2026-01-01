@@ -1,8 +1,10 @@
 ﻿using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Entities;
+using ApiTester.McpServer.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace ApiTester.McpServer.Persistence.Stores;
 
@@ -41,6 +43,12 @@ public sealed class SqlTestRunStore : ITestRunStore
             OperationId = record.OperationId,
             SpecId = record.SpecId,
             BaselineRunId = record.BaselineRunId,
+            Actor = record.Actor,
+            EnvironmentName = record.Environment?.Name,
+            EnvironmentBaseUrl = record.Environment?.BaseUrl,
+            PolicySnapshotJson = record.PolicySnapshot is null
+                ? null
+                : JsonSerializer.Serialize(record.PolicySnapshot, JsonDefaults.Default),
             StartedUtc = record.StartedUtc.UtcDateTime,
             CompletedUtc = record.CompletedUtc.UtcDateTime,
 
@@ -105,6 +113,13 @@ public sealed class SqlTestRunStore : ITestRunStore
         return new TestRunRecord
         {
             RunId = run.RunId,
+            Actor = run.Actor ?? OwnerKeyDefaults.Default,
+            Environment = run.EnvironmentName is null && run.EnvironmentBaseUrl is null
+                ? null
+                : new TestRunEnvironmentSnapshot(run.EnvironmentName, run.EnvironmentBaseUrl),
+            PolicySnapshot = run.PolicySnapshotJson is null
+                ? null
+                : JsonSerializer.Deserialize<ApiExecutionPolicySnapshot>(run.PolicySnapshotJson, JsonDefaults.Default),
             OwnerKey = run.Project?.OwnerKey ?? OwnerKeyDefaults.Default,
             ProjectKey = run.Project?.ProjectKey ?? "default",
             OperationId = run.OperationId,
@@ -212,6 +227,13 @@ public sealed class SqlTestRunStore : ITestRunStore
             return new TestRunRecord
             {
                 RunId = run.RunId,
+                Actor = run.Actor ?? ownerKey,
+                Environment = run.EnvironmentName is null && run.EnvironmentBaseUrl is null
+                    ? null
+                    : new TestRunEnvironmentSnapshot(run.EnvironmentName, run.EnvironmentBaseUrl),
+                PolicySnapshot = run.PolicySnapshotJson is null
+                    ? null
+                    : JsonSerializer.Deserialize<ApiExecutionPolicySnapshot>(run.PolicySnapshotJson, JsonDefaults.Default),
                 OwnerKey = run.Project?.OwnerKey ?? ownerKey,
                 ProjectKey = run.Project?.ProjectKey ?? projectKey,
                 OperationId = run.OperationId,
