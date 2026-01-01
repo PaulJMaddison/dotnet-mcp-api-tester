@@ -86,7 +86,7 @@ public sealed class SqlTestRunStore : ITestRunStore
             .AsNoTracking()
             .Include(x => x.Results)
             .Include(x => x.Project)
-            .FirstOrDefaultAsync(x => x.RunId == runId && x.Project.OwnerKey == ownerKey);
+            .FirstOrDefaultAsync(x => x.RunId == runId && x.Project != null && x.Project.OwnerKey == ownerKey);
 
         if (run is null) return null;
 
@@ -147,13 +147,13 @@ public sealed class SqlTestRunStore : ITestRunStore
 
         var run = await _db.TestRuns
             .Include(x => x.Project)
-            .FirstOrDefaultAsync(x => x.RunId == runId && x.Project.OwnerKey == ownerKey);
+            .FirstOrDefaultAsync(x => x.RunId == runId && x.Project != null && x.Project.OwnerKey == ownerKey);
         if (run is null)
             return false;
 
         var baselineExists = await _db.TestRuns
             .Include(x => x.Project)
-            .AnyAsync(x => x.RunId == baselineRunId && x.Project.OwnerKey == ownerKey);
+            .AnyAsync(x => x.RunId == baselineRunId && x.Project != null && x.Project.OwnerKey == ownerKey);
         if (!baselineExists)
             return false;
 
@@ -176,7 +176,7 @@ public sealed class SqlTestRunStore : ITestRunStore
         var q = _db.TestRuns
             .AsNoTracking()
             .Include(x => x.Project)
-            .Where(x => x.Project.ProjectKey == projectKey && x.Project.OwnerKey == ownerKey);
+            .Where(x => x.Project != null && x.Project.ProjectKey == projectKey && x.Project.OwnerKey == ownerKey);
 
         if (!string.IsNullOrWhiteSpace(operationId))
         {
