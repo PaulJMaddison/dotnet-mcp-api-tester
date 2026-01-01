@@ -25,18 +25,19 @@ public sealed class RunHistoryTools
     {
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
         operationId = string.IsNullOrWhiteSpace(operationId) ? null : operationId.Trim();
+        var normalizedTake = Math.Clamp(take, 1, 200);
 
         _logger.LogInformation(
             "Listing runs for project {ProjectKey} with operation {OperationId} (take {Take})",
             projectKey,
             operationId ?? "(all)",
-            take);
+            normalizedTake);
 
         // Day 14: store supports filtering (file store folder today, SQL WHERE later)
         var result = await _store.ListAsync(
             OwnerKeyDefaults.Default,
             projectKey,
-            new PageRequest(take, 0),
+            new PageRequest(normalizedTake, 0),
             SortField.StartedUtc,
             SortDirection.Desc,
             operationId);
@@ -44,7 +45,7 @@ public sealed class RunHistoryTools
         return new
         {
             projectKey,
-            pageSize = take,
+            pageSize = normalizedTake,
             total = result.Total,
             nextPageToken = result.NextOffset?.ToString(),
             runs = result.Items.Select(r => new
@@ -75,7 +76,7 @@ public sealed class RunHistoryTools
 
         var run = await _store.GetAsync(OwnerKeyDefaults.Default, id);
         if (run is null)
-            return new { isError = true, error = $"Run not found: {runId}" };
+            return new { run = (object?)null };
 
         return new
         {

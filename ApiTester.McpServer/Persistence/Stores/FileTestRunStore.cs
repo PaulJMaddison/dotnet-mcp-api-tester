@@ -30,6 +30,7 @@ public sealed class FileTestRunStore : ITestRunStore
     public async Task SaveAsync(TestRunRecord record)
     {
         if (record is null) throw new ArgumentNullException(nameof(record));
+        if (record.Result is null) throw new ArgumentNullException(nameof(record.Result));
         var ownerKey = string.IsNullOrWhiteSpace(record.OwnerKey) ? OwnerKeyDefaults.Default : record.OwnerKey.Trim();
         var projectKey = string.IsNullOrWhiteSpace(record.ProjectKey) ? "default" : record.ProjectKey.Trim();
 
@@ -42,7 +43,25 @@ public sealed class FileTestRunStore : ITestRunStore
             ownerKey,
             projectKey,
             path);
-        var json = JsonSerializer.Serialize(record, JsonDefaults.Default);
+        record.Result.ClassificationSummary = ResultClassificationRules.Summarize(record.Result.Results);
+
+        var recordToSave = new TestRunRecord
+        {
+            RunId = record.RunId,
+            Actor = record.Actor,
+            Environment = record.Environment,
+            PolicySnapshot = record.PolicySnapshot,
+            OwnerKey = ownerKey,
+            ProjectKey = projectKey,
+            OperationId = record.OperationId,
+            SpecId = record.SpecId,
+            BaselineRunId = record.BaselineRunId,
+            StartedUtc = record.StartedUtc.ToUniversalTime(),
+            CompletedUtc = record.CompletedUtc.ToUniversalTime(),
+            Result = record.Result
+        };
+
+        var json = JsonSerializer.Serialize(recordToSave, JsonDefaults.Default);
 
         await File.WriteAllTextAsync(path, json);
     }
@@ -68,7 +87,10 @@ public sealed class FileTestRunStore : ITestRunStore
             var json = await File.ReadAllTextAsync(candidate);
             var record = JsonSerializer.Deserialize<TestRunRecord>(json, JsonDefaults.Default);
             if (record is not null)
+            {
+                record = NormalizeRecord(record, ownerKey, Path.GetFileName(projectDir) ?? "default");
                 record.Result.ClassificationSummary = ResultClassificationRules.Summarize(record.Result.Results);
+            }
             return record;
         }
 
@@ -214,5 +236,32 @@ public sealed class FileTestRunStore : ITestRunStore
         var chars = s.Where(c => !invalid.Contains(c)).ToArray();
         var cleaned = new string(chars).Trim();
         return string.IsNullOrWhiteSpace(cleaned) ? "default" : cleaned;
+    }
+
+    private static TestRunRecord NormalizeRecord(TestRunRecord record, string ownerKey, string projectKey)
+    {
+        var normalizedOwnerKey = string.IsNullOrWhiteSpace(record.OwnerKey) ? ownerKey : record.OwnerKey.Trim();
+        var normalizedProjectKey = string.IsNullOrWhiteSpace(record.ProjectKey) ? projectKey : record.ProjectKey.Trim();
+        if (!string.Equals(normalizedOwnerKey, record.OwnerKey, StringComparison.Ordinal) ||
+            !string.Equals(normalizedProjectKey, record.ProjectKey, StringComparison.Ordinal))
+        {
+            return new TestRunRecord
+            {
+                RunId = record.RunId,
+                Actor = record.Actor,
+                Environment = record.Environment,
+                PolicySnapshot = record.PolicySnapshot,
+                OwnerKey = string.IsNullOrWhiteSpace(normalizedOwnerKey) ? OwnerKeyDefaults.Default : normalizedOwnerKey,
+                ProjectKey = string.IsNullOrWhiteSpace(normalizedProjectKey) ? "default" : normalizedProjectKey,
+                OperationId = record.OperationId,
+                SpecId = record.SpecId,
+                BaselineRunId = record.BaselineRunId,
+                StartedUtc = record.StartedUtc,
+                CompletedUtc = record.CompletedUtc,
+                Result = record.Result
+            };
+        }
+
+        return record;
     }
 }

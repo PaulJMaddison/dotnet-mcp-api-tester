@@ -24,6 +24,9 @@ public sealed class ProjectTools
     [McpServerTool, Description("Create a new project. Returns projectId.")]
     public async Task<object> ApiCreateProject(string name, CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(name))
+            return new { isError = true, error = "Project name is required." };
+
         var project = await _projects.CreateAsync(OwnerKeyDefaults.Default, name, ct);
         _ctx.SetCurrentProject(project.ProjectId);
         _logger.LogInformation("Created project {ProjectId} with name {ProjectName}", project.ProjectId, project.Name);
@@ -33,10 +36,11 @@ public sealed class ProjectTools
     [McpServerTool, Description("List recent projects.")]
     public async Task<object> ApiListProjects(int take = 50, CancellationToken ct = default)
     {
-        var result = await _projects.ListAsync(OwnerKeyDefaults.Default, new PageRequest(take, 0), SortField.CreatedUtc, SortDirection.Desc, ct);
+        var normalizedTake = Math.Clamp(take, 1, 200);
+        var result = await _projects.ListAsync(OwnerKeyDefaults.Default, new PageRequest(normalizedTake, 0), SortField.CreatedUtc, SortDirection.Desc, ct);
         return new
         {
-            pageSize = take,
+            pageSize = normalizedTake,
             total = result.Total,
             nextPageToken = result.NextOffset?.ToString(),
             projects = result.Items

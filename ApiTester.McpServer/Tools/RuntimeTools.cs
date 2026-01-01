@@ -15,13 +15,20 @@ public sealed class RuntimeTools
     }
 
     [McpServerTool, Description("Set the base URL used for executing API requests. Overrides servers[] in the OpenAPI spec.")]
-    public string ApiSetBaseUrl(string baseUrl)
+    public object ApiSetBaseUrl(string baseUrl)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new ArgumentException("baseUrl is required", nameof(baseUrl));
 
-        _runtime.SetBaseUrl(baseUrl);
-        return $"Base URL set to: {_runtime.BaseUrl}";
+        var trimmed = baseUrl.Trim();
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return new { isError = true, error = "Base URL must be an absolute http/https URL." };
+        }
+
+        _runtime.SetBaseUrl(trimmed);
+        return new { ok = true, baseUrl = _runtime.BaseUrl };
     }
 
     [McpServerTool, Description("Set a Bearer token for the Authorization header used when executing API requests.")]
