@@ -5,6 +5,8 @@ VisualStudioVersion = 17.14.36705.20
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.McpServer", "ApiTester.McpServer\ApiTester.McpServer.csproj", "{56B1F160-5418-4B85-821B-1DA9C5209370}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiTester.AI", "ApiTester.AI\ApiTester.AI.csproj", "{4DF70AA8-C0C9-4718-A973-C423BEF8E2BF}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
@@ -36,6 +38,10 @@ Global
 		{56B1F160-5418-4B85-821B-1DA9C5209370}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{56B1F160-5418-4B85-821B-1DA9C5209370}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{56B1F160-5418-4B85-821B-1DA9C5209370}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4DF70AA8-C0C9-4718-A973-C423BEF8E2BF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4DF70AA8-C0C9-4718-A973-C423BEF8E2BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4DF70AA8-C0C9-4718-A973-C423BEF8E2BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4DF70AA8-C0C9-4718-A973-C423BEF8E2BF}.Release|Any CPU.Build.0 = Release|Any CPU
 		{D9D844FE-C4A5-4B27-AF9C-7DDF3A1F13ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{D9D844FE-C4A5-4B27-AF9C-7DDF3A1F13ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D9D844FE-C4A5-4B27-AF9C-7DDF3A1F13ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
