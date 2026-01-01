@@ -32,6 +32,7 @@ else if (Model.NotFound)
 }
 else if (Model.Run is not null)
 {
+    <h2>Run Summary</h2>
     <div class="summary-grid">
         <div class="summary-card">
             <span>Total Cases</span>
@@ -82,22 +83,22 @@ else if (Model.Run is not null)
             <table>
                 <thead>
                     <tr>
-                        <th scope="col">Name</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Status Code</th>
-                        <th scope="col" class="table-number">Duration (ms)</th>
-                        <th scope="col">Method</th>
-                        <th scope="col">URL</th>
+                        <th>Name</th>
+                        <th>Passed</th>
+                        <th>Blocked</th>
+                        <th>Status Code</th>
+                        <th>Duration (ms)</th>
+                        <th>Method</th>
+                        <th>URL</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var result in Model.Run.Result.Results)
                     {
-                        var statusText = result.Pass ? "Pass" : result.Blocked ? "Blocked" : "Fail";
-                        var badgeClass = result.Pass ? "badge-pass" : result.Blocked ? "badge-blocked" : "badge-fail";
                         <tr>
                             <td>@result.Name</td>
-                            <td><span class="badge @badgeClass">@statusText</span></td>
+                            <td>@(result.Pass ? "Yes" : "No")</td>
+                            <td>@(result.Blocked ? "Yes" : "No")</td>
                             <td>@(result.StatusCode?.ToString() ?? "—")</td>
                             <td class="table-number">@DisplayFormatters.FormatDurationMs(result.DurationMs)</td>
                             <td>@(string.IsNullOrWhiteSpace(result.Method) ? "—" : result.Method)</td>

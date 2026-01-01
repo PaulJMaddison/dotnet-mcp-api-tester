@@ -21,7 +21,7 @@ public class DetailsModel : PageModel
 
     public int Take { get; private set; } = 20;
 
-    public bool NotFound { get; private set; }
+    public new bool NotFound { get; private set; }
 
     public string? ErrorMessage { get; private set; }
 

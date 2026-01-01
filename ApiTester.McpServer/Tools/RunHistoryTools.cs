@@ -50,19 +50,19 @@ public sealed class RunHistoryTools
             nextPageToken = result.NextOffset?.ToString(),
             runs = result.Items.Select(r => new
             {
-                r.RunId,
-                r.ProjectKey,
-                r.OperationId,
-                r.StartedUtc,
-                r.CompletedUtc,
+                runId = r.RunId,
+                projectKey = r.ProjectKey,
+                operationId = r.OperationId,
+                startedUtc = r.StartedUtc,
+                completedUtc = r.CompletedUtc,
                 summary = new
                 {
-                    r.Result.TotalCases,
-                    r.Result.Passed,
-                    r.Result.Failed,
-                    r.Result.Blocked,
-                    r.Result.TotalDurationMs,
-                    r.Result.ClassificationSummary
+                    totalCases = r.Result.TotalCases,
+                    passed = r.Result.Passed,
+                    failed = r.Result.Failed,
+                    blocked = r.Result.Blocked,
+                    totalDurationMs = r.Result.TotalDurationMs,
+                    classificationSummary = r.Result.ClassificationSummary
                 }
             })
         };

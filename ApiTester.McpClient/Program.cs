@@ -1,123 +1,127 @@
 ﻿using System.Diagnostics;
 using System.Text.Json;
 
-static async Task<int> Main()
+namespace ApiTester.McpClient;
+
+internal static class Program
 {
-    var serverProjectPath = Path.GetFullPath(Path.Combine(
-        AppContext.BaseDirectory, "..", "..", "..", "..", "ApiTester.McpServer", "ApiTester.McpServer.csproj"));
-
-    var httpbinSpecPath = Path.GetFullPath(Path.Combine(
-        AppContext.BaseDirectory, "..", "..", "..", "Specs", "httpbin.openapi.json"));
-
-    var psi = new ProcessStartInfo
+    public static async Task<int> Main()
     {
-        FileName = "dotnet",
-        Arguments = $"run --project \"{serverProjectPath}\"",
-        RedirectStandardInput = true,
-        RedirectStandardOutput = true,
-        RedirectStandardError = true,
-        UseShellExecute = false,
-        CreateNoWindow = true,
-        WorkingDirectory = Path.GetDirectoryName(serverProjectPath)! // ensures server content root is stable
-    };
+        var serverProjectPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "..", "ApiTester.McpServer", "ApiTester.McpServer.csproj"));
 
-    // Force dev so appsettings.Development.json (SQL) is used when running via the client
-    psi.Environment["DOTNET_ENVIRONMENT"] = "Development";
-    psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
+        var httpbinSpecPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "Specs", "httpbin.openapi.json"));
 
-    using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start MCP server process.");
-
-    _ = Task.Run(async () =>
-    {
-        while (!proc.StandardError.EndOfStream)
+        var psi = new ProcessStartInfo
         {
-            var line = await proc.StandardError.ReadLineAsync();
-            if (!string.IsNullOrWhiteSpace(line))
-                Console.Error.WriteLine("[server] " + line);
-        }
-    });
+            FileName = "dotnet",
+            Arguments = $"run --project \"{serverProjectPath}\"",
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = Path.GetDirectoryName(serverProjectPath)! // ensures server content root is stable
+        };
 
-    using var input = proc.StandardInput;
-    using var output = proc.StandardOutput;
+        // Force dev so appsettings.Development.json (SQL) is used when running via the client
+        psi.Environment["DOTNET_ENVIRONMENT"] = "Development";
+        psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Development";
 
-    var id = 0;
-    var exitCode = 0;
+        using var proc = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start MCP server process.");
 
-    var jsonPretty = new JsonSerializerOptions { WriteIndented = true };
-
-    static string TryPrettyJson(string? maybeJson, JsonSerializerOptions pretty)
-    {
-        if (string.IsNullOrWhiteSpace(maybeJson)) return maybeJson ?? "";
-
-        var s = maybeJson.Trim();
-        if (!(s.StartsWith("{") || s.StartsWith("["))) return maybeJson;
-
-        try
+        _ = Task.Run(async () =>
         {
-            using var doc = JsonDocument.Parse(s);
-            return JsonSerializer.Serialize(doc.RootElement, pretty);
-        }
-        catch
+            while (!proc.StandardError.EndOfStream)
+            {
+                var line = await proc.StandardError.ReadLineAsync();
+                if (!string.IsNullOrWhiteSpace(line))
+                    Console.Error.WriteLine("[server] " + line);
+            }
+        });
+
+        using var input = proc.StandardInput;
+        using var output = proc.StandardOutput;
+
+        var id = 0;
+        var exitCode = 0;
+
+        var jsonPretty = new JsonSerializerOptions { WriteIndented = true };
+
+        static string TryPrettyJson(string? maybeJson, JsonSerializerOptions pretty)
         {
-            return maybeJson;
-        }
-    }
+            if (string.IsNullOrWhiteSpace(maybeJson)) return maybeJson ?? "";
 
-    string Pretty(JsonElement el) => JsonSerializer.Serialize(el, jsonPretty);
+            var s = maybeJson.Trim();
+            if (!(s.StartsWith("{") || s.StartsWith("["))) return maybeJson;
 
-    void PrintSection(string title)
-    {
-        Console.WriteLine();
-        Console.WriteLine(new string('=', 80));
-        Console.WriteLine(title);
-        Console.WriteLine(new string('=', 80));
-    }
-
-    void PrintToolTextOrRaw(string label, JsonDocument response)
-    {
-        Console.WriteLine();
-        Console.WriteLine(label);
-
-        if (response.RootElement.TryGetProperty("result", out var result) &&
-            result.TryGetProperty("content", out var content) &&
-            content.ValueKind == JsonValueKind.Array &&
-            content.GetArrayLength() > 0 &&
-            content[0].TryGetProperty("text", out var textEl))
-        {
-            var text = textEl.GetString();
-            Console.WriteLine(TryPrettyJson(text, jsonPretty));
-            return;
+            try
+            {
+                using var doc = JsonDocument.Parse(s);
+                return JsonSerializer.Serialize(doc.RootElement, pretty);
+            }
+            catch
+            {
+                return maybeJson;
+            }
         }
 
-        Console.WriteLine(Pretty(response.RootElement));
-    }
+        string Pretty(JsonElement el) => JsonSerializer.Serialize(el, jsonPretty);
 
-    static bool ToolCallIsError(JsonDocument response)
-    {
-        return response.RootElement.TryGetProperty("result", out var r) &&
-               r.TryGetProperty("isError", out var isError) &&
-               isError.ValueKind == JsonValueKind.True;
-    }
+        void PrintSection(string title)
+        {
+            Console.WriteLine();
+            Console.WriteLine(new string('=', 80));
+            Console.WriteLine(title);
+            Console.WriteLine(new string('=', 80));
+        }
 
-    static bool IsExpectedBlocked(JsonElement resultItem)
-    {
-        if (!resultItem.TryGetProperty("blocked", out var blockedEl) || blockedEl.ValueKind != JsonValueKind.True)
-            return false;
+        void PrintToolTextOrRaw(string label, JsonDocument response)
+        {
+            Console.WriteLine();
+            Console.WriteLine(label);
 
-        if (!resultItem.TryGetProperty("blockReason", out var reasonEl) || reasonEl.ValueKind != JsonValueKind.String)
-            return false;
+            if (response.RootElement.TryGetProperty("result", out var result) &&
+                result.TryGetProperty("content", out var content) &&
+                content.ValueKind == JsonValueKind.Array &&
+                content.GetArrayLength() > 0 &&
+                content[0].TryGetProperty("text", out var textEl))
+            {
+                var text = textEl.GetString();
+                Console.WriteLine(TryPrettyJson(text, jsonPretty));
+                return;
+            }
 
-        var reason = reasonEl.GetString() ?? "";
+            Console.WriteLine(Pretty(response.RootElement));
+        }
 
-        return reason.StartsWith("Missing required path param", StringComparison.OrdinalIgnoreCase) ||
-               reason.StartsWith("Missing required query param", StringComparison.OrdinalIgnoreCase) ||
-               reason.StartsWith("Missing required header", StringComparison.OrdinalIgnoreCase);
-    }
+        static bool ToolCallIsError(JsonDocument response)
+        {
+            return response.RootElement.TryGetProperty("result", out var r) &&
+                   r.TryGetProperty("isError", out var isError) &&
+                   isError.ValueKind == JsonValueKind.True;
+        }
 
-    static bool IsHttpbinFlake(JsonElement resultItem)
-    {
-        if (resultItem.TryGetProperty("statusCode", out var scEl) &&
-            scEl.ValueKind == JsonValueKind.Number &&
+        static bool IsExpectedBlocked(JsonElement resultItem)
+        {
+            if (!resultItem.TryGetProperty("blocked", out var blockedEl) || blockedEl.ValueKind != JsonValueKind.True)
+                return false;
+
+            if (!resultItem.TryGetProperty("blockReason", out var reasonEl) || reasonEl.ValueKind != JsonValueKind.String)
+                return false;
+
+            var reason = reasonEl.GetString() ?? "";
+
+            return reason.StartsWith("Missing required path param", StringComparison.OrdinalIgnoreCase) ||
+                   reason.StartsWith("Missing required query param", StringComparison.OrdinalIgnoreCase) ||
+                   reason.StartsWith("Missing required header", StringComparison.OrdinalIgnoreCase);
+        }
+
+        static bool IsHttpbinFlake(JsonElement resultItem)
+        {
+            if (resultItem.TryGetProperty("statusCode", out var scEl) &&
+                scEl.ValueKind == JsonValueKind.Number &&
             scEl.GetInt32() == 502)
             return true;
 
@@ -554,5 +558,4 @@ static async Task<int> Main()
 
     return exitCode;
 }
-
-return await Main();
+}
