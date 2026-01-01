@@ -209,6 +209,122 @@ app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore s
         : Results.Ok(ProjectMapping.ToDto(project));
 });
 
+app.MapGet("/api/projects/{projectId}/environments", async (string projectId, IProjectStore projectStore, IEnvironmentStore environmentStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    var environments = await environmentStore.ListAsync(ownerKey, id, ct);
+    return Results.Ok(EnvironmentMapping.ToListResponse(environments));
+});
+
+app.MapPost("/api/projects/{projectId}/environments", async (string projectId, EnvironmentCreateRequest request, IProjectStore projectStore, IEnvironmentStore environmentStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (!RequestValidation.TryValidateRequiredName(request?.Name, out var nameError))
+        return InvalidRequest(nameError);
+
+    if (!RequestValidation.TryNormalizeBaseUrl(request?.BaseUrl, out var normalizedBaseUrl, out var baseUrlError))
+        return InvalidRequest(baseUrlError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    try
+    {
+        var environment = await environmentStore.CreateAsync(ownerKey, id, request!.Name!, normalizedBaseUrl, ct);
+        logger.LogInformation("Created environment {EnvironmentId} for project {ProjectId}", environment.EnvironmentId, id);
+        return Results.Ok(EnvironmentMapping.ToDto(environment));
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Problem(title: "Invalid request", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
+    }
+});
+
+app.MapGet("/api/projects/{projectId}/environments/{environmentId}", async (string projectId, string environmentId, IProjectStore projectStore, IEnvironmentStore environmentStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (!RequestValidation.TryParseGuid(environmentId, out var envId, out var envError))
+        return InvalidRequest(envError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    var environment = await environmentStore.GetAsync(ownerKey, id, envId, ct);
+    return environment is null
+        ? Results.NotFound()
+        : Results.Ok(EnvironmentMapping.ToDto(environment));
+});
+
+app.MapPut("/api/projects/{projectId}/environments/{environmentId}", async (string projectId, string environmentId, EnvironmentUpdateRequest request, IProjectStore projectStore, IEnvironmentStore environmentStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (!RequestValidation.TryParseGuid(environmentId, out var envId, out var envError))
+        return InvalidRequest(envError);
+
+    if (!RequestValidation.TryValidateRequiredName(request?.Name, out var nameError))
+        return InvalidRequest(nameError);
+
+    if (!RequestValidation.TryNormalizeBaseUrl(request?.BaseUrl, out var normalizedBaseUrl, out var baseUrlError))
+        return InvalidRequest(baseUrlError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    try
+    {
+        var environment = await environmentStore.UpdateAsync(ownerKey, id, envId, request!.Name!, normalizedBaseUrl, ct);
+        if (environment is null)
+            return Results.NotFound();
+
+        logger.LogInformation("Updated environment {EnvironmentId} for project {ProjectId}", envId, id);
+        return Results.Ok(EnvironmentMapping.ToDto(environment));
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Problem(title: "Invalid request", detail: ex.Message, statusCode: StatusCodes.Status409Conflict);
+    }
+});
+
+app.MapDelete("/api/projects/{projectId}/environments/{environmentId}", async (string projectId, string environmentId, IProjectStore projectStore, IEnvironmentStore environmentStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (!RequestValidation.TryParseGuid(environmentId, out var envId, out var envError))
+        return InvalidRequest(envError);
+
+    var ownerKey = httpContext.GetOwnerKey();
+    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    var removed = await environmentStore.DeleteAsync(ownerKey, id, envId, ct);
+    if (!removed)
+        return Results.NotFound();
+
+    logger.LogInformation("Deleted environment {EnvironmentId} for project {ProjectId}", envId, id);
+    return Results.NoContent();
+});
+
 app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId, HttpRequest request, IProjectStore projectStore, IOpenApiSpecStore specStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
@@ -492,9 +608,11 @@ app.MapGet("/api/projects/{projectId}/testplans/{operationId}", async (
 app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     string projectId,
     string operationId,
+    string? environment,
     IProjectStore projectStore,
     IOpenApiSpecStore specStore,
     ITestPlanStore planStore,
+    IEnvironmentStore environmentStore,
     TestPlanRunner runner,
     ApiRuntimeConfig runtime,
     HttpContext httpContext,
@@ -521,14 +639,21 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     if (doc is null)
         return Results.Problem(title: "OpenAPI parse error", detail: "Stored OpenAPI spec could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
 
-    if (string.IsNullOrWhiteSpace(runtime.BaseUrl))
-    {
-        var baseUrl = ResolveBaseUrl(doc);
-        if (string.IsNullOrWhiteSpace(baseUrl))
-            return Results.Problem(title: "Base URL missing", detail: "OpenAPI spec does not define servers and no runtime base URL is configured.", statusCode: StatusCodes.Status409Conflict);
+    if (!RequestValidation.TryNormalizeOptionalValue(environment, out var environmentName, out var environmentError))
+        return InvalidRequest(environmentError);
 
-        runtime.SetBaseUrl(baseUrl);
+    string? environmentBaseUrl = null;
+    if (!string.IsNullOrWhiteSpace(environmentName))
+    {
+        var environmentRecord = await environmentStore.GetByNameAsync(ownerKey, id, environmentName, ct);
+        if (environmentRecord is null)
+            return Results.NotFound();
+
+        environmentBaseUrl = environmentRecord.BaseUrl;
     }
+
+    if (!EnvironmentSelector.TryApplyBaseUrl(runtime, doc, environmentBaseUrl, out _, out var selectionError))
+        return Results.Problem(title: "Base URL missing", detail: selectionError, statusCode: StatusCodes.Status409Conflict);
 
     var trimmedOperationId = operationId.Trim();
     TestPlan plan;
@@ -662,15 +787,6 @@ static async Task<IResult> NotFoundOrForbiddenAsync(IProjectStore store, Guid pr
         return Results.StatusCode(StatusCodes.Status403Forbidden);
 
     return Results.NotFound();
-}
-
-static string? ResolveBaseUrl(OpenApiDocument doc)
-{
-    if (doc.Servers is null || doc.Servers.Count == 0)
-        return null;
-
-    var serverUrl = doc.Servers[0].Url;
-    return string.IsNullOrWhiteSpace(serverUrl) ? null : serverUrl.Trim().TrimEnd('/');
 }
 
 static (string path, OperationType method, OpenApiOperation op)? FindOperation(OpenApiDocument doc, string operationId)
