@@ -66,7 +66,10 @@ public sealed class FileTestRunStore : ITestRunStore
                 continue;
 
             var json = await File.ReadAllTextAsync(candidate);
-            return JsonSerializer.Deserialize<TestRunRecord>(json, JsonDefaults.Default);
+            var record = JsonSerializer.Deserialize<TestRunRecord>(json, JsonDefaults.Default);
+            if (record is not null)
+                record.Result.ClassificationSummary = ResultClassificationRules.Summarize(record.Result.Results);
+            return record;
         }
 
         return null;
@@ -170,6 +173,8 @@ public sealed class FileTestRunStore : ITestRunStore
                     Result = record.Result
                 };
             }
+
+            record.Result.ClassificationSummary = ResultClassificationRules.Summarize(record.Result.Results);
 
             list.Add(record);
         }

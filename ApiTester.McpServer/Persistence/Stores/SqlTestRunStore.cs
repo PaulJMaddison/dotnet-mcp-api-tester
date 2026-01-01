@@ -24,6 +24,8 @@ public sealed class SqlTestRunStore : ITestRunStore
         var projectKey = string.IsNullOrWhiteSpace(record.ProjectKey) ? "default" : record.ProjectKey.Trim();
         var ownerKey = string.IsNullOrWhiteSpace(record.OwnerKey) ? OwnerKeyDefaults.Default : record.OwnerKey.Trim();
 
+        record.Result.ClassificationSummary = ResultClassificationRules.Summarize(record.Result.Results);
+
         var project = await EnsureProjectAsync(projectKey, ownerKey);
         _logger.LogInformation(
             "Saving run {RunId} for owner {OwnerKey} project {ProjectKey} (projectId {ProjectId})",
@@ -58,7 +60,8 @@ public sealed class SqlTestRunStore : ITestRunStore
                 DurationMs = r.DurationMs,
                 Pass = r.Pass,
                 FailureReason = r.FailureReason,
-                ResponseSnippet = r.ResponseSnippet
+                ResponseSnippet = r.ResponseSnippet,
+                Classification = r.Classification
             }).ToList()
         };
 
@@ -78,6 +81,26 @@ public sealed class SqlTestRunStore : ITestRunStore
 
         if (run is null) return null;
 
+        var caseResults = run.Results
+            .OrderBy(r => r.TestCaseResultId)
+            .Select(r => new TestCaseResult
+            {
+                Name = r.Name,
+                Blocked = r.Blocked,
+                BlockReason = r.BlockReason,
+                Method = r.Method,
+                Url = r.Url,
+                StatusCode = r.StatusCode,
+                DurationMs = r.DurationMs,
+                Pass = r.Pass,
+                FailureReason = r.FailureReason,
+                ResponseSnippet = r.ResponseSnippet,
+                Classification = r.Classification ?? ResultClassification.Pass
+            })
+            .ToList();
+
+        var classificationSummary = ResultClassificationRules.Summarize(caseResults);
+
         return new TestRunRecord
         {
             RunId = run.RunId,
@@ -95,22 +118,8 @@ public sealed class SqlTestRunStore : ITestRunStore
                 Failed = run.Failed,
                 Blocked = run.Blocked,
                 TotalDurationMs = run.TotalDurationMs,
-                Results = run.Results
-                    .OrderBy(r => r.TestCaseResultId)
-                    .Select(r => new TestCaseResult
-                    {
-                        Name = r.Name,
-                        Blocked = r.Blocked,
-                        BlockReason = r.BlockReason,
-                        Method = r.Method,
-                        Url = r.Url,
-                        StatusCode = r.StatusCode,
-                        DurationMs = r.DurationMs,
-                        Pass = r.Pass,
-                        FailureReason = r.FailureReason,
-                        ResponseSnippet = r.ResponseSnippet
-                    })
-                    .ToList()
+                ClassificationSummary = classificationSummary,
+                Results = caseResults
             }
         };
     }
@@ -171,29 +180,54 @@ public sealed class SqlTestRunStore : ITestRunStore
         };
 
         var runs = await ordered
+            .Include(x => x.Results)
             .Skip(request.Offset)
             .Take(request.PageSize)
             .ToListAsync(CancellationToken.None);
 
-        var items = runs.Select(run => new TestRunRecord
+        var items = runs.Select(run =>
         {
-            RunId = run.RunId,
-            OwnerKey = run.Project?.OwnerKey ?? ownerKey,
-            ProjectKey = run.Project?.ProjectKey ?? projectKey,
-            OperationId = run.OperationId,
-            BaselineRunId = run.BaselineRunId,
-            StartedUtc = new DateTimeOffset(run.StartedUtc, TimeSpan.Zero),
-            CompletedUtc = new DateTimeOffset(run.CompletedUtc, TimeSpan.Zero),
-            Result = new TestRunResult
+            var results = run.Results
+                .OrderBy(r => r.TestCaseResultId)
+                .Select(r => new TestCaseResult
+                {
+                    Name = r.Name,
+                    Blocked = r.Blocked,
+                    BlockReason = r.BlockReason,
+                    Method = r.Method,
+                    Url = r.Url,
+                    StatusCode = r.StatusCode,
+                    DurationMs = r.DurationMs,
+                    Pass = r.Pass,
+                    FailureReason = r.FailureReason,
+                    ResponseSnippet = r.ResponseSnippet,
+                    Classification = r.Classification ?? ResultClassification.Pass
+                })
+                .ToList();
+
+            var summary = ResultClassificationRules.Summarize(results);
+
+            return new TestRunRecord
             {
+                RunId = run.RunId,
+                OwnerKey = run.Project?.OwnerKey ?? ownerKey,
+                ProjectKey = run.Project?.ProjectKey ?? projectKey,
                 OperationId = run.OperationId,
-                TotalCases = run.TotalCases,
-                Passed = run.Passed,
-                Failed = run.Failed,
-                Blocked = run.Blocked,
-                TotalDurationMs = run.TotalDurationMs,
-                Results = new List<TestCaseResult>() // summaries don’t need case results
-            }
+                BaselineRunId = run.BaselineRunId,
+                StartedUtc = new DateTimeOffset(run.StartedUtc, TimeSpan.Zero),
+                CompletedUtc = new DateTimeOffset(run.CompletedUtc, TimeSpan.Zero),
+                Result = new TestRunResult
+                {
+                    OperationId = run.OperationId,
+                    TotalCases = run.TotalCases,
+                    Passed = run.Passed,
+                    Failed = run.Failed,
+                    Blocked = run.Blocked,
+                    TotalDurationMs = run.TotalDurationMs,
+                    ClassificationSummary = summary,
+                    Results = new List<TestCaseResult>() // summaries don’t need case results
+                }
+            };
         }).ToList();
 
         var itemCount = items.Count;

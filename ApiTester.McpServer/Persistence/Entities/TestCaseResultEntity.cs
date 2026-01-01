@@ -1,4 +1,6 @@
-﻿namespace ApiTester.McpServer.Persistence.Entities;
+﻿using ApiTester.McpServer.Models;
+
+namespace ApiTester.McpServer.Persistence.Entities;
 
 public sealed class TestCaseResultEntity
 {
@@ -20,4 +22,6 @@ public sealed class TestCaseResultEntity
     public bool Pass { get; set; }
     public string? FailureReason { get; set; }
     public string? ResponseSnippet { get; set; }
+
+    public ResultClassification? Classification { get; set; }
 }

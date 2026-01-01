@@ -4,6 +4,7 @@ using ApiTester.McpServer.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApiTester.McpServer.Migrations
 {
     [DbContext(typeof(ApiTesterDbContext))]
-    partial class ApiTesterDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260226090000_Day42_ResultClassification")]
+    partial class Day42_ResultClassification : Migration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -202,11 +204,11 @@ namespace ApiTester.McpServer.Migrations
                     b.Property<DateTime>("StartedUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("TotalCases")
-                        .HasColumnType("int");
-
                     b.Property<long>("TotalDurationMs")
                         .HasColumnType("bigint");
+
+                    b.Property<int>("TotalCases")
+                        .HasColumnType("int");
 
                     b.HasKey("RunId");
 
@@ -252,16 +254,18 @@ namespace ApiTester.McpServer.Migrations
 
             modelBuilder.Entity("ApiTester.McpServer.Persistence.Entities.TestRunEntity", b =>
                 {
-                    b.HasOne("ApiTester.McpServer.Persistence.Entities.TestRunEntity", "BaselineRun")
-                        .WithMany()
-                        .HasForeignKey("BaselineRunId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("ApiTester.McpServer.Persistence.Entities.ProjectEntity", "Project")
                         .WithMany("Runs")
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("ApiTester.McpServer.Persistence.Entities.TestRunEntity", "BaselineRun")
+                        .WithMany()
+                        .HasForeignKey("BaselineRunId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("BaselineRun");
 
                     b.Navigation("Project");
                 });
@@ -273,11 +277,6 @@ namespace ApiTester.McpServer.Migrations
                     b.Navigation("Runs");
 
                     b.Navigation("TestPlans");
-                });
-
-            modelBuilder.Entity("ApiTester.McpServer.Persistence.Entities.TestRunEntity", b =>
-                {
-                    b.Navigation("Results");
                 });
 #pragma warning restore 612, 618
         }
