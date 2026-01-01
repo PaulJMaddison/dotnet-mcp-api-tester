@@ -57,91 +57,98 @@ public sealed class PolicyTools
     [McpServerTool, Description("Update the API execution policy. Pass policyJson as a JSON object string.")]
     public object ApiSetPolicy(string policyJson)
     {
-        using var doc = JsonDocument.Parse(policyJson);
-        var root = doc.RootElement;
-
-        if (root.ValueKind != JsonValueKind.Object)
-            throw new InvalidOperationException("policyJson must be a JSON object.");
-
-        // Start from current policy, patch fields from JSON
-        var next = ClonePolicy(_cfg.Policy);
-
-        if (root.TryGetProperty("dryRun", out var dryRun))
-            next.DryRun = dryRun.GetBoolean();
-
-        if (root.TryGetProperty("allowedMethods", out var methods) && methods.ValueKind == JsonValueKind.Array)
+        try
         {
-            next.AllowedMethods.Clear();
-            foreach (var m in methods.EnumerateArray())
+            using var doc = JsonDocument.Parse(policyJson);
+            var root = doc.RootElement;
+
+            if (root.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("policyJson must be a JSON object.");
+
+            // Start from current policy, patch fields from JSON
+            var next = ClonePolicy(_cfg.Policy);
+
+            if (root.TryGetProperty("dryRun", out var dryRun))
+                next.DryRun = dryRun.GetBoolean();
+
+            if (root.TryGetProperty("allowedMethods", out var methods) && methods.ValueKind == JsonValueKind.Array)
             {
-                var s = (m.GetString() ?? "").Trim();
-                if (!string.IsNullOrWhiteSpace(s))
-                    next.AllowedMethods.Add(s);
-            }
-        }
-
-        if (root.TryGetProperty("allowedBaseUrls", out var urls) && urls.ValueKind == JsonValueKind.Array)
-        {
-            next.AllowedBaseUrls.Clear();
-            foreach (var u in urls.EnumerateArray())
-            {
-                var s = (u.GetString() ?? "").Trim();
-                if (string.IsNullOrWhiteSpace(s))
-                    continue;
-
-                // normalise: trim + remove trailing slash
-                s = s.TrimEnd('/');
-
-                // basic validation: must be absolute http/https URI
-                if (!Uri.TryCreate(s, UriKind.Absolute, out var uri) ||
-                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                next.AllowedMethods.Clear();
+                foreach (var m in methods.EnumerateArray())
                 {
-                    throw new InvalidOperationException($"Invalid allowedBaseUrl: {s}. Must be absolute http/https URL.");
+                    var s = (m.GetString() ?? "").Trim();
+                    if (!string.IsNullOrWhiteSpace(s))
+                        next.AllowedMethods.Add(s);
                 }
-
-                next.AllowedBaseUrls.Add(s);
             }
-        }
 
-        if (root.TryGetProperty("timeoutSeconds", out var timeoutSeconds))
+            if (root.TryGetProperty("allowedBaseUrls", out var urls) && urls.ValueKind == JsonValueKind.Array)
+            {
+                next.AllowedBaseUrls.Clear();
+                foreach (var u in urls.EnumerateArray())
+                {
+                    var s = (u.GetString() ?? "").Trim();
+                    if (string.IsNullOrWhiteSpace(s))
+                        continue;
+
+                    // normalise: trim + remove trailing slash
+                    s = s.TrimEnd('/');
+
+                    // basic validation: must be absolute http/https URI
+                    if (!Uri.TryCreate(s, UriKind.Absolute, out var uri) ||
+                        (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                    {
+                        throw new InvalidOperationException($"Invalid allowedBaseUrl: {s}. Must be absolute http/https URL.");
+                    }
+
+                    next.AllowedBaseUrls.Add(s);
+                }
+            }
+
+            if (root.TryGetProperty("timeoutSeconds", out var timeoutSeconds))
+            {
+                var seconds = timeoutSeconds.GetInt32();
+
+                // clamp to sane range for now
+                if (seconds < 1) seconds = 1;
+                if (seconds > 60) seconds = 60;
+
+                next.Timeout = TimeSpan.FromSeconds(seconds);
+            }
+
+            if (root.TryGetProperty("maxRequestBodyBytes", out var maxReq))
+            {
+                var v = maxReq.GetInt32();
+                if (v < 0) throw new InvalidOperationException("maxRequestBodyBytes must be >= 0.");
+                next.MaxRequestBodyBytes = v;
+            }
+
+            if (root.TryGetProperty("maxResponseBodyBytes", out var maxResp))
+            {
+                var v = maxResp.GetInt32();
+                if (v < 0) throw new InvalidOperationException("maxResponseBodyBytes must be >= 0.");
+                next.MaxResponseBodyBytes = v;
+            }
+
+            if (root.TryGetProperty("blockLocalhost", out var blockLocalhost))
+                next.BlockLocalhost = blockLocalhost.GetBoolean();
+
+            if (root.TryGetProperty("blockPrivateNetworks", out var blockPrivate))
+                next.BlockPrivateNetworks = blockPrivate.GetBoolean();
+
+            // Final sanity: if dryRun=false and allow list empty, that’s deny-by-default, which is fine.
+            // But do not allow blank methods list, default to GET if cleared accidentally.
+            if (next.AllowedMethods.Count == 0)
+                next.AllowedMethods.Add("GET");
+
+            ApplyPolicy(next);
+
+            return new { ok = true, policy = ApiGetPolicy() };
+        }
+        catch (Exception ex)
         {
-            var seconds = timeoutSeconds.GetInt32();
-
-            // clamp to sane range for now
-            if (seconds < 1) seconds = 1;
-            if (seconds > 60) seconds = 60;
-
-            next.Timeout = TimeSpan.FromSeconds(seconds);
+            return new { isError = true, error = ex.Message };
         }
-
-        if (root.TryGetProperty("maxRequestBodyBytes", out var maxReq))
-        {
-            var v = maxReq.GetInt32();
-            if (v < 0) throw new InvalidOperationException("maxRequestBodyBytes must be >= 0.");
-            next.MaxRequestBodyBytes = v;
-        }
-
-        if (root.TryGetProperty("maxResponseBodyBytes", out var maxResp))
-        {
-            var v = maxResp.GetInt32();
-            if (v < 0) throw new InvalidOperationException("maxResponseBodyBytes must be >= 0.");
-            next.MaxResponseBodyBytes = v;
-        }
-
-        if (root.TryGetProperty("blockLocalhost", out var blockLocalhost))
-            next.BlockLocalhost = blockLocalhost.GetBoolean();
-
-        if (root.TryGetProperty("blockPrivateNetworks", out var blockPrivate))
-            next.BlockPrivateNetworks = blockPrivate.GetBoolean();
-
-        // Final sanity: if dryRun=false and allow list empty, that’s deny-by-default, which is fine.
-        // But do not allow blank methods list, default to GET if cleared accidentally.
-        if (next.AllowedMethods.Count == 0)
-            next.AllowedMethods.Add("GET");
-
-        ApplyPolicy(next);
-
-        return new { ok = true, policy = ApiGetPolicy() };
     }
 
     private void ApplyPolicy(ApiExecutionPolicy policy)
