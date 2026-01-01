@@ -1,0 +1,25 @@
+<svg width="1200" height="560" viewBox="0 0 1200 560" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="560" rx="28" fill="#0F111A"/>
+  <rect x="72" y="96" width="1056" height="120" rx="24" fill="#1A1F2D" stroke="#3B4158" stroke-width="2"/>
+  <text x="112" y="148" fill="#E9EDFF" font-size="22" font-family="Segoe UI, sans-serif">Compliance evidence pipeline</text>
+  <text x="112" y="182" fill="#C8D2FF" font-size="18" font-family="Segoe UI, sans-serif">From run logs to audit-ready bundles with secure approvals.</text>
+  <rect x="96" y="276" width="240" height="180" rx="18" fill="#20263A" stroke="#3B4158" stroke-width="2"/>
+  <rect x="356" y="276" width="240" height="180" rx="18" fill="#20263A" stroke="#3B4158" stroke-width="2"/>
+  <rect x="616" y="276" width="240" height="180" rx="18" fill="#20263A" stroke="#3B4158" stroke-width="2"/>
+  <rect x="876" y="276" width="240" height="180" rx="18" fill="#20263A" stroke="#3B4158" stroke-width="2"/>
+  <text x="128" y="322" fill="#E9EDFF" font-size="18" font-family="Segoe UI, sans-serif">Capture</text>
+  <text x="128" y="352" fill="#C8D2FF" font-size="16" font-family="Segoe UI, sans-serif">Run logs + data</text>
+  <text x="388" y="322" fill="#E9EDFF" font-size="18" font-family="Segoe UI, sans-serif">Normalize</text>
+  <text x="388" y="352" fill="#C8D2FF" font-size="16" font-family="Segoe UI, sans-serif">Policy tags</text>
+  <text x="648" y="322" fill="#E9EDFF" font-size="18" font-family="Segoe UI, sans-serif">Approve</text>
+  <text x="648" y="352" fill="#C8D2FF" font-size="16" font-family="Segoe UI, sans-serif">Reviewer sign-off</text>
+  <text x="908" y="322" fill="#E9EDFF" font-size="18" font-family="Segoe UI, sans-serif">Archive</text>
+  <text x="908" y="352" fill="#C8D2FF" font-size="16" font-family="Segoe UI, sans-serif">Tamper-proof vault</text>
+  <path d="M336 366H356" stroke="#70789B" stroke-width="6" stroke-linecap="round"/>
+  <path d="M596 366H616" stroke="#70789B" stroke-width="6" stroke-linecap="round"/>
+  <path d="M856 366H876" stroke="#70789B" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="216" cy="432" r="26" fill="#1B2234" stroke="#596189" stroke-width="3"/>
+  <circle cx="476" cy="432" r="26" fill="#1B2234" stroke="#596189" stroke-width="3"/>
+  <circle cx="736" cy="432" r="26" fill="#1B2234" stroke="#596189" stroke-width="3"/>
+  <circle cx="996" cy="432" r="26" fill="#1B2234" stroke="#596189" stroke-width="3"/>
+</svg>
