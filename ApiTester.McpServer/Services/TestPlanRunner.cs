@@ -58,9 +58,16 @@ public sealed class TestPlanRunner
     }
 
     public async Task<TestRunRecord> RunPlanAsync(TestPlan plan, string projectKey, CancellationToken ct = default)
-        => await RunPlanAsync(plan, projectKey, OwnerKeyDefaults.Default, null, ct);
+        => await RunPlanAsync(plan, projectKey, OwnerKeyDefaults.Default, null, null, null, ct);
 
-    public async Task<TestRunRecord> RunPlanAsync(TestPlan plan, string projectKey, string ownerKey, Guid? specId, CancellationToken ct = default)
+    public async Task<TestRunRecord> RunPlanAsync(
+        TestPlan plan,
+        string projectKey,
+        string ownerKey,
+        Guid? specId,
+        string? actor,
+        string? environmentName,
+        CancellationToken ct = default)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
@@ -72,6 +79,10 @@ public sealed class TestPlanRunner
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
 
         var startedUtc = DateTimeOffset.UtcNow;
+        var auditActor = string.IsNullOrWhiteSpace(actor) ? ownerKey : actor.Trim();
+        var auditEnvironment = string.IsNullOrWhiteSpace(environmentName) ? null : environmentName.Trim();
+        var environmentSnapshot = new TestRunEnvironmentSnapshot(auditEnvironment, _cfg.BaseUrl);
+        var policySnapshot = ApiExecutionPolicySnapshot.FromPolicy(_cfg.Policy);
 
         _logger.LogInformation(
             "Executing test plan {OperationId} for owner {OwnerKey} project {ProjectKey} with {CaseCount} cases",
@@ -113,6 +124,9 @@ public sealed class TestPlanRunner
         var record = new TestRunRecord
         {
             RunId = Guid.NewGuid(),
+            Actor = auditActor,
+            Environment = environmentSnapshot,
+            PolicySnapshot = policySnapshot,
             OwnerKey = ownerKey,
             ProjectKey = projectKey,
             OperationId = plan.OperationId.Trim(),

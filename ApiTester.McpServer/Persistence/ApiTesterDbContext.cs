@@ -27,6 +27,9 @@ public sealed class ApiTesterDbContext : DbContext
         {
             b.HasKey(x => x.RunId);
             b.Property(x => x.OperationId).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Actor).HasMaxLength(100);
+            b.Property(x => x.EnvironmentName).HasMaxLength(100);
+            b.Property(x => x.EnvironmentBaseUrl).HasMaxLength(2048);
             b.HasIndex(x => new { x.ProjectId, x.StartedUtc });
             b.HasIndex(x => x.BaselineRunId);
             b.HasIndex(x => x.SpecId);
