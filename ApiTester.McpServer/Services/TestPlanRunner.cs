@@ -94,6 +94,7 @@ public sealed class TestPlanRunner
         var blocked = results.Count(x => x.Blocked);
         var passed = results.Count(x => !x.Blocked && x.Pass);
         var failed = results.Count(x => !x.Blocked && !x.Pass);
+        var classificationSummary = ResultClassificationRules.Summarize(results);
 
         var completedUtc = DateTimeOffset.UtcNow;
 
@@ -105,6 +106,7 @@ public sealed class TestPlanRunner
             Failed = failed,
             Blocked = blocked,
             TotalDurationMs = swTotal.ElapsedMilliseconds,
+            ClassificationSummary = classificationSummary,
             Results = results
         };
 

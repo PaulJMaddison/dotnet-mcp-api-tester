@@ -35,6 +35,31 @@ public class RunMappingTests
 
     private static TestRunRecord BuildRunRecord()
     {
+        var results = new List<TestCaseResult>
+        {
+            new()
+            {
+                Name = "case-1",
+                Method = "GET",
+                Url = "https://example.test",
+                StatusCode = 200,
+                DurationMs = 100,
+                Pass = true
+            },
+            new()
+            {
+                Name = "case-2",
+                Method = "POST",
+                Url = "https://example.test",
+                StatusCode = 500,
+                DurationMs = 200,
+                Pass = false,
+                FailureReason = "Error"
+            }
+        };
+
+        var summary = ResultClassificationRules.Summarize(results);
+
         return new TestRunRecord
         {
             RunId = Guid.NewGuid(),
@@ -50,28 +75,8 @@ public class RunMappingTests
                 Failed = 1,
                 Blocked = 0,
                 TotalDurationMs = 1234,
-                Results =
-                [
-                    new TestCaseResult
-                    {
-                        Name = "case-1",
-                        Method = "GET",
-                        Url = "https://example.test",
-                        StatusCode = 200,
-                        DurationMs = 100,
-                        Pass = true
-                    },
-                    new TestCaseResult
-                    {
-                        Name = "case-2",
-                        Method = "POST",
-                        Url = "https://example.test",
-                        StatusCode = 500,
-                        DurationMs = 200,
-                        Pass = false,
-                        FailureReason = "Error"
-                    }
-                ]
+                ClassificationSummary = summary,
+                Results = results
             }
         };
     }

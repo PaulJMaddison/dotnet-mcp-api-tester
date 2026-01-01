@@ -33,6 +33,8 @@ public sealed class TestRunResult
     public required int Blocked { get; init; }
     public required long TotalDurationMs { get; init; }
 
+    public ResultClassificationSummary ClassificationSummary { get; set; } = new();
+
     public List<TestCaseResult> Results { get; init; } = new();
 }
 
@@ -53,4 +55,6 @@ public sealed class TestCaseResult
     public string? FailureReason { get; init; }
 
     public string? ResponseSnippet { get; init; }
+
+    public ResultClassification Classification { get; set; }
 }

@@ -24,6 +24,8 @@ public sealed class SqlRunStore : IRunStore
             projectId,
             operationId);
 
+        result.ClassificationSummary = ResultClassificationRules.Summarize(result.Results);
+
         var run = new TestRunEntity
         {
             RunId = runId,
@@ -47,7 +49,8 @@ public sealed class SqlRunStore : IRunStore
                 DurationMs = r.DurationMs,
                 Pass = r.Pass,
                 FailureReason = r.FailureReason,
-                ResponseSnippet = r.ResponseSnippet
+                ResponseSnippet = r.ResponseSnippet,
+                Classification = r.Classification
             }).ToList()
         };
 
@@ -64,6 +67,25 @@ public sealed class SqlRunStore : IRunStore
 
         if (run is null) return null;
 
+        var caseResults = run.Results
+            .OrderBy(x => x.TestCaseResultId)
+            .Select(r => new TestCaseResult
+            {
+                Name = r.Name,
+                Blocked = r.Blocked,
+                BlockReason = r.BlockReason,
+                Method = r.Method,
+                Url = r.Url,
+                StatusCode = r.StatusCode,
+                DurationMs = r.DurationMs,
+                Pass = r.Pass,
+                FailureReason = r.FailureReason,
+                ResponseSnippet = r.ResponseSnippet
+            })
+            .ToList();
+
+        var classificationSummary = ResultClassificationRules.Summarize(caseResults);
+
         return new
         {
             runId = run.RunId,
@@ -79,21 +101,21 @@ public sealed class SqlRunStore : IRunStore
                 failed = run.Failed,
                 blocked = run.Blocked,
                 totalDurationMs = run.TotalDurationMs,
-                results = run.Results
-                    .OrderBy(x => x.TestCaseResultId)
-                    .Select(r => new
-                    {
-                        name = r.Name,
-                        blocked = r.Blocked,
-                        blockReason = r.BlockReason,
-                        method = r.Method,
-                        url = r.Url,
-                        statusCode = r.StatusCode,
-                        durationMs = r.DurationMs,
-                        pass = r.Pass,
-                        failureReason = r.FailureReason,
-                        responseSnippet = r.ResponseSnippet
-                    })
+                classificationSummary,
+                results = caseResults.Select(r => new
+                {
+                    name = r.Name,
+                    blocked = r.Blocked,
+                    blockReason = r.BlockReason,
+                    method = r.Method,
+                    url = r.Url,
+                    statusCode = r.StatusCode,
+                    durationMs = r.DurationMs,
+                    pass = r.Pass,
+                    failureReason = r.FailureReason,
+                    responseSnippet = r.ResponseSnippet,
+                    classification = r.Classification
+                })
             }
         };
     }

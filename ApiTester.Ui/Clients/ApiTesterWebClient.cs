@@ -199,7 +199,8 @@ public sealed record RunSummary(
     int Passed,
     int Failed,
     int Blocked,
-    long TotalDurationMs);
+    long TotalDurationMs,
+    ResultClassificationSummary ClassificationSummary);
 
 public sealed record RunDetailDto(
     Guid RunId,
@@ -216,6 +217,7 @@ public sealed record TestRunResult(
     int Failed,
     int Blocked,
     long TotalDurationMs,
+    ResultClassificationSummary ClassificationSummary,
     IReadOnlyList<TestCaseResult> Results);
 
 public sealed record TestCaseResult(
@@ -228,7 +230,24 @@ public sealed record TestCaseResult(
     long DurationMs,
     bool Pass,
     string? FailureReason,
-    string? ResponseSnippet);
+    string? ResponseSnippet,
+    ResultClassification Classification);
+
+public sealed record ResultClassificationSummary(
+    int Pass,
+    int Fail,
+    int BlockedExpected,
+    int BlockedUnexpected,
+    int FlakyExternal);
+
+public enum ResultClassification
+{
+    Pass,
+    Fail,
+    BlockedExpected,
+    BlockedUnexpected,
+    FlakyExternal
+}
 
 public sealed record OpenApiSpecMetadataDto(
     Guid ProjectId,

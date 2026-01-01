@@ -58,7 +58,8 @@ public sealed class RunHistoryTools
                     r.Result.Passed,
                     r.Result.Failed,
                     r.Result.Blocked,
-                    r.Result.TotalDurationMs
+                    r.Result.TotalDurationMs,
+                    r.Result.ClassificationSummary
                 }
             })
         };

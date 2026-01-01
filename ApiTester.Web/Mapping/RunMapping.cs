@@ -18,7 +18,8 @@ public static class RunMapping
             record.Result.Passed,
             record.Result.Failed,
             record.Result.Blocked,
-            record.Result.TotalDurationMs);
+            record.Result.TotalDurationMs,
+            record.Result.ClassificationSummary);
 
         return new RunSummaryDto(
             record.RunId,
