@@ -19,6 +19,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<FileProjectStore>();
         services.AddSingleton<FileOpenApiSpecStore>();
         services.AddSingleton<FileTestPlanStore>();
+        services.AddSingleton<FileEnvironmentStore>();
 
         if (selection.UseSqlProvider)
         {
@@ -34,10 +35,12 @@ public static class PersistenceServiceCollectionExtensions
             services.AddScoped<SqlProjectStore>();
             services.AddScoped<SqlOpenApiSpecStore>();
             services.AddScoped<SqlTestPlanStore>();
+            services.AddScoped<SqlEnvironmentStore>();
             services.AddScoped<ITestRunStore>(sp => sp.GetRequiredService<SqlTestRunStore>());
             services.AddScoped<IProjectStore>(sp => sp.GetRequiredService<SqlProjectStore>());
             services.AddScoped<IOpenApiSpecStore>(sp => sp.GetRequiredService<SqlOpenApiSpecStore>());
             services.AddScoped<ITestPlanStore>(sp => sp.GetRequiredService<SqlTestPlanStore>());
+            services.AddScoped<IEnvironmentStore>(sp => sp.GetRequiredService<SqlEnvironmentStore>());
         }
         else
         {
@@ -45,6 +48,7 @@ public static class PersistenceServiceCollectionExtensions
             services.AddSingleton<IProjectStore>(sp => sp.GetRequiredService<FileProjectStore>());
             services.AddSingleton<IOpenApiSpecStore>(sp => sp.GetRequiredService<FileOpenApiSpecStore>());
             services.AddSingleton<ITestPlanStore>(sp => sp.GetRequiredService<FileTestPlanStore>());
+            services.AddSingleton<IEnvironmentStore>(sp => sp.GetRequiredService<FileEnvironmentStore>());
         }
 
         return services;
