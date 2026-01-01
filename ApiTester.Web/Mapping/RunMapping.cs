@@ -63,4 +63,46 @@ public static class RunMapping
             environment,
             policy);
     }
+
+    public static RunComplianceReportResponse ToComplianceReport(TestRunRecord record)
+    {
+        var environment = record.Environment is null
+            ? null
+            : new RunEnvironmentSnapshot(record.Environment.Name, record.Environment.BaseUrl);
+
+        var audit = new ComplianceAuditMetadata(
+            record.Actor,
+            record.ProjectKey,
+            record.OperationId,
+            record.StartedUtc,
+            record.CompletedUtc,
+            environment);
+
+        var policy = record.PolicySnapshot is null
+            ? null
+            : new CompliancePolicySection(
+                record.PolicySnapshot.DryRun,
+                record.PolicySnapshot.AllowedMethods);
+
+        var ssrf = record.PolicySnapshot is null
+            ? null
+            : new ComplianceSsrfSection(
+                record.PolicySnapshot.AllowedBaseUrls,
+                record.PolicySnapshot.BlockLocalhost,
+                record.PolicySnapshot.BlockPrivateNetworks);
+
+        var limits = record.PolicySnapshot is null
+            ? null
+            : new ComplianceLimitSection(
+                record.PolicySnapshot.TimeoutSeconds,
+                record.PolicySnapshot.MaxRequestBodyBytes,
+                record.PolicySnapshot.MaxResponseBodyBytes);
+
+        return new RunComplianceReportResponse(
+            record.RunId,
+            audit,
+            policy,
+            ssrf,
+            limits);
+    }
 }
