@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel;
 using ApiTester.McpServer.Options;
+using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Stores;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.Server;
@@ -10,11 +11,13 @@ namespace ApiTester.McpServer.Tools;
 public sealed class PersistenceTools
 {
     private readonly ITestRunStore _store;
+    private readonly IProjectStore _projects;
     private readonly IOptions<PersistenceOptions> _opts;
 
-    public PersistenceTools(ITestRunStore store, IOptions<PersistenceOptions> opts)
+    public PersistenceTools(ITestRunStore store, IProjectStore projects, IOptions<PersistenceOptions> opts)
     {
         _store = store;
+        _projects = projects;
         _opts = opts;
     }
 
@@ -22,12 +25,14 @@ public sealed class PersistenceTools
     public object ApiPersistenceStatus()
     {
         var p = _opts.Value;
+        var selection = PersistenceProviderSelector.Select(p);
 
         return new
         {
-            provider = (p.Provider ?? "File").Trim(),
+            provider = selection.Provider.ToString(),
             hasConnectionString = !string.IsNullOrWhiteSpace(p.ConnectionString),
-            storeImplementation = _store.GetType().FullName
+            testRunStore = _store.GetType().FullName,
+            projectStore = _projects.GetType().FullName
         };
     }
 }

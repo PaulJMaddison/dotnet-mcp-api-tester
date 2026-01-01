@@ -28,7 +28,7 @@ builder.Services.AddScoped<TestPlanRunner>();
 
 builder.Services.AddHttpClient();
 
-builder.Services.AddSingleton<ProjectContext>();
+builder.Services.AddScoped<ProjectContext>();
 builder.Services.AddApiTesterPersistence(builder.Configuration);
 
 builder.Services
