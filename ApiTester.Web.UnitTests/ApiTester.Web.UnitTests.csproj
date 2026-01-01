@@ -26,4 +26,10 @@
     <ProjectReference Include="..\ApiTester.Web\ApiTester.Web.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Fixtures\OpenApi\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
