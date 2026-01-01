@@ -66,6 +66,7 @@ The server enforces:
 - safe HTTP verbs by default
 - output redaction
 - timeouts and size limits
+- only absolute http/https base URLs for runtime overrides
 
 ---
 

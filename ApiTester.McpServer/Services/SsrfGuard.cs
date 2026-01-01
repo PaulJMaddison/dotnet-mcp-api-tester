@@ -64,6 +64,13 @@ public sealed class SsrfGuard
         {
             var b = ip.GetAddressBytes();
 
+            // 0.0.0.0/8 (unspecified)
+            if (b[0] == 0)
+            {
+                reason = "Unspecified IPv4 address (0.0.0.0/8)";
+                return false;
+            }
+
             // 169.254.0.0/16
             if (b[0] == 169 && b[1] == 254)
             {
