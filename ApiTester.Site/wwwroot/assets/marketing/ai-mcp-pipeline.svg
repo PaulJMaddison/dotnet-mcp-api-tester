@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-label="AI MCP pipeline">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e9f2ff"></stop>
+      <stop offset="1" stop-color="#ffffff"></stop>
+    </linearGradient>
+    <style>
+      .bg { fill: url(#g); }
+      .card { fill: #fff; stroke: #cfd8e3; stroke-width: 2; }
+      .title { font: 700 28px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #0b1f3a; }
+      .text { font: 500 18px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #24415f; }
+      .muted { font: 500 16px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #5b748c; }
+      .pill { fill: #0d6efd; }
+      .pillText { font: 700 14px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #fff; letter-spacing: .4px; }
+      .arrow { stroke: #0d6efd; stroke-width: 4; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1200" height="700" rx="32"></rect>
+
+  <text class="title" x="80" y="110">Spec → Plan → Run → Evidence → Eval</text>
+  <text class="muted" x="80" y="145">MCP tools drive the workflow, grounded AI answers questions using retrieved evidence</text>
+
+  <g transform="translate(80,210)">
+    <rect class="card" x="0" y="0" width="230" height="180" rx="18"></rect>
+    <rect class="pill" x="18" y="18" width="84" height="26" rx="13"></rect>
+    <text class="pillText" x="30" y="37">INPUT</text>
+    <text class="text" x="18" y="80">OpenAPI spec</text>
+    <text class="muted" x="18" y="115">File or URL import</text>
+    <text class="muted" x="18" y="140">SSRF guarded</text>
+  </g>
+
+  <path class="arrow" d="M335 300 L405 300"></path>
+  <path class="arrow" d="M395 290 L415 300 L395 310"></path>
+
+  <g transform="translate(420,210)">
+    <rect class="card" x="0" y="0" width="230" height="180" rx="18"></rect>
+    <rect class="pill" x="18" y="18" width="84" height="26" rx="13"></rect>
+    <text class="pillText" x="28" y="37">TOOLS</text>
+    <text class="text" x="18" y="80">Test plan</text>
+    <text class="muted" x="18" y="115">Generate scenarios</text>
+    <text class="muted" x="18" y="140">Edge case expansion</text>
+  </g>
+
+  <path class="arrow" d="M675 300 L745 300"></path>
+  <path class="arrow" d="M735 290 L755 300 L735 310"></path>
+
+  <g transform="translate(760,210)">
+    <rect class="card" x="0" y="0" width="360" height="180" rx="18"></rect>
+    <rect class="pill" x="18" y="18" width="120" height="26" rx="13"></rect>
+    <text class="pillText" x="30" y="37">EXECUTION</text>
+    <text class="text" x="18" y="80">Run + evidence</text>
+    <text class="muted" x="18" y="115">Latency, status, payload</text>
+    <text class="muted" x="18" y="140">Audit friendly outputs</text>
+  </g>
+
+  <path class="arrow" d="M260 430 C260 520, 520 520, 520 430"></path>
+  <path class="arrow" d="M510 440 L520 430 L530 440"></path>
+
+  <g transform="translate(420,470)">
+    <rect class="card" x="0" y="0" width="340" height="170" rx="18"></rect>
+    <rect class="pill" x="18" y="18" width="92" height="26" rx="13"></rect>
+    <text class="pillText" x="30" y="37">AI</text>
+    <text class="text" x="18" y="80">RAG ask</text>
+    <text class="muted" x="18" y="115">Answer from evidence</text>
+    <text class="muted" x="18" y="140">Citations per claim</text>
+  </g>
+
+  <path class="arrow" d="M780 555 L860 555"></path>
+  <path class="arrow" d="M850 545 L870 555 L850 565"></path>
+
+  <g transform="translate(880,470)">
+    <rect class="card" x="0" y="0" width="240" height="170" rx="18"></rect>
+    <rect class="pill" x="18" y="18" width="92" height="26" rx="13"></rect>
+    <text class="pillText" x="30" y="37">EVAL</text>
+    <text class="text" x="18" y="80">Scorecard</text>
+    <text class="muted" x="18" y="115">Persist Markdown</text>
+    <text class="muted" x="18" y="140">Diff over time</text>
+  </g>
+</svg>

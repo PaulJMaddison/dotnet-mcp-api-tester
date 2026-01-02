@@ -52,38 +52,38 @@ public sealed record MarketingContent(
         {
             new(
                 "Developer",
-                "Keep delivery moving with deterministic test plans and clear CI readiness signals.",
-                "Use project separation to isolate services, and export run history to release notes.")
+                "Ship with confidence, catch breaking changes early, and stop hand testing endpoints.",
+                "Import OpenAPI, generate a deterministic plan, then let AI propose edge cases you would not think to write at 5pm.")
             ,
             new(
                 "QA",
-                "Standardise regression coverage with repeatable runs and clear failure context.",
-                "Use run history timelines, flake notes, and audit logs to track decisions.")
+                "Turn regression into evidence, not spreadsheets, plus AI assisted exploratory coverage for the unknown unknowns.",
+                "Run deterministic suites, then add AI probes for boundaries, nullability, weird payloads, and error contracts.")
             ,
             new(
                 "Compliance",
-                "Collect evidence without slowing teams or broadening access.",
-                "Policy allowlists, SSRF guard controls, and immutable audit logs are built in.")
+                "Collect audit ready evidence while keeping access controlled and traffic inside policy.",
+                "MCP tooling, allowlists, SSRF guard, and immutable run history give you traceability without widening secrets access.")
         };
 
         var homeWorkflowSteps = new List<WorkflowStep>
         {
             new(
-                "Define the plan",
-                "Create deterministic test plans per project, with policy allowlists and CI readiness rules."),
+                "Connect your API",
+                "Import OpenAPI, map environments, and set runtime policy allowlists, SSRF guard blocks localhost and private networks by default."),
             new(
-                "Run with controls",
-                "Tests execute with SSRF guard protections, project separation, and scoped credentials."),
+                "Generate and run tests",
+                "Create deterministic plans from the spec, run them headless via MCP, then let AI suggest edge cases and negative tests."),
             new(
-                "Share evidence",
-                "Run history, audit logs, and exportable reports capture what changed and who approved it.")
+                "Explain and evidence",
+                "AI describes endpoints, parameters, and behaviour using only your spec and run evidence, with citations, then exports reports for stakeholders.")
         };
 
         var pricingPlans = new List<PricingPlan>
         {
             new(
                 "Free",
-                "For developers and fast-moving vibe coders validating a new API or integration.",
+                "For developers validating a new API, importing a spec, running a plan, and getting basic AI assisted documentation.",
                 "£0",
                 "per month",
                 "Start free",
@@ -95,11 +95,12 @@ public sealed record MarketingContent(
                     "1 project with project separation controls",
                     "Manual runs with basic run history",
                     "Deterministic test plan templates",
+                    "AI assisted endpoint summaries from OpenAPI evidence",
                     "Community support"
                 }),
             new(
                 "Pro",
-                "For QA and product teams that need repeatable evidence every sprint.",
+                "For teams that need repeatable evidence every sprint, plus AI driven edge case coverage and API explainers that stay grounded in your specs.",
                 "£79",
                 "per user/month",
                 "Upgrade",
@@ -110,12 +111,14 @@ public sealed record MarketingContent(
                 {
                     "Unlimited projects with policy allowlists",
                     "Scheduled runs and CI readiness checks",
+                    "AI generated edge case suggestions, negative tests, and boundary probes",
+                    "RAG grounded API descriptions, parameters, and example requests",
                     "Flaky handling notes and rerun controls",
                     "Audit logs and exports for stakeholders"
                 }),
             new(
                 "Team",
-                "For regulated organisations requiring governance and separation across environments.",
+                "For regulated organisations requiring governance, environments, and cost control, plus evaluation reports to track AI quality over time.",
                 "Custom",
                 "",
                 "Talk to sales",
@@ -127,6 +130,7 @@ public sealed record MarketingContent(
                     "Dedicated retention settings and evidence exports",
                     "SSRF guard configuration and allowlist administration",
                     "Organisation-wide audit logs",
+                    "AI evaluation reports, scorecards, drift tracking, and approval workflows",
                     "Priority support and onboarding"
                 })
         };
@@ -137,22 +141,26 @@ public sealed record MarketingContent(
             new("Deterministic test plans", new List<string> { "Included", "Included", "Included" }),
             new("Policy allowlists", new List<string> { "Basic", "Advanced", "Advanced" }),
             new("SSRF guard controls", new List<string> { "Standard", "Standard", "Custom" }),
-            new("CI readiness checks", new List<string> { "Manual", "Automated", "Automated" })
+            new("CI readiness checks", new List<string> { "Manual", "Automated", "Automated" }),
+            new("AI edge case suggestions", new List<string> { "Limited", "Included", "Included" }),
+            new("RAG grounded API explainer", new List<string> { "Basic", "Included", "Included" }),
+            new("AI eval scorecards and drift", new List<string> { "Not included", "Optional", "Included" })
         };
 
         var pricingUseCases = new List<UseCaseSummary>
         {
-            new("Developer onboarding", "Connect a new API, validate contracts, and share proof with a single workspace."),
-            new("QA regression", "Keep repeatable runs that map to deterministic test plans and release gates."),
-            new("Compliance evidence", "Export audit logs and run history without exposing production secrets."),
-            new("CI coverage", "Trigger suites in pipelines and publish CI readiness outcomes.")
+            new("Developer onboarding", "Import the spec, run a plan, and get an AI generated, grounded endpoint guide in minutes."),
+            new("QA regression", "Repeatable runs with deterministic plans, plus AI probes for boundary cases and negative scenarios."),
+            new("Compliance evidence", "Export audit logs, run history, and AI evaluation scorecards without exposing production secrets."),
+            new("CI coverage", "Trigger suites in pipelines, publish readiness outcomes, and attach AI explanations to release notes.")
         };
 
         var pricingFaqs = new List<FaqDefinition>
         {
             new("Can we change plans later?", "Yes. You can upgrade or downgrade at any time with pro-rated billing."),
             new("What does a run include?", "A run is a complete execution of a deterministic test plan, including retries within the same run."),
-            new("Do you store payloads forever?", "No. Retention is configurable and can be set per project.")
+            new("Do you store payloads forever?", "No. Retention is configurable and can be set per project."),
+            new("Is the AI allowed to invent API behaviour?", "No. The AI is grounded in your OpenAPI and run evidence. If it cannot prove something, it says what evidence is missing.")
         };
 
         var securityControls = new List<SecurityControl>
@@ -160,103 +168,113 @@ public sealed record MarketingContent(
             new("SSRF guard", "Outbound traffic is restricted to approved destinations and blocked from private, loopback, and metadata ranges."),
             new("Policy allowlists", "Allowlist policies define where tests can run, which methods are allowed, and which headers may be used."),
             new("Audit logs", "Every change, run, and approval is captured with actor, timestamp, and project context."),
-            new("Project separation", "Projects isolate credentials, environments, and run history by default.")
+            new("Project separation", "Projects isolate credentials, environments, and run history by default."),
+            new("Grounded AI", "AI outputs are constrained to your evidence, OpenAPI specs and run artefacts, with citations and explicit unknowns."),
+            new("Prompt injection resilience", "RAG prompts enforce evidence-only answers, tool access is explicit, and inputs are treated as untrusted.")
         };
 
         var retentionNotes = new List<string>
         {
             "Retention windows are configurable per project and can be shortened or extended by policy.",
             "Evidence exports include run history, approvals, and configuration snapshots when available.",
-            "We do not claim certifications we do not hold; ask for the latest assurance pack."
+            "AI evaluation reports can be persisted as artefacts and diffed over time to track quality drift.",
+            "We do not claim certifications we do not hold, ask for the latest assurance pack."
         };
 
         var qaHighlights = new List<QaHighlight>
         {
             new("Run history", "Track every run with timestamps, owners, and environment markers for audit-ready traceability."),
             new("Repeatability", "Deterministic test plans ensure the same inputs and assertions can be rerun on demand."),
+            new("AI exploratory coverage", "AI proposes edge cases, negative tests, and boundary probes based on your spec and failures, then you choose what becomes deterministic."),
             new("Flaky handling", "Mark flakiness, capture notes, and rerun without rewriting the plan. Automated retries are configurable."),
-            new("Exports and evidence", "Export CSV and JSON summaries for QA sign-off and compliance archives.")
+            new("Exports and evidence", "Export CSV and JSON summaries for QA sign-off and compliance archives."),
+            new("Explain failures", "AI summarises why a run failed, what endpoint and contract broke, and what changed, while citing the evidence.")
         };
 
         var qaWorkflowSteps = new List<WorkflowStep>
         {
             new("Create deterministic plans", "Define fixtures, preconditions, and assertions once per project."),
             new("Run in CI", "Trigger plans from your pipeline and capture CI readiness in the run history."),
-            new("Share evidence", "Attach audit logs and exports to release sign-off packs.")
+            new("Add AI probes", "Generate boundary cases and negative tests from the spec, promote the valuable ones into deterministic coverage."),
+            new("Share evidence", "Attach audit logs, exports, and AI eval scorecards to release sign-off packs.")
         };
 
         var docsQuickstartSteps = new List<string>
         {
-            "Create a project and set policy allowlists for target environments.",
-            "Connect your OpenAPI or GraphQL spec and map base URLs.",
-            "Build a deterministic test plan and run it locally or in CI.",
-            "Review run history and export evidence for QA or compliance."
+            "Create a project, set policy allowlists for target environments, and confirm SSRF guard defaults.",
+            "Import your OpenAPI spec and map base URLs, tokens, and headers via the runtime config tools.",
+            "Generate a deterministic test plan, run it locally or in CI via MCP, and review run history.",
+            "Index the spec for RAG, ask grounded questions about endpoints and parameters, and export evidence reports."
         };
 
         var docsMcpHighlights = new List<string>
         {
-            "The MCP client runs locally and sends execution metadata to ApiTester.",
+            "MCP exposes the platform as tools, so CLIs, agents, and CI can drive the same workflows as the UI.",
             "SSRF guard rules are enforced before outbound requests are made.",
-            "Run results stream back as structured run history with audit logs."
+            "Run results stream back as structured run history with audit logs.",
+            "AI tools can be orchestrated safely because tool access is explicit and outputs are grounded in evidence."
         };
 
         var docsCiSteps = new List<string>
         {
             "Generate a token scoped to the project and environment.",
             "Run the MCP client in your pipeline to execute deterministic test plans.",
-            "Publish CI readiness status and export artefacts for release notes."
+            "Publish CI readiness status and export artefacts for release notes.",
+            "Optionally run eval scorecards to track AI quality and regression over time."
         };
 
         var useCaseStories = new List<CaseStudy>
         {
             new(
                 "Dev lead",
-                "A platform engineer needed quick feedback when APIs changed. ApiTester kept specs and tests aligned, then surfaced CI readiness before merging. The team relied on run history to prove what was tested without opening production access."),
+                "A platform engineer needed quick feedback when APIs changed. ApiTester kept specs and tests aligned, then surfaced CI readiness before merging. The team relied on run history to prove what was tested, plus AI summaries to explain breaking changes to non engineers."),
             new(
                 "QA lead",
-                "A QA team replaced manual spreadsheets with deterministic test plans and repeatable runs. Flaky handling notes helped prioritise fixes, while exports provided evidence for weekly release sign-off."),
+                "A QA team replaced manual spreadsheets with deterministic test plans and repeatable runs. AI suggested boundary and negative cases that were consistently missed, then the team promoted the best ones into deterministic coverage. Exports provided evidence for weekly release sign-off."),
             new(
-                "Compliance reviewer",
-                "A compliance reviewer required project separation, policy allowlists, and clear audit logs. ApiTester supplied evidence packs that showed who ran what, when, and under which policy." )
+                "Security reviewer",
+                "A security reviewer required project separation, allowlists, and SSRF guard. ApiTester provided an execution policy story, audit logs, and evidence packs, plus grounded AI explanations that never invented behaviour outside the spec." )
         };
 
         var aboutPrinciples = new List<string>
         {
-            "Deliver outcomes before features: evidence, confidence, and controlled access.",
-            "Keep controls visible: SSRF guard, policy allowlists, audit logs, and project separation are not optional add-ons.",
-            "Stay practical: deterministic test plans and CI readiness reduce debate during releases."
+            "Deliver outcomes before features, evidence, confidence, and controlled access.",
+            "Keep controls visible, SSRF guard, policy allowlists, audit logs, and project separation are not optional add-ons.",
+            "Stay practical, deterministic test plans and CI readiness reduce debate during releases.",
+            "Use AI where it actually helps, for coverage gaps, edge cases, and clear API explanations, grounded in evidence."
         };
 
         var aboutAudience = new List<string>
         {
             "Developers who want clear feedback without slowing delivery.",
-            "QA teams who need repeatable evidence with run history.",
+            "QA teams who need repeatable evidence with run history, plus AI assisted exploratory coverage.",
             "Compliance and security teams who need policy-backed controls and audit logs.",
-            "Fast-moving teams and vibe coders who want a clear path to safe releases."
+            "Fast-moving teams who want a safe path to shipping, with AI doing the grunt work and humans approving what matters."
         };
 
         var aboutNotList = new List<string>
         {
             "ApiTester is not a production traffic proxy or API gateway.",
-            "It does not scan for vulnerabilities or replace a security testing programme.",
+            "It does not replace a proper security testing programme, it enforces safe execution and evidence capture for API tests.",
             "It does not execute arbitrary outbound calls outside policy allowlists.",
-            "It is not a general-purpose ticketing or incident management tool."
+            "It is not a general-purpose ticketing or incident management tool.",
+            "The AI does not make up behaviour, it is constrained to evidence and will say what it cannot prove."
         };
 
         return new MarketingContent(
             new MetadataContent(
                 "ApiTester",
-                "Outcome-led API testing for developers, QA, and compliance teams.",
-                "API testing, deterministic test plans, audit logs, CI readiness, SSRF guard",
+                "AI first API testing with MCP, deterministic plans, edge case discovery, and grounded API documentation.",
+                "API testing, MCP, AI testing, edge cases, RAG, OpenAPI, audit logs, CI readiness, SSRF guard, policy allowlists",
                 "https://apitester.example.com",
-                "ApiTester - API testing with evidence",
-                "Run deterministic API tests with audit logs, policy allowlists, and CI readiness signals.",
+                "ApiTester, AI first API testing with evidence",
+                "Run deterministic API tests via MCP, use AI to propose edge cases, and generate grounded API documentation with audit-grade evidence.",
                 "summary_large_image",
                 "/images/hero-illustration.svg",
                 "Illustration of the ApiTester testing workspace"),
             new LayoutContent(
                 "ApiTester",
-                "Outcome-led API testing with deterministic plans, run history, and audit-grade evidence.",
+                "AI first API testing with deterministic plans, run history, and audit-grade evidence.",
                 navigationItems,
                 footerGroups,
                 "Email: support@apitester.example.com",
@@ -264,42 +282,42 @@ public sealed record MarketingContent(
                 "Location: 21 King Street, London, UK",
                 "© 2024 ApiTester. All rights reserved."),
             new HomePageContent(
-                "Deliver release-ready API evidence without slowing delivery.",
-                "ApiTester gives developers, QA, and compliance teams deterministic test plans, run history, and CI readiness without opening risky access.",
+                "AI first API testing, deterministic when it matters, creative where it helps.",
+                "ApiTester turns your OpenAPI into deterministic test plans, then uses AI to propose edge cases and produce grounded API documentation via MCP, with run history and audit-grade evidence.",
                 "Book a walkthrough",
                 "/contact",
                 "Read developer docs",
                 "/docs",
                 new VisualPlaceholder(
                     "Hero visual placeholder",
-                    "Planned visual of deterministic plans, run history, and CI readiness."),
+                    "Planned visual of deterministic plans, AI edge case discovery, and grounded API explanations."),
                 "Outcomes for every role",
                 homePersonaTiles,
                 "Workflow",
-                "How teams plan, run, and evidence API testing.",
+                "A predictable path from spec to tests to evidence, with AI doing the tedious parts.",
                 homeWorkflowSteps,
                 new VisualPlaceholder(
                     "Workflow animation placeholder",
-                    "Planned visual showing plan, run, and evidence handover."),
+                    "Planned visual showing import, test execution, AI analysis, and evidence export."),
                 "Proof points",
                 new List<ProofPoint>
                 {
-                    new("Deterministic plans", "Deterministic test plans from your OpenAPI, run them, store evidence."),
-                    new("Policy-first execution", "Policy-first execution: allowlist base URLs and methods, block localhost, block private networks."),
-                    new("SSRF guard", "SSRF guard included, metadata endpoints blocked by default."),
+                    new("Import OpenAPI", "Load your spec once, keep it as the source of truth for tests and documentation."),
+                    new("Deterministic plans", "Generate deterministic test plans from your OpenAPI, run them, store evidence."),
+                    new("AI edge case discovery", "AI proposes boundaries, nulls, weird payloads, negative scenarios, and you promote the valuable ones into deterministic coverage."),
+                    new("Grounded API documentation", "AI explains endpoints, parameters, auth, and error contracts using only your spec and run evidence, with citations."),
+                    new("Policy-first execution", "Allowlist base URLs and methods, block localhost, block private networks, and enforce SSRF guard before any request."),
                     new("Run history", "Run history per project, filter by operationId, export CSV, printable reports."),
                     new("Audit trail", "Audit trail for compliance, who ran what, when, and what changed."),
-                    new("Built for CI", "Built for CI, no UI clicking required, run it headless."),
-                    new("Fast onboarding", "Fast onboarding for builders, load spec, set base URL, run."),
-                    new("AI driven testing", "AI driven testing and descriptions of your API")
+                    new("Built for CI", "Headless by default via MCP, no UI clicking required, consistent results.")
                 },
-                "Move from tests to evidence in one workflow.",
-                "Create deterministic test plans, run them under policy, and share audit-ready proof.",
+                "Move from testing to evidence in one workflow.",
+                "Create deterministic test plans, run them under policy, add AI coverage for edge cases, and share audit-ready proof.",
                 "Request a demo",
                 "/contact"),
             new PricingPageContent(
                 "Pricing that supports delivery and governance",
-                "Choose a plan that matches how you buy: individual validation, team QA, or compliance-led rollouts.",
+                "Choose a plan that matches how you buy, individual validation, team QA, or compliance-led rollouts with AI evaluation and cost controls.",
                 "Start free",
                 "/signup",
                 "Talk to sales",
@@ -311,55 +329,56 @@ public sealed record MarketingContent(
                     "Deterministic test plans with versioned changes",
                     "Run history with exportable evidence",
                     "Project separation and scoped access",
-                    "SSRF guard defaults and policy allowlists"
+                    "SSRF guard defaults and policy allowlists",
+                    "Grounded AI summaries of your API from specs and evidence"
                 },
                 new VisualPlaceholder(
                     "Pricing visual placeholder",
-                    "Planned comparison visual for plan coverage and evidence."),
+                    "Planned comparison visual for plan coverage, AI capabilities, and evidence."),
                 "Compare plans",
-                "Plan features aligned to delivery and compliance needs.",
+                "Plan features aligned to delivery, governance, and AI quality control.",
                 "Capability",
                 "Ask about governance",
                 "/contact",
                 pricingFeatureMatrix,
                 "Teams using ApiTester",
-                "Short examples of how teams adopt consistent API evidence.",
+                "Short examples of how teams adopt consistent API evidence and grounded AI documentation.",
                 pricingUseCases,
                 "Pricing FAQs",
                 "Clear answers to common buying questions.",
                 pricingFaqs),
             new SecurityComplianceContent(
                 "Security & compliance",
-                "Controls are built in so teams can run tests without broad access or hidden risk.",
+                "Controls are built in so teams can run tests and AI analysis without broad access or hidden risk.",
                 "Security controls",
                 securityControls,
                 "Retention and evidence",
                 retentionNotes,
                 new VisualPlaceholder(
                     "Security controls placeholder",
-                    "Planned visual for SSRF guard and allowlist policy flows."),
+                    "Planned visual for SSRF guard, allowlist policy flows, and evidence exports."),
                 "Need a security review?",
-                "We can share our latest control summary, data handling notes, and audit log samples.",
+                "We can share our latest control summary, data handling notes, AI grounding approach, and audit log samples.",
                 "Contact security",
                 "/contact"),
             new QaReportingContent(
                 "QA & reporting",
-                "Repeatable API evidence with run history, deterministic test plans, and exportable reports.",
+                "Repeatable API evidence with deterministic test plans, run history, AI edge case discovery, and exportable reports.",
                 "QA outcomes",
                 qaHighlights,
                 "Workflow",
-                "A predictable path from plan to evidence.",
+                "A predictable path from plan to evidence, plus AI coverage for the messy bits.",
                 qaWorkflowSteps,
                 new VisualPlaceholder(
                     "QA workflow placeholder",
-                    "Planned visual for run history and evidence exports."),
+                    "Planned visual for run history, evidence exports, and AI assisted analysis."),
                 "Turn QA work into evidence, not noise.",
-                "Capture run history, explain flakiness, and export proof without spreadsheets.",
+                "Capture run history, explain flakiness, and export proof, plus use AI to expand coverage safely.",
                 "Discuss QA workflows",
                 "/contact"),
             new DeveloperDocsContent(
                 "Developer docs",
-                "Marketing-facing guidance for teams evaluating the MCP client and CI usage.",
+                "Marketing-facing guidance for teams evaluating the MCP workflow, AI tools, and CI usage.",
                 "Quickstart",
                 docsQuickstartSteps,
                 "MCP client overview",
@@ -368,22 +387,22 @@ public sealed record MarketingContent(
                 docsCiSteps,
                 new VisualPlaceholder(
                     "Developer workflow placeholder",
-                    "Planned visual of MCP client runs and CI readiness signals."),
-                "Start with the MCP client",
-                "Set policy allowlists, run deterministic plans, and export CI evidence in minutes.",
+                    "Planned visual of MCP tool calls, CI runs, and AI grounded outputs."),
+                "Start with MCP",
+                "Set policy allowlists, run deterministic plans, ask grounded AI questions, and export evidence in minutes.",
                 "Download the MCP client",
                 "/contact"),
             new UseCasesContent(
                 "Use cases",
-                "Short stories from teams who need evidence they can trust.",
+                "Short stories from teams who need evidence they can trust, and AI explanations they can defend.",
                 useCaseStories,
                 "See your use case in a real workflow.",
-                "We can share examples tied to deterministic test plans, run history, and audit logs.",
+                "We can share examples tied to deterministic test plans, run history, AI edge case discovery, and audit logs.",
                 "Request examples",
                 "/contact"),
             new AboutContent(
                 "About ApiTester",
-                "We build for teams who need practical evidence, not noise.",
+                "We build for teams who need practical evidence, not noise, and AI that stays inside guard rails.",
                 "Product philosophy",
                 aboutPrinciples,
                 "Who it’s for",
@@ -391,7 +410,7 @@ public sealed record MarketingContent(
                 "What it is not",
                 aboutNotList,
                 "Work with a product that stays within policy.",
-                "We help teams show evidence, not shortcuts, and we are clear about the limits.",
+                "We help teams show evidence, not shortcuts, and we are clear about the limits, including what AI can and cannot infer.",
                 "Speak with the team",
                 "/contact"));
     }

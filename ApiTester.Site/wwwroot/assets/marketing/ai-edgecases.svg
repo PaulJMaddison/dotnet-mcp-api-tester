@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-label="Edge case testing">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff7e6"></stop>
+      <stop offset="1" stop-color="#ffffff"></stop>
+    </linearGradient>
+    <style>
+      .b { fill: url(#bg); }
+      .card { fill:#fff; stroke:#e3d4b5; stroke-width:2; }
+      .t { font: 700 26px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill:#2b2b2b; }
+      .s { font: 600 18px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill:#4b4b4b; }
+      .m { font: 500 16px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill:#6b6b6b; }
+      .tag { fill:#fd7e14; }
+      .tagText { font: 800 13px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill:#fff; letter-spacing:.5px; }
+      .tick { fill:#198754; }
+      .x { fill:#dc3545; }
+    </style>
+  </defs>
+
+  <rect class="b" x="0" y="0" width="1200" height="700" rx="32"></rect>
+
+  <text class="t" x="80" y="120">Edge cases, abuse cases, and evidence</text>
+  <text class="m" x="80" y="155">Generate coverage that looks like a senior engineer, then keep outputs reviewable</text>
+
+  <g transform="translate(80,210)">
+    <rect class="card" x="0" y="0" width="520" height="420" rx="18"></rect>
+    <rect class="tag" x="22" y="22" width="140" height="28" rx="14"></rect>
+    <text class="tagText" x="38" y="42">TEST PLAN</text>
+
+    <text class="s" x="22" y="95">GET /weatherforecast</text>
+    <text class="m" x="22" y="130">• Missing auth header</text>
+    <text class="m" x="22" y="160">• Invalid Accept header</text>
+    <text class="m" x="22" y="190">• Extreme query bounds</text>
+    <text class="m" x="22" y="220">• Unexpected content type</text>
+    <text class="m" x="22" y="250">• Retry and timeout behaviour</text>
+
+    <text class="m" x="22" y="310">Outputs:</text>
+    <text class="m" x="22" y="340">Status, latency, payload, evidence log</text>
+    <text class="m" x="22" y="370">Saved run artefacts for diffing</text>
+  </g>
+
+  <g transform="translate(640,210)">
+    <rect class="card" x="0" y="0" width="480" height="420" rx="18"></rect>
+    <rect class="tag" x="22" y="22" width="160" height="28" rx="14"></rect>
+    <text class="tagText" x="38" y="42">EVIDENCE</text>
+
+    <circle class="tick" cx="40" cy="95" r="10"></circle>
+    <text class="m" x="62" y="101">200 OK, 42 ms</text>
+
+    <circle class="x" cx="40" cy="135" r="10"></circle>
+    <text class="m" x="62" y="141">401 Unauthorised, missing bearer token</text>
+
+    <circle class="tick" cx="40" cy="175" r="10"></circle>
+    <text class="m" x="62" y="181">400 Bad Request on invalid header</text>
+
+    <text class="m" x="22" y="240">AI assistant can explain results</text>
+    <text class="m" x="22" y="270">using only retrieved evidence</text>
+
+    <text class="m" x="22" y="330">Eval: scorecard + Markdown report</text>
+  </g>
+</svg>

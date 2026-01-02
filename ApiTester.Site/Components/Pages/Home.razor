@@ -1,4 +1,4 @@
-@page "/"
+﻿@page "/"
 
 @code {
     private HomePageContent Content { get; } = MarketingContent.Current.Home;
@@ -112,6 +112,38 @@
         </div>
     </div>
 </section>
+
+<section class="py-5 bg-white">
+    <div class="container">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-6">
+                <h2 class="fw-bold">Swagger documents the happy path, ApiTester probes what you missed.</h2>
+                <p class="text-muted">
+                    Import an OpenAPI spec, then let the platform generate and run coverage that looks like a senior engineer wrote it,
+                    bounds checks, invalid enums, missing headers, auth mistakes, and other failure modes.
+                    When you ask questions, answers are grounded in retrieved evidence, with citations.
+                </p>
+
+                <ul class="list-unstyled mt-3">
+                    <li class="mb-2">✅ Generate a runnable test plan from the contract</li>
+                    <li class="mb-2">✅ Expand edge cases safely, with deterministic guardrails</li>
+                    <li class="mb-2">✅ Ask questions about endpoints, params, auth, and responses with citations</li>
+                    <li class="mb-2">✅ Export evidence, run evals, track drift</li>
+                </ul>
+
+                <a class="btn btn-primary mt-3" href="/docs">Run the demo workflow</a>
+            </div>
+
+            <div class="col-lg-6">
+                <img class="img-fluid rounded-4 shadow-sm visual-asset"
+                     src="/assets/marketing/ai-mcp-pipeline.svg"
+                     alt="AI assisted MCP workflow from spec import to evidence and eval reports."
+                     loading="lazy" decoding="async" />
+            </div>
+        </div>
+    </div>
+</section>
+
 
 <section class="cta-section text-white py-5">
     <div class="container text-center">
