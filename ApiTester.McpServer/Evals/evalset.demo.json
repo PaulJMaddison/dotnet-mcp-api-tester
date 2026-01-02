@@ -1,0 +1,17 @@
+{
+  "name": "demo-evalset",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What operations exist in this API and what are their operationIds?"
+    },
+    {
+      "id": "q2",
+      "question": "List the HTTP methods and paths for the operations."
+    },
+    {
+      "id": "q3",
+      "question": "If I want to create an order, which endpoint should I call?"
+    }
+  ]
+}

@@ -1,19 +1,27 @@
 using ApiTester.AI;
+using Xunit;
 
 namespace ApiTester.Web.UnitTests;
 
 public sealed class AiClientTests
 {
     [Fact]
-    public async Task MockAiClientTracksPromptsAndResponses()
+    public async Task MockAiClient_CapturesPrompts_AndReturnsResponse()
     {
-        var client = new MockAiClient(prompt => new AiResponse($"Echo: {prompt.User}"));
+        var mock = new MockAiClient(_ => new AiResponse(
+            Content: "ok",
+            Usage: new AiUsage(10, 20),
+            ElapsedMs: 5,
+            Model: "mock",
+            Cost: new AiCostEstimate(0.001m, 0.002m, 0.003m)));
+
         var prompt = new AiPrompt("system", "user");
 
-        var response = await client.GetResponseAsync(prompt);
+        var resp = await mock.GetResponseAsync(prompt, CancellationToken.None);
 
-        Assert.Equal("Echo: user", response.Content);
-        Assert.Single(client.ReceivedPrompts);
-        Assert.Equal(prompt, client.ReceivedPrompts[0]);
+        Assert.Equal("ok", resp.Content);
+        Assert.Single(mock.ReceivedPrompts);
+        Assert.Equal("system", mock.ReceivedPrompts.First().System);
+        Assert.Equal("user", mock.ReceivedPrompts.First().User);
     }
 }

@@ -1,8 +1,11 @@
-﻿using ApiTester.McpServer.Services;
+﻿using ApiTester.McpServer.Persistence.Stores;
+using ApiTester.McpServer.Runtime;
+using ApiTester.McpServer.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Readers;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace ApiTester.McpServer.Tools;
@@ -14,6 +17,8 @@ public sealed class OpenApiTools
     private readonly ApiRuntimeConfig _runtime;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly SsrfGuard _ssrfGuard;
+    private readonly ProjectContext _ctx;
+    private readonly IOpenApiSpecStore _specs;
     private readonly ILogger<OpenApiTools> _logger;
 
     public OpenApiTools(
@@ -21,25 +26,43 @@ public sealed class OpenApiTools
         ApiRuntimeConfig runtime,
         IHttpClientFactory httpClientFactory,
         SsrfGuard ssrfGuard,
+        ProjectContext ctx,
+        IOpenApiSpecStore specs,
         ILogger<OpenApiTools> logger)
     {
         _store = store;
         _runtime = runtime;
         _httpClientFactory = httpClientFactory;
         _ssrfGuard = ssrfGuard;
+        _ctx = ctx;
+        _specs = specs;
         _logger = logger;
     }
 
-    [McpServerTool, Description("Import an OpenAPI (Swagger) specification from a URL or local file path.")]
-    public async Task<string> ApiImportOpenApi(string specUrlOrPath, CancellationToken ct = default)
+    [McpServerTool, Description("Import an OpenAPI (Swagger) specification from a URL or local file path. Persists to the current project so it can be indexed for RAG.")]
+    public async Task<string> ApiImportOpenApi(string specUrlOrPath, string? projectId = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(specUrlOrPath))
             throw new ArgumentException("specUrlOrPath is required.", nameof(specUrlOrPath));
+
+        // Allow stateless demos by passing projectId explicitly
+        if (!string.IsNullOrWhiteSpace(projectId))
+        {
+            if (!Guid.TryParse(projectId, out var pid))
+                throw new ArgumentException("projectId must be a valid GUID.", nameof(projectId));
+
+            _ctx.SetCurrentProject(pid);
+        }
+
+        var currentProjectId = _ctx.CurrentProjectId;
+        if (currentProjectId is null)
+            throw new InvalidOperationException("No current project. Call ApiCreateProject / ApiSetCurrentProject or pass projectId.");
 
         string specText;
 
         var isRemote = Uri.TryCreate(specUrlOrPath, UriKind.Absolute, out var uri) &&
             (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
         _logger.LogInformation("Importing OpenAPI spec from {SpecSource} ({Location})", isRemote ? "url" : "path", specUrlOrPath);
 
         if (isRemote)
@@ -67,12 +90,16 @@ public sealed class OpenApiTools
         else
         {
             var fileInfo = new FileInfo(specUrlOrPath);
+            if (!fileInfo.Exists)
+                throw new FileNotFoundException("OpenAPI file path not found.", specUrlOrPath);
+
             if (fileInfo.Length > OpenApiImportLimits.MaxSpecBytes)
                 throw new InvalidOperationException($"OpenAPI spec exceeds {OpenApiImportLimits.MaxSpecBytes} bytes.");
 
             specText = await File.ReadAllTextAsync(specUrlOrPath, ct);
         }
 
+        // Parse for metadata / validation diagnostics
         var reader = new OpenApiStringReader();
         var doc = reader.Read(specText, out var diag);
 
@@ -81,6 +108,25 @@ public sealed class OpenApiTools
 
         // IMPORTANT: load it even if there are errors, so the tool still works on messy specs
         _store.SetDocument(doc);
+
+        var title = doc.Info?.Title ?? "(no title)";
+        var version = doc.Info?.Version ?? "(no version)";
+        var paths = doc.Paths?.Count ?? 0;
+
+        // Persist to store for the current project so RagTools can index it
+        var createdUtc = DateTime.UtcNow;
+
+        // Stable hash so we can de-dupe / track changes
+        var specHash = ComputeSha256Hex(specText);
+
+        await _specs.UpsertAsync(
+            projectId: currentProjectId.Value,
+            title: title,
+            version: version,
+            specJson: specText,
+            specHash: specHash,
+            createdUtc: createdUtc,
+            ct: ct).ConfigureAwait(false);
 
         var sb = new StringBuilder();
 
@@ -98,18 +144,18 @@ public sealed class OpenApiTools
             sb.AppendLine("OpenAPI loaded cleanly.");
         }
 
-        var title = doc.Info?.Title ?? "(no title)";
-        var version = doc.Info?.Version ?? "(no version)";
-        var paths = doc.Paths?.Count ?? 0;
-
         _logger.LogInformation(
-            "OpenAPI spec loaded {Title} {Version} with {PathCount} paths and {ErrorCount} validation error(s)",
+            "OpenAPI spec stored for project {ProjectId}. Title {Title} {Version} with {PathCount} paths, {ErrorCount} validation error(s), hash {SpecHash}",
+            currentProjectId.Value,
             title,
             version,
             paths,
-            diag.Errors.Count);
+            diag.Errors.Count,
+            specHash);
 
         sb.AppendLine($"Title: {title}, Version: {version}, Paths: {paths}");
+        sb.AppendLine($"Stored against projectId: {currentProjectId.Value}");
+        sb.AppendLine($"Spec hash: {specHash}");
 
         return sb.ToString().Trim();
     }
@@ -140,5 +186,12 @@ public sealed class OpenApiTools
         }
 
         return Encoding.UTF8.GetString(ms.ToArray());
+    }
+
+    private static string ComputeSha256Hex(string text)
+    {
+        var bytes = Encoding.UTF8.GetBytes(text);
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }
