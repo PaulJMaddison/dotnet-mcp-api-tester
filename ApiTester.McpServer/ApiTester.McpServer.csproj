@@ -22,6 +22,11 @@
     <PackageReference Include="ModelContextProtocol" Version="0.5.0-preview.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ApiTester.Rag\ApiTester.Rag.csproj" />
+    <ProjectReference Include="..\ApiTester.AI\ApiTester.AI.csproj" />
+  </ItemGroup>
+
   <ProjectExtensions><VisualStudio><UserProperties appsettings_1json__JsonSchema="https://www.schemastore.org/assetlinks.json" /></VisualStudio></ProjectExtensions>
 
 </Project>

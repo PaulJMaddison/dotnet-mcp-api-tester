@@ -1,0 +1,11 @@
+[
+  {
+    "specId": "f2edf7c8-8f12-4f48-b496-c6bb47c9cc8d",
+    "projectId": "d3b94d94-780d-4923-a476-6d32630205c1",
+    "title": "WeatherForecast API",
+    "version": "1.0",
+    "specJson": "{\r\n  \u0022openapi\u0022: \u00223.0.1\u0022,\r\n  \u0022info\u0022: { \u0022title\u0022: \u0022WeatherForecast API\u0022, \u0022version\u0022: \u00221.0\u0022 },\r\n  \u0022paths\u0022: {\r\n    \u0022/weatherforecast\u0022: {\r\n      \u0022get\u0022: {\r\n        \u0022operationId\u0022: \u0022GetWeatherForecast\u0022,\r\n        \u0022responses\u0022: {\r\n          \u0022200\u0022: {\r\n            \u0022description\u0022: \u0022OK\u0022,\r\n            \u0022content\u0022: {\r\n              \u0022application/json\u0022: {\r\n                \u0022schema\u0022: {\r\n                  \u0022type\u0022: \u0022array\u0022,\r\n                  \u0022items\u0022: { \u0022$ref\u0022: \u0022#/components/schemas/WeatherForecast\u0022 }\r\n                }\r\n              }\r\n            }\r\n          }\r\n        }\r\n      }\r\n    }\r\n  },\r\n  \u0022components\u0022: {\r\n    \u0022schemas\u0022: {\r\n      \u0022WeatherForecast\u0022: {\r\n        \u0022type\u0022: \u0022object\u0022,\r\n        \u0022required\u0022: [ \u0022date\u0022, \u0022temperatureC\u0022, \u0022summary\u0022 ],\r\n        \u0022properties\u0022: {\r\n          \u0022date\u0022: { \u0022type\u0022: \u0022string\u0022, \u0022format\u0022: \u0022date-time\u0022 },\r\n          \u0022temperatureC\u0022: { \u0022type\u0022: \u0022integer\u0022, \u0022format\u0022: \u0022int32\u0022 },\r\n          \u0022temperatureF\u0022: { \u0022type\u0022: \u0022integer\u0022, \u0022format\u0022: \u0022int32\u0022, \u0022readOnly\u0022: true },\r\n          \u0022summary\u0022: { \u0022type\u0022: \u0022string\u0022, \u0022nullable\u0022: true }\r\n        }\r\n      }\r\n    }\r\n  }\r\n}",
+    "specHash": "bfe35a2640a662970fb6ad12a345bdc08ea25a042f0a1ebd1f0f2c83cc1879af",
+    "createdUtc": "2026-01-02T19:18:48.4013944Z"
+  }
+]
