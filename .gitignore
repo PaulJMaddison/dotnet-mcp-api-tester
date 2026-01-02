@@ -17,3 +17,4 @@ obj/
 Thumbs.db
 "@ | Out-File -Encoding utf8 .gitignore
 /ApiTester.McpServer/run-history/default
+/ApiTester.Site/Properties/launchSettings.json
