@@ -1,13 +1,18 @@
 @using ApiTester.Site.Content
 
 <div class="table-responsive">
-    <table class="table table-bordered align-middle">
+    <table class="table table-bordered align-middle" aria-label="Pricing plan comparison">
         <thead class="table-light">
             <tr>
                 <th scope="col">@ComparisonHeader</th>
                 @foreach (var plan in Plans)
                 {
-                    <th scope="col">@plan.Name</th>
+                    <th scope="col">
+                        <div class="d-inline-flex align-items-center gap-2">
+                            <img class="pricing-tier-icon" src="@GetPlanIcon(plan.Name)" alt="@GetPlanIconAlt(plan.Name)" loading="lazy" decoding="async" />
+                            <span>@plan.Name</span>
+                        </div>
+                    </th>
                 }
             </tr>
         </thead>
@@ -30,4 +35,14 @@
     [Parameter] public IReadOnlyList<PricingPlan> Plans { get; set; } = Array.Empty<PricingPlan>();
     [Parameter] public IReadOnlyList<FeatureComparison> Features { get; set; } = Array.Empty<FeatureComparison>();
     [Parameter] public string ComparisonHeader { get; set; } = "Capability";
+
+    private static string GetPlanIcon(string planName) => planName switch
+    {
+        "Free" => "assets/pricing/plan-starter.svg",
+        "Pro" => "assets/pricing/plan-growth.svg",
+        "Team" => "assets/pricing/plan-enterprise.svg",
+        _ => "assets/pricing/plan-starter.svg"
+    };
+
+    private static string GetPlanIconAlt(string planName) => $"{planName} tier icon";
 }

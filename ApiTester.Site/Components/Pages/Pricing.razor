@@ -3,6 +3,16 @@
 @code {
     private PricingPageContent Content { get; } = MarketingContent.Current.Pricing;
     private PageMetadata Metadata => Content.Metadata;
+
+    private static string GetPlanIcon(string planName) => planName switch
+    {
+        "Free" => "assets/pricing/plan-starter.svg",
+        "Pro" => "assets/pricing/plan-growth.svg",
+        "Team" => "assets/pricing/plan-enterprise.svg",
+        _ => "assets/pricing/plan-starter.svg"
+    };
+
+    private static string GetPlanIconAlt(string planName) => $"{planName} tier icon";
 }
 
 <PageTitle>@Metadata.Title</PageTitle>
@@ -33,7 +43,7 @@
     </div>
 </section>
 
-<section class="py-5">
+<section class="py-5 pricing-pattern">
     <div class="container">
         <div class="row g-4">
             @foreach (var plan in Content.Plans)
@@ -45,6 +55,7 @@
                             {
                                 <div class="badge bg-primary">@plan.Badge</div>
                             }
+                            <img class="pricing-tier-icon" src="@GetPlanIcon(plan.Name)" alt="@GetPlanIconAlt(plan.Name)" loading="lazy" decoding="async" />
                             <h3 class="h5 mt-3">@plan.Name</h3>
                             <p class="text-muted">@plan.Tagline</p>
                             <div class="display-6 fw-bold">@plan.Price <span class="fs-6 text-muted">@plan.PriceSuffix</span></div>
