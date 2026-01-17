@@ -105,7 +105,7 @@ public sealed record MarketingContent(
         {
             new(
                 "Free",
-                "For solo developers or vibe coders validating a new API before sharing results.",
+                "For individual builders validating an API, capturing proof, and sharing a first report.",
                 "£0",
                 "per month",
                 "Start free",
@@ -114,74 +114,88 @@ public sealed record MarketingContent(
                 string.Empty,
                 new List<string>
                 {
-                    "1 project with basic allowlists",
+                    "1 project with policy allowlists",
                     "50 deterministic runs per month",
-                    "7-day run history retention",
-                    "AI-assisted endpoint summaries from OpenAPI evidence",
+                    "14-day run history retention",
+                    "Grounded API summaries from OpenAPI evidence",
                     "Community support"
                 }),
             new(
                 "Pro",
-                "For delivery teams that need repeatable evidence every sprint and AI coverage that stays grounded.",
-                "£79",
+                "For delivery teams that need CI-ready evidence, shared baselines, and AI coverage with guardrails.",
+                "£89",
                 "per user/month",
                 "Upgrade",
                 "/upgrade",
                 true,
-                "Most used",
+                "Most popular",
                 new List<string>
                 {
                     "Unlimited projects and environments",
-                    "Scheduled runs and CI readiness checks",
-                    "AI edge case suggestions with promotion workflow",
-                    "Run baselines, flaky annotations, and rerun controls",
+                    "CI triggers, schedules, and readiness gates",
+                    "AI edge-case suggestions with promotion workflow",
+                    "Baselines, flaky annotations, and rerun controls",
                     "Audit logs and exportable evidence packs"
                 }),
             new(
                 "Team",
-                "For regulated organisations that need governance, retention controls, and AI evaluation reporting.",
+                "For regulated organisations that need governance, retention controls, and security reviews.",
                 "Custom",
-                "",
+                "annual",
                 "Talk to sales",
                 "/contact",
                 false,
                 string.Empty,
                 new List<string>
                 {
-                    "Retention and redaction policies per project",
+                    "Retention, redaction, and data residency controls",
                     "Organisation-wide audit trails and approvals",
                     "SSRF guard configuration and allowlist administration",
                     "AI evaluation scorecards and drift tracking",
-                    "Priority support and onboarding"
+                    "Priority support, onboarding, and security pack"
                 })
         };
 
         var pricingFeatureMatrix = new List<FeatureComparison>
         {
-            new("Deterministic run history", new List<string> { "50 runs", "Unlimited", "Unlimited" }),
-            new("Retention controls", new List<string> { "7 days", "30 days", "Custom" }),
-            new("Policy allowlists", new List<string> { "Basic", "Advanced", "Advanced" }),
+            new("Deterministic runs per month", new List<string> { "50", "Unlimited", "Unlimited" }),
+            new("Run history retention", new List<string> { "14 days", "90 days", "Custom" }),
+            new("Policy allowlists", new List<string> { "Standard", "Advanced", "Advanced + custom" }),
             new("SSRF guard controls", new List<string> { "Standard", "Standard", "Custom" }),
             new("Baseline comparison", new List<string> { "Limited", "Included", "Included" }),
-            new("AI edge case suggestions", new List<string> { "Limited", "Included", "Included" }),
-            new("AI eval scorecards", new List<string> { "Not included", "Optional", "Included" }),
-            new("Audit log exports", new List<string> { "Not included", "Included", "Included" })
+            new("CI triggers & schedules", new List<string> { "Manual", "Included", "Included" }),
+            new("AI edge-case workflow", new List<string> { "Limited", "Included", "Included" }),
+            new("Audit trail exports", new List<string> { "Not included", "Included", "Included" })
         };
 
         var pricingUseCases = new List<UseCaseSummary>
         {
-            new("Developer onboarding", "Import the spec, run a plan, and ship an API explainer grounded in evidence."),
-            new("QA regression", "Repeatable runs with deterministic plans, plus AI probes for boundary cases."),
-            new("Compliance evidence", "Export audit logs, run history, and redacted evidence without overexposing secrets."),
-            new("CI release gates", "Trigger suites in pipelines, publish readiness outcomes, and attach summaries to releases.")
+            new("API testing", "Turn OpenAPI into deterministic plans and capture proof every sprint."),
+            new("Regression coverage", "Lock in baselines, promote the best AI probes, and avoid rework."),
+            new("Compliance evidence", "Export audit logs, run history, and redacted reports for reviewers."),
+            new("CI smoke checks", "Run fast plans in pipelines and publish readiness signals to releases.")
         };
 
         var pricingFaqs = new List<FaqDefinition>
         {
-            new("Can we change plans later?", "Yes. You can upgrade or downgrade at any time with pro-rated billing."),
-            new("What counts as a run?", "A run is one execution of a deterministic test plan, including retries configured in that plan."),
-            new("Do you retain payloads forever?", "No. Retention is configurable per project and can be shortened by policy."),
-            new("Will the AI invent API behaviour?", "No. The AI is grounded in your OpenAPI and run evidence. If it lacks proof, it says what is missing.")
+            new(
+                "Why not just use Postman?",
+                "Postman is great for manual exploration. ApiTester focuses on deterministic plans, run history, baselines, and audit-ready evidence with AI grounded in your spec."),
+            new(
+                "Does this run in CI?",
+                "Yes. Use the MCP client to run deterministic plans headlessly, publish readiness gates, and attach evidence to your pipeline."),
+            new(
+                "How do you handle security and secrets?",
+                "Projects are isolated, credentials are scoped, and redaction policies mask sensitive fields before storage or export."),
+            new(
+                "What about audit trails and evidence?",
+                "Every run, approval, and configuration change is logged with timestamps and can be exported for compliance review."),
+            new(
+                "How do you prevent SSRF?",
+                "Outbound calls are restricted to allowlisted hosts and blocked from private, loopback, and metadata ranges by default."),
+            new(
+                "How does pricing scale?",
+                "Pro is per user/month with unlimited projects. Team plans add governance, retention, and security reviews tailored to your organisation.")
         };
 
         var securityControls = new List<SecurityControl>
@@ -376,8 +390,8 @@ public sealed record MarketingContent(
                     "/pricing",
                     $"{baseUrl}/assets/marketing/og-devqa-compliance.svg",
                     "ApiTester marketing illustration"),
-                "Pricing that supports delivery and governance",
-                "Choose a plan that matches how you ship: individual validation, team QA, or compliance-led rollouts with AI evaluation and cost controls.",
+                "Pricing that scales from validation to governance",
+                "Choose a plan built for evidence-led API delivery: solo validation, team QA, or regulated rollouts with AI controls.",
                 "Start free",
                 "/signup",
                 "Talk to sales",
@@ -396,16 +410,16 @@ public sealed record MarketingContent(
                     "Pricing visual placeholder",
                     "Planned comparison visual for plan coverage, AI capabilities, and evidence."),
                 "Compare plans",
-                "Plan features aligned to delivery, governance, and AI quality control.",
+                "Plan features aligned to delivery velocity, governance controls, and AI quality.",
                 "Capability",
                 "Ask about governance",
                 "/contact",
                 pricingFeatureMatrix,
-                "Teams using ApiTester",
-                "Short examples of how teams adopt consistent API evidence and grounded AI documentation.",
+                "Use cases",
+                "Where teams rely on ApiTester for proof, not opinions.",
                 pricingUseCases,
                 "Pricing FAQs",
-                "Clear answers to common buying questions.",
+                "Answers to common objections and buyer questions.",
                 pricingFaqs),
             new SecurityComplianceContent(
                 BuildPageMetadata(
