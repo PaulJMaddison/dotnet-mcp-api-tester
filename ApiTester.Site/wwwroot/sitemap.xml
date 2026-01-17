@@ -6,6 +6,11 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://apitester.example.com/features</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://apitester.example.com/pricing</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -26,6 +31,46 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://apitester.example.com/docs/getting-started</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://apitester.example.com/docs/import-openapi</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://apitester.example.com/docs/running-test-plans</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://apitester.example.com/docs/run-history</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://apitester.example.com/docs/policies-ssrf</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://apitester.example.com/docs/persistence</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://apitester.example.com/docs/ci-usage</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://apitester.example.com/docs/api-reference</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://apitester.example.com/use-cases</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -39,6 +84,11 @@
     <loc>https://apitester.example.com/contact</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://apitester.example.com/thank-you</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.4</priority>
   </url>
   <url>
     <loc>https://apitester.example.com/status</loc>

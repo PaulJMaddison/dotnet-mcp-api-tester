@@ -1,11 +1,28 @@
 @page "/docs/api-reference"
 @using ApiTester.Site.Content
 
-<PageTitle>API reference | ApiTester docs</PageTitle>
-
 @code {
     private DocsApiReference Reference => DocsContent.Current.ApiReference;
+    private string Title => "API reference | ApiTester docs";
+    private string CanonicalUrl => "https://apitester.example.com/docs/api-reference";
 }
+
+<PageTitle>@Title</PageTitle>
+<HeadContent>
+    <meta name="description" content="@Reference.Summary" />
+    <meta property="og:title" content="@Title" />
+    <meta property="og:description" content="@Reference.Summary" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="@CanonicalUrl" />
+    <meta property="og:image" content="https://apitester.example.com/assets/marketing/og-devqa-compliance.svg" />
+    <meta property="og:image:alt" content="ApiTester marketing illustration" />
+    <meta name="twitter:card" content="@MarketingContent.Current.Metadata.TwitterCard" />
+    <meta name="twitter:title" content="@Title" />
+    <meta name="twitter:description" content="@Reference.Summary" />
+    <meta name="twitter:image" content="https://apitester.example.com/assets/marketing/og-devqa-compliance.svg" />
+    <meta name="twitter:image:alt" content="ApiTester marketing illustration" />
+    <link rel="canonical" href="@CanonicalUrl" />
+</HeadContent>
 
 <DocsShell Title="@Reference.Title" Subtitle="@Reference.Summary" ActiveUrl="/docs/api-reference">
     <section class="doc-section mb-4">
