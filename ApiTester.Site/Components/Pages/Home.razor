@@ -3,6 +3,16 @@
 @code {
     private HomePageContent Content { get; } = MarketingContent.Current.Home;
     private PageMetadata Metadata => Content.Metadata;
+
+    private (string Src, string Alt) GetPersonaIcon(string title)
+        => title switch
+        {
+            "Developer" => ("/assets/marketing/persona-dev-qa-engineer.svg", "Developer persona icon"),
+            "QA" => ("/assets/marketing/persona-dev-qa-engineer.svg", "QA engineer persona icon"),
+            "Compliance" => ("/assets/marketing/persona-security-compliance-lead.svg", "Compliance lead persona icon"),
+            "Vibe coder" => ("/assets/marketing/ai-edgecases.svg", "Vibe coder persona icon"),
+            _ => ("/images/personas-illustration.svg", "Persona illustration")
+        };
 }
 
 <PageTitle>@Metadata.Title</PageTitle>
@@ -34,9 +44,10 @@
                 </div>
             </div>
             <div class="col-lg-6">
-                <div class="diagram-placeholder">
-                    <div class="placeholder-grid">@Content.HeroPlaceholder.Title</div>
-                    <p class="mb-0">@Content.HeroPlaceholder.Description</p>
+                <div class="diagram-visual">
+                    <img src="/images/hero-illustration.svg"
+                         alt="Illustration of deterministic API testing, AI edge case discovery, and evidence capture"
+                         class="img-fluid" />
                 </div>
             </div>
         </div>
@@ -49,8 +60,13 @@
         <div class="row g-4 mt-2">
             @foreach (var tile in Content.PersonaTiles)
             {
+                var icon = GetPersonaIcon(tile.Title);
                 <div class="col-md-6 col-lg-3">
-                    <PersonaCard Title="@tile.Title" Outcome="@tile.Outcome" Proof="@tile.Proof" />
+                    <PersonaCard Title="@tile.Title"
+                                 Outcome="@tile.Outcome"
+                                 Proof="@tile.Proof"
+                                 IconSrc="@icon.Src"
+                                 IconAlt="@icon.Alt" />
                 </div>
             }
         </div>

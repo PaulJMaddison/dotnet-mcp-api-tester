@@ -34,6 +34,17 @@ body {
     letter-spacing: 0.3px;
 }
 
+.site-logo {
+    height: 32px;
+    width: auto;
+}
+
+.persona-icon {
+    height: 48px;
+    width: auto;
+    display: block;
+}
+
 .cta-section {
     background: linear-gradient(120deg, #2563eb, #1d4ed8);
 }
