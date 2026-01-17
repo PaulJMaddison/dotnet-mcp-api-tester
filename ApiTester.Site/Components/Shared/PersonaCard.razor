@@ -1,5 +1,9 @@
 <div class="card h-100 border-0 shadow-sm">
     <div class="card-body">
+        @if (!string.IsNullOrWhiteSpace(IconSrc))
+        {
+            <img class="persona-icon mb-3" src="@IconSrc" alt="@IconAlt" />
+        }
         <h3 class="h5">@Title</h3>
         <p class="mb-2">@Outcome</p>
         <p class="text-muted mb-0">@Proof</p>
@@ -10,4 +14,6 @@
     [Parameter] public string Title { get; set; } = string.Empty;
     [Parameter] public string Outcome { get; set; } = string.Empty;
     [Parameter] public string Proof { get; set; } = string.Empty;
+    [Parameter] public string IconSrc { get; set; } = string.Empty;
+    [Parameter] public string IconAlt { get; set; } = string.Empty;
 }
