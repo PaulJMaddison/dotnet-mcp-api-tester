@@ -203,9 +203,31 @@ public sealed record MarketingContent(
             new("SSRF guard", "Outbound traffic is restricted to approved destinations and blocked from private, loopback, and metadata ranges."),
             new("Policy allowlists", "Allowlists define where tests can run, which methods are allowed, and which headers may be used."),
             new("Redaction", "Sensitive headers and payload fields can be masked before storage or export based on policy."),
-            new("Audit trail", "Every change, run, and approval is captured with actor, timestamp, and project context."),
+            new("Audit trail", "Configuration changes, runs, approvals, and exports are logged with actor, timestamp, and project context."),
             new("Project separation", "Projects isolate credentials, environments, and run history by default."),
             new("Grounded AI", "AI outputs are constrained to your evidence, OpenAPI specs, and run artefacts, with explicit unknowns.")
+        };
+
+        var ssrfDetails = new List<string>
+        {
+            "Outbound requests must match configured host allowlists before execution.",
+            "Private network ranges are blocked by default, including RFC1918 and unique local IPv6 ranges.",
+            "Metadata and link-local ranges are blocked by default, including 169.254.169.254.",
+            "Loopback and localhost destinations are denied, including 127.0.0.1 and ::1."
+        };
+
+        var dataHandlingNotes = new List<string>
+        {
+            "Retention windows are configurable per project and can be shortened or extended by policy.",
+            "Redaction rules mask sensitive headers and JSON fields before storage or export.",
+            "Data is stored in the cloud region configured for your tenant; location details are shared during onboarding."
+        };
+
+        var auditTrailNotes = new List<string>
+        {
+            "Audit trail entries capture configuration changes, plan runs, approvals, and export events.",
+            "Entries include timestamps, actor identifiers, and project or environment context.",
+            "Audit logs can be exported as CSV or JSON summaries for compliance review."
         };
 
         var retentionNotes = new List<string>
@@ -432,11 +454,25 @@ public sealed record MarketingContent(
                 "Controls are built in so teams can run tests and AI analysis without broad access or hidden risk.",
                 "Security controls",
                 securityControls,
+                "SSRF protection",
+                ssrfDetails,
+                "Data handling",
+                dataHandlingNotes,
+                "Audit trail",
+                auditTrailNotes,
                 "Retention and evidence",
                 retentionNotes,
                 new VisualPlaceholder(
                     "Security controls placeholder",
                     "Planned visual for SSRF guard, allowlist policy flows, and evidence exports."),
+                "Responsible disclosure",
+                "If you believe you have found a security issue, report it privately so we can investigate and respond.",
+                "Email security",
+                "mailto:security@apitester.example.com",
+                "Status updates",
+                "Check the status page for planned maintenance windows and availability updates.",
+                "View system status",
+                "/status",
                 "Need a security review?",
                 "We can share our latest control summary, data handling notes, AI grounding approach, and audit log samples.",
                 "Contact security",
@@ -635,9 +671,23 @@ public sealed record SecurityComplianceContent(
     string HeroSubtitle,
     string ControlsTitle,
     IReadOnlyList<SecurityControl> Controls,
+    string SsrfTitle,
+    IReadOnlyList<string> SsrfNotes,
+    string DataHandlingTitle,
+    IReadOnlyList<string> DataHandlingNotes,
+    string AuditTrailTitle,
+    IReadOnlyList<string> AuditTrailNotes,
     string RetentionTitle,
     IReadOnlyList<string> RetentionNotes,
     VisualPlaceholder ControlsPlaceholder,
+    string DisclosureTitle,
+    string DisclosureSubtitle,
+    string DisclosureContactLabel,
+    string DisclosureContactLink,
+    string StatusTitle,
+    string StatusSubtitle,
+    string StatusLinkLabel,
+    string StatusLink,
     string CtaTitle,
     string CtaSubtitle,
     string CtaLabel,
