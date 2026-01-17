@@ -1,0 +1,7 @@
+Binary assets to add manually (PR blocked by binary restrictions):
+
+1) /ApiTester.Site/wwwroot/favicon.ico
+   - 32x32 and 16x16 sizes embedded (standard multi-size favicon)
+
+2) /ApiTester.Site/wwwroot/og-image.png
+   - 1200x630 OpenGraph preview image

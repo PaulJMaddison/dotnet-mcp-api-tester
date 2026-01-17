@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 360" role="img" aria-label="ApiTester personas illustration">
+  <rect width="820" height="360" rx="28" fill="#f8fafc" />
+  <g transform="translate(90 70)">
+    <circle cx="80" cy="70" r="46" fill="#4f46e5" opacity="0.9" />
+    <rect x="20" y="130" width="120" height="120" rx="32" fill="#e2e8f0" />
+    <text x="80" y="210" text-anchor="middle" font-family="'Inter', system-ui, sans-serif" font-size="16" fill="#0f172a" font-weight="600">QA</text>
+  </g>
+  <g transform="translate(320 40)">
+    <circle cx="90" cy="80" r="54" fill="#22d3ee" opacity="0.8" />
+    <rect x="20" y="150" width="140" height="120" rx="32" fill="#e2e8f0" />
+    <text x="90" y="230" text-anchor="middle" font-family="'Inter', system-ui, sans-serif" font-size="16" fill="#0f172a" font-weight="600">Product</text>
+  </g>
+  <g transform="translate(570 70)">
+    <circle cx="80" cy="70" r="46" fill="#0f172a" opacity="0.9" />
+    <rect x="20" y="130" width="120" height="120" rx="32" fill="#e2e8f0" />
+    <text x="80" y="210" text-anchor="middle" font-family="'Inter', system-ui, sans-serif" font-size="16" fill="#0f172a" font-weight="600">Dev</text>
+  </g>
+</svg>
