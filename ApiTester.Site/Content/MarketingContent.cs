@@ -69,8 +69,8 @@ public sealed record MarketingContent(
         {
             new(
                 "Developer",
-                "Ship with confidence by catching contract breaks before merge and keeping your API docs grounded in evidence.",
-                "Import OpenAPI, generate deterministic plans, and let AI propose edge cases while you control what becomes permanent coverage."),
+                "Ship with confidence by catching contract breaks before merge and keeping API docs grounded in evidence.",
+                "Import OpenAPI, generate deterministic plans, and let AI propose edge cases while you decide what becomes permanent coverage."),
             new(
                 "QA",
                 "Turn regression into reusable evidence with run history, baselines, and exportable release packs.",
@@ -82,7 +82,7 @@ public sealed record MarketingContent(
             new(
                 "Vibe coder",
                 "Prototype fast with AI, then lock in the best flows with deterministic tests and proof you can share.",
-                "Ask the AI for coverage ideas, promote the winners, and keep the rest as exploratory probes." )
+                "Ask the AI for coverage ideas, promote the winners, and keep the rest as exploratory probes.")
         };
 
         var homeWorkflowSteps = new List<WorkflowStep>
@@ -105,7 +105,7 @@ public sealed record MarketingContent(
         {
             new(
                 "Free",
-                "For solo developers validating a new API or prototype before sharing results.",
+                "For solo developers or vibe coders validating a new API before sharing results.",
                 "£0",
                 "per month",
                 "Start free",
@@ -336,8 +336,8 @@ public sealed record MarketingContent(
                     "/",
                     $"{baseUrl}/og/home-placeholder.png",
                     "Placeholder hero for ApiTester home"),
-                "Grounded API testing for dev, QA, compliance, and vibe coders.",
-                "ApiTester turns your OpenAPI into deterministic test plans, then uses AI to propose edge cases and produce grounded API documentation via MCP, with run history and audit-grade evidence.",
+                "Evidence-first API testing for dev, QA, compliance, and vibe coders.",
+                "ApiTester turns your OpenAPI into deterministic test plans, then uses AI to propose edge cases and produce grounded API documentation via MCP, with run history, baselines, and audit-grade evidence you can share.",
                 "Book a walkthrough",
                 "/contact",
                 "Read developer docs",
@@ -362,7 +362,7 @@ public sealed record MarketingContent(
                     new("Grounded API documentation", "AI explains endpoints, parameters, auth, and error contracts using only your spec and run evidence."),
                     new("Policy-first execution", "Allowlist base URLs and methods, block localhost and private networks, and enforce SSRF guard."),
                     new("Run history", "Filter run history by operationId, export CSV, and share reports."),
-                    new("Audit trail", "Track who ran what, when, and what changed for compliance."),
+                    new("Audit trail", "Track who ran what, when, and what changed for compliance reviews."),
                     new("Built for CI", "Headless by default via MCP, no UI clicking required, consistent results.")
                 },
                 "Move from testing to evidence in one workflow.",
