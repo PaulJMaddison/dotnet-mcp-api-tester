@@ -1,11 +1,28 @@
 @page "/docs/import-openapi"
 @using ApiTester.Site.Content
 
-<PageTitle>Import OpenAPI | ApiTester docs</PageTitle>
-
 @code {
     private DocPage Page => DocsContent.Current.Pages.First(page => page.Slug == "import-openapi");
+    private string Title => $"{Page.Title} | ApiTester docs";
+    private string CanonicalUrl => $"https://apitester.example.com/docs/{Page.Slug}";
 }
+
+<PageTitle>@Title</PageTitle>
+<HeadContent>
+    <meta name="description" content="@Page.Summary" />
+    <meta property="og:title" content="@Title" />
+    <meta property="og:description" content="@Page.Summary" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="@CanonicalUrl" />
+    <meta property="og:image" content="https://apitester.example.com/assets/marketing/og-devqa-compliance.svg" />
+    <meta property="og:image:alt" content="ApiTester marketing illustration" />
+    <meta name="twitter:card" content="@MarketingContent.Current.Metadata.TwitterCard" />
+    <meta name="twitter:title" content="@Title" />
+    <meta name="twitter:description" content="@Page.Summary" />
+    <meta name="twitter:image" content="https://apitester.example.com/assets/marketing/og-devqa-compliance.svg" />
+    <meta name="twitter:image:alt" content="ApiTester marketing illustration" />
+    <link rel="canonical" href="@CanonicalUrl" />
+</HeadContent>
 
 <DocsShell Title="@Page.Title" Subtitle="@Page.Summary" ActiveUrl="/docs/import-openapi">
     <DocsPageSections Page="@Page" />

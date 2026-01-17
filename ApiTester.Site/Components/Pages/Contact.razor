@@ -1,7 +1,31 @@
 @page "/contact"
+@using ApiTester.Site.Content
 @using ApiTester.Site.Models
 @inject NavigationManager NavigationManager
 @inject ApiTester.Site.Services.LeadCaptureClient LeadCaptureClient
+
+@code {
+    private const string Title = "Contact ApiTester | Book a walkthrough";
+    private const string Description = "Connect with the ApiTester team to plan your API testing rollout, demos, and security reviews.";
+    private const string CanonicalUrl = "https://apitester.example.com/contact";
+}
+
+<PageTitle>@Title</PageTitle>
+<HeadContent>
+    <meta name="description" content="@Description" />
+    <meta property="og:title" content="@Title" />
+    <meta property="og:description" content="@Description" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="@CanonicalUrl" />
+    <meta property="og:image" content="https://apitester.example.com/assets/marketing/og-devqa-compliance.svg" />
+    <meta property="og:image:alt" content="ApiTester marketing illustration" />
+    <meta name="twitter:card" content="@MarketingContent.Current.Metadata.TwitterCard" />
+    <meta name="twitter:title" content="@Title" />
+    <meta name="twitter:description" content="@Description" />
+    <meta name="twitter:image" content="https://apitester.example.com/assets/marketing/og-devqa-compliance.svg" />
+    <meta name="twitter:image:alt" content="ApiTester marketing illustration" />
+    <link rel="canonical" href="@CanonicalUrl" />
+</HeadContent>
 
 <section class="page-hero bg-light py-5">
     <div class="container">
@@ -14,7 +38,7 @@
     <div class="container">
         <div class="row g-4">
             <div class="col-lg-7">
-                <EditForm class="contact-form" Model="LeadCapture" OnValidSubmit="HandleValidSubmit">
+                <EditForm class="contact-form" Model="LeadCapture" OnValidSubmit="HandleValidSubmit" aria-label="Contact form">
                     <DataAnnotationsValidator />
                     <ValidationSummary class="text-danger" />
                     @if (!string.IsNullOrWhiteSpace(SubmissionError))

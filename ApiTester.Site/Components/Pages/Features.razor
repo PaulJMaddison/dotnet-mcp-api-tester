@@ -1,4 +1,28 @@
 @page "/features"
+@using ApiTester.Site.Content
+
+@code {
+    private const string Title = "ApiTester features | Automation for API-first teams";
+    private const string Description = "Explore ApiTester features like scenario studio, live monitoring, and contract diffing for evidence-led API releases.";
+    private const string CanonicalUrl = "https://apitester.example.com/features";
+}
+
+<PageTitle>@Title</PageTitle>
+<HeadContent>
+    <meta name="description" content="@Description" />
+    <meta property="og:title" content="@Title" />
+    <meta property="og:description" content="@Description" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="@CanonicalUrl" />
+    <meta property="og:image" content="https://apitester.example.com/assets/marketing/og-devqa-compliance.svg" />
+    <meta property="og:image:alt" content="ApiTester marketing illustration" />
+    <meta name="twitter:card" content="@MarketingContent.Current.Metadata.TwitterCard" />
+    <meta name="twitter:title" content="@Title" />
+    <meta name="twitter:description" content="@Description" />
+    <meta name="twitter:image" content="https://apitester.example.com/assets/marketing/og-devqa-compliance.svg" />
+    <meta name="twitter:image:alt" content="ApiTester marketing illustration" />
+    <link rel="canonical" href="@CanonicalUrl" />
+</HeadContent>
 
 <section class="page-hero bg-light py-5">
     <div class="container">
@@ -7,8 +31,9 @@
     </div>
 </section>
 
-<section class="py-5">
+<section class="py-5" aria-labelledby="feature-section-title">
     <div class="container">
+        <h2 id="feature-section-title" class="visually-hidden">Feature highlights</h2>
         <div class="row g-4">
             <div class="col-lg-4">
                 <div class="feature-card">
@@ -54,13 +79,13 @@
                 <div class="row g-3">
                     <div class="col-sm-6">
                         <div class="stat-card">
-                            <h4 class="h6 text-uppercase">Collaboration</h4>
+                            <h3 class="h6 text-uppercase">Collaboration</h3>
                             <p class="mb-0">Comment threads on every run keep QA, engineering, and product aligned.</p>
                         </div>
                     </div>
                     <div class="col-sm-6">
                         <div class="stat-card">
-                            <h4 class="h6 text-uppercase">Integrations</h4>
+                            <h3 class="h6 text-uppercase">Integrations</h3>
                             <p class="mb-0">Sync with GitHub, Azure DevOps, and CI pipelines without custom scripts.</p>
                         </div>
                     </div>

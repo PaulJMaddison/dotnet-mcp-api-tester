@@ -6,6 +6,16 @@ body {
     letter-spacing: 0.1px;
 }
 
+.text-muted,
+.text-secondary {
+    color: #475569 !important;
+}
+
+.app-shell .text-muted,
+.app-shell .text-secondary {
+    color: #94a3b8 !important;
+}
+
 h1,
 h2,
 h3,

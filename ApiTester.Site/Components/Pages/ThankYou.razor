@@ -1,5 +1,29 @@
 @page "/thank-you"
 @page "/contact/thanks"
+@using ApiTester.Site.Content
+
+@code {
+    private const string Title = "Thanks for contacting ApiTester";
+    private const string Description = "We received your ApiTester request and will follow up shortly with next steps.";
+    private const string CanonicalUrl = "https://apitester.example.com/thank-you";
+}
+
+<PageTitle>@Title</PageTitle>
+<HeadContent>
+    <meta name="description" content="@Description" />
+    <meta property="og:title" content="@Title" />
+    <meta property="og:description" content="@Description" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="@CanonicalUrl" />
+    <meta property="og:image" content="https://apitester.example.com/assets/marketing/og-devqa-compliance.svg" />
+    <meta property="og:image:alt" content="ApiTester marketing illustration" />
+    <meta name="twitter:card" content="@MarketingContent.Current.Metadata.TwitterCard" />
+    <meta name="twitter:title" content="@Title" />
+    <meta name="twitter:description" content="@Description" />
+    <meta name="twitter:image" content="https://apitester.example.com/assets/marketing/og-devqa-compliance.svg" />
+    <meta name="twitter:image:alt" content="ApiTester marketing illustration" />
+    <link rel="canonical" href="@CanonicalUrl" />
+</HeadContent>
 
 <section class="page-hero bg-light py-5">
     <div class="container">

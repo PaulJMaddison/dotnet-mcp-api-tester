@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,7 +34,28 @@ builder.Services.AddScoped<ApiTester.Site.Services.ILeadCaptureService, ApiTeste
 
 var app = builder.Build();
 
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = context =>
+    {
+        var path = context.Context.Request.Path;
+
+        if (path.StartsWithSegments("/assets")
+            || path.StartsWithSegments("/images")
+            || path.StartsWithSegments("/css")
+            || path.StartsWithSegments("/js"))
+        {
+            context.Context.Response.Headers[HeaderNames.CacheControl] = "public,max-age=31536000,immutable";
+            return;
+        }
+
+        if (path.Equals("/robots.txt", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("/sitemap.xml", StringComparison.OrdinalIgnoreCase))
+        {
+            context.Context.Response.Headers[HeaderNames.CacheControl] = "public,max-age=3600";
+        }
+    }
+});
 app.UseSession();
 app.UseAntiforgery();
 
