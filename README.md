@@ -8,7 +8,7 @@ The solution is split into three main layers:
 - **ApiTester.Ui**: A Razor Pages UI that calls `ApiTester.Web` using an API key. It is intended for human-driven exploration of projects and runs.
 - **Persistence layer (ApiTester.McpServer)**: Shared persistence abstractions and implementations. The Web API registers either file-based stores or EF Core-backed SQL stores based on configuration.
 
-![Architecture overview](docs/diagrams/architecture-overview.svg)
+<img src="docs/diagrams/architecture-overview.svg" alt="Architecture overview" style="max-width: 100%; height: auto;">
 
 ## Persistence model
 

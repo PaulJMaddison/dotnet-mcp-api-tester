@@ -80,7 +80,7 @@ Your API
 
 The AI never talks to your API directly.
 
-![MCP server flow](../docs/diagrams/mcp-server-flow.svg)
+<img src="../docs/diagrams/mcp-server-flow.svg" alt="MCP server flow" style="max-width: 100%; height: auto;">
 
 ---
 
