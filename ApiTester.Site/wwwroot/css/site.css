@@ -67,6 +67,13 @@ body {
     box-shadow: 0 16px 30px rgba(15, 23, 42, 0.08);
 }
 
+.pricing-pattern {
+    background-image: url("../assets/pricing/pricing-pattern.svg");
+    background-repeat: no-repeat;
+    background-position: top right;
+    background-size: 320px auto;
+}
+
 .pricing-card.featured {
     border: 2px solid #2563eb;
     box-shadow: 0 20px 40px rgba(37, 99, 235, 0.2);
@@ -74,6 +81,12 @@ body {
 
 .pricing-card .badge {
     font-size: 0.75rem;
+}
+
+.pricing-tier-icon {
+    height: 40px;
+    width: auto;
+    display: block;
 }
 
 .doc-list {
