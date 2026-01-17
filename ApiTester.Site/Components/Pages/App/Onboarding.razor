@@ -1,0 +1,68 @@
+@page "/app/onboarding"
+@layout ApiTester.Site.Components.Layout.AppLayout
+
+<PageTitle>Onboarding</PageTitle>
+
+<div class="app-page">
+    <AppBreadcrumbs Items="@Breadcrumbs" />
+
+    <div class="app-page-header">
+        <div>
+            <h1 class="h3 mb-1">Get started</h1>
+            <p class="text-secondary mb-0">Follow the checklist to set up your first API testing project.</p>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-12 col-lg-5">
+            <div class="app-card">
+                <h2 class="h5">Create your first project</h2>
+                <p class="text-secondary">Start by creating a project in ApiTester Web. You'll use it to group OpenAPI specs, base URLs, and test runs.</p>
+                <NavLink class="btn btn-primary" href="/app/projects">Go to projects</NavLink>
+            </div>
+        </div>
+        <div class="col-12 col-lg-7">
+            <div class="app-card">
+                <h2 class="h5">Onboarding checklist</h2>
+                <p class="text-secondary">Complete each step to finish setup.</p>
+                <ol class="list-group list-group-numbered">
+                    <li class="list-group-item d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-semibold">Create project</div>
+                            <div class="small text-secondary">Set up a new project workspace.</div>
+                        </div>
+                        <NavLink class="btn btn-sm btn-outline-primary" href="/app/projects">Projects</NavLink>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-semibold">Import OpenAPI</div>
+                            <div class="small text-secondary">Upload or connect your OpenAPI document.</div>
+                        </div>
+                        <NavLink class="btn btn-sm btn-outline-primary" href="/docs">OpenAPI docs</NavLink>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-semibold">Set base URL + policy</div>
+                            <div class="small text-secondary">Configure the environment and enforcement policy.</div>
+                        </div>
+                        <NavLink class="btn btn-sm btn-outline-primary" href="/docs">Environment setup</NavLink>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-semibold">Run test plan</div>
+                            <div class="small text-secondary">Trigger the first automated test run.</div>
+                        </div>
+                        <NavLink class="btn btn-sm btn-outline-primary" href="/app/projects">View runs</NavLink>
+                    </li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly IReadOnlyList<BreadcrumbItem> Breadcrumbs = new List<BreadcrumbItem>
+    {
+        new("Onboarding", "/app/onboarding")
+    };
+}
