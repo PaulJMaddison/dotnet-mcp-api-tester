@@ -90,6 +90,39 @@ public class MarketingContentTests
     }
 
     [Fact]
+    public void PricingContent_IncludesHeadingsAndCtas()
+    {
+        var pricing = MarketingContent.Current.Pricing;
+
+        Assert.False(string.IsNullOrWhiteSpace(pricing.HeroTitle));
+        Assert.False(string.IsNullOrWhiteSpace(pricing.ComparisonTitle));
+        Assert.False(string.IsNullOrWhiteSpace(pricing.UseCasesTitle));
+        Assert.False(string.IsNullOrWhiteSpace(pricing.FaqTitle));
+        Assert.False(string.IsNullOrWhiteSpace(pricing.PrimaryCtaLabel));
+        Assert.False(string.IsNullOrWhiteSpace(pricing.PrimaryCtaLink));
+        Assert.False(string.IsNullOrWhiteSpace(pricing.SecondaryCtaLabel));
+        Assert.False(string.IsNullOrWhiteSpace(pricing.SecondaryCtaLink));
+        Assert.False(string.IsNullOrWhiteSpace(pricing.ComparisonCtaLabel));
+        Assert.False(string.IsNullOrWhiteSpace(pricing.ComparisonCtaLink));
+    }
+
+    [Fact]
+    public void PricingContent_PlansHaveCompleteDefinitions()
+    {
+        var pricing = MarketingContent.Current.Pricing;
+
+        Assert.All(pricing.Plans, plan =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(plan.Name));
+            Assert.False(string.IsNullOrWhiteSpace(plan.Tagline));
+            Assert.False(string.IsNullOrWhiteSpace(plan.Price));
+            Assert.False(string.IsNullOrWhiteSpace(plan.CtaLabel));
+            Assert.False(string.IsNullOrWhiteSpace(plan.CtaLink));
+            Assert.NotEmpty(plan.Highlights);
+        });
+    }
+
+    [Fact]
     public void UseCasesContent_IncludesThreeAudienceStories()
     {
         var useCases = MarketingContent.Current.UseCases.CaseStudies;
