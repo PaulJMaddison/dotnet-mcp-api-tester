@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="200" viewBox="0 0 720 200">
+  <rect width="720" height="200" fill="#f8fafc"/>
+  <text x="24" y="32" font-family="Arial, sans-serif" font-size="16" fill="#0f172a" font-weight="600">Policy flow</text>
+
+  <rect x="32" y="70" width="150" height="70" rx="10" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <text x="107" y="110" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#0f172a">Policy set</text>
+
+  <rect x="220" y="70" width="150" height="70" rx="10" fill="#ffffff" stroke="#6366f1" stroke-width="2"/>
+  <text x="295" y="102" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#0f172a">Evaluation</text>
+  <text x="295" y="122" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#475569">Rules + weights</text>
+
+  <rect x="408" y="70" width="150" height="70" rx="10" fill="#ffffff" stroke="#10b981" stroke-width="2"/>
+  <text x="483" y="110" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#0f172a">Decision</text>
+
+  <rect x="596" y="70" width="100" height="70" rx="10" fill="#ffffff" stroke="#f97316" stroke-width="2"/>
+  <text x="646" y="110" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#0f172a">Action</text>
+
+  <line x1="182" y1="105" x2="220" y2="105" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="370" y1="105" x2="408" y2="105" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="558" y1="105" x2="596" y2="105" stroke="#10b981" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,3 L0,6 Z" fill="#334155"/>
+    </marker>
+  </defs>
+</svg>
