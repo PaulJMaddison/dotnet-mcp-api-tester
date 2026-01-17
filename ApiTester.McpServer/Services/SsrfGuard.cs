@@ -52,6 +52,11 @@ public sealed class SsrfGuard
     {
         reason = null;
 
+        if (ip.AddressFamily == AddressFamily.InterNetworkV6 && ip.IsIPv4MappedToIPv6)
+        {
+            return IsIpAllowed(ip.MapToIPv4(), blockLocalhost, blockPrivate, out reason);
+        }
+
         // Localhost / loopback
         if (blockLocalhost && IPAddress.IsLoopback(ip))
         {

@@ -14,6 +14,8 @@ public sealed class SsrfGuardTests
     [InlineData("http://172.16.0.1", "Private")]
     [InlineData("http://169.254.1.1", "Link-local")]
     [InlineData("http://[::1]", "Loopback")]
+    [InlineData("http://[::ffff:127.0.0.1]", "Loopback")]
+    [InlineData("http://[::ffff:10.0.0.1]", "Private")]
     public async Task CheckAsync_BlocksRestrictedHosts(string url, string reasonFragment)
     {
         var guard = new SsrfGuard();
