@@ -1,6 +1,7 @@
 @page "/contact"
-@using System.ComponentModel.DataAnnotations
+@using ApiTester.Site.Models
 @inject NavigationManager NavigationManager
+@inject ApiTester.Site.Services.LeadCaptureClient LeadCaptureClient
 
 <section class="page-hero bg-light py-5">
     <div class="container">
@@ -16,6 +17,10 @@
                 <EditForm class="contact-form" Model="LeadCapture" OnValidSubmit="HandleValidSubmit">
                     <DataAnnotationsValidator />
                     <ValidationSummary class="text-danger" />
+                    @if (!string.IsNullOrWhiteSpace(SubmissionError))
+                    {
+                        <div class="alert alert-danger" role="alert">@SubmissionError</div>
+                    }
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label" for="firstName">First name</label>
@@ -46,7 +51,9 @@
                             <InputText id="website" class="form-control" @bind-Value="LeadCapture.Website" tabindex="-1" autocomplete="off" />
                         </div>
                         <div class="col-12">
-                            <button class="btn btn-primary btn-lg" type="submit">Send request</button>
+                            <button class="btn btn-primary btn-lg" type="submit" disabled="@IsSubmitting">
+                                @(IsSubmitting ? "Sending..." : "Send request")
+                            </button>
                         </div>
                     </div>
                 </EditForm>
@@ -108,57 +115,29 @@
 </section>
 
 @code {
-    private LeadCaptureModel LeadCapture { get; } = new();
+    private LeadCaptureRequest LeadCapture { get; } = new();
 
-    private static readonly List<LeadCaptureSubmission> LeadSubmissions = new();
+    private bool IsSubmitting { get; set; }
 
-    private void HandleValidSubmit()
+    private string? SubmissionError { get; set; }
+
+    private async Task HandleValidSubmit()
     {
-        if (!string.IsNullOrWhiteSpace(LeadCapture.Website))
+        SubmissionError = null;
+        IsSubmitting = true;
+
+        var result = await LeadCaptureClient.SubmitAsync(LeadCapture, default);
+
+        IsSubmitting = false;
+
+        if (result.IsAccepted)
         {
+            NavigationManager.NavigateTo("/thank-you");
             return;
         }
 
-        LeadSubmissions.Add(new LeadCaptureSubmission(
-            LeadCapture.FirstName,
-            LeadCapture.LastName,
-            LeadCapture.Email,
-            LeadCapture.Company,
-            LeadCapture.Message,
-            DateTimeOffset.UtcNow));
-
-        NavigationManager.NavigateTo("/contact/thanks");
+        SubmissionError = result.Errors.Count > 0
+            ? string.Join(" ", result.Errors)
+            : "We could not submit your request. Please try again.";
     }
-
-    private sealed class LeadCaptureModel
-    {
-        [Required(ErrorMessage = "First name is required.")]
-        [StringLength(80)]
-        public string? FirstName { get; set; }
-
-        [Required(ErrorMessage = "Last name is required.")]
-        [StringLength(80)]
-        public string? LastName { get; set; }
-
-        [Required(ErrorMessage = "Work email is required.")]
-        [EmailAddress(ErrorMessage = "Enter a valid work email.")]
-        public string? Email { get; set; }
-
-        [StringLength(120)]
-        public string? Company { get; set; }
-
-        [Required(ErrorMessage = "Tell us what you want to achieve.")]
-        [StringLength(500)]
-        public string? Message { get; set; }
-
-        public string? Website { get; set; }
-    }
-
-    private sealed record LeadCaptureSubmission(
-        string? FirstName,
-        string? LastName,
-        string? Email,
-        string? Company,
-        string? Message,
-        DateTimeOffset SubmittedAt);
 }
