@@ -1,0 +1,160 @@
+@page "/app/runs/{RunId}"
+@layout ApiTester.Site.Components.Layout.AppLayout
+@inject IApiTesterWebClient ApiClient
+
+<PageTitle>Run detail</PageTitle>
+
+<div class="app-page">
+    <AppBreadcrumbs Items="@Breadcrumbs" />
+
+    <div class="app-page-header">
+        <div>
+            <h1 class="h3 mb-1">Run @RunId</h1>
+            <p class="text-secondary mb-0">Summary and case-by-case results for this run.</p>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="app-card app-state">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span class="ms-2">Loading run details...</span>
+        </div>
+    }
+    else if (_response?.Error is not null)
+    {
+        <div class="app-card app-state app-state-error">
+            <h2 class="h6">Unable to load run details</h2>
+            <p class="text-secondary">@_response.Error.Message</p>
+            @if (!string.IsNullOrWhiteSpace(_response.Error.Details))
+            {
+                <details>
+                    <summary>View error details</summary>
+                    <pre class="mb-0">@_response.Error.Details</pre>
+                </details>
+            }
+        </div>
+    }
+    else if (_response?.Data is null)
+    {
+        <div class="app-card app-state">
+            <h2 class="h6">Run not found</h2>
+            <p class="text-secondary mb-0">We could not locate this run.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <div class="col-12 col-lg-4">
+                <div class="app-card">
+                    <h2 class="h6 text-uppercase text-secondary">Run summary</h2>
+                    <ul class="list-unstyled mb-0">
+                        <li class="d-flex justify-content-between py-1"><span>Project</span><span>@_response.Data.ProjectKey</span></li>
+                        <li class="d-flex justify-content-between py-1"><span>Operation</span><span>@_response.Data.OperationId</span></li>
+                        <li class="d-flex justify-content-between py-1"><span>Started</span><span>@_response.Data.StartedUtc.ToString("g")</span></li>
+                        <li class="d-flex justify-content-between py-1"><span>Completed</span><span>@_response.Data.CompletedUtc.ToString("g")</span></li>
+                        <li class="d-flex justify-content-between py-1"><span>Duration</span><span>@TimeSpan.FromMilliseconds(_response.Data.Result.TotalDurationMs).TotalSeconds.ToString("0.##")s</span></li>
+                    </ul>
+                </div>
+                <div class="app-card mt-3">
+                    <h2 class="h6 text-uppercase text-secondary">Case totals</h2>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge text-bg-success">@_response.Data.Result.Passed passed</span>
+                        <span class="badge text-bg-danger">@_response.Data.Result.Failed failed</span>
+                        <span class="badge text-bg-warning text-dark">@_response.Data.Result.Blocked blocked</span>
+                        <span class="badge text-bg-light">@_response.Data.Result.TotalCases total</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-lg-8">
+                <div class="app-card">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2 class="h5 mb-0">Case results</h2>
+                        <span class="text-secondary small">@_response.Data.Result.Results.Count cases</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table align-middle">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Case</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Response</th>
+                                    <th scope="col">Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var result in _response.Data.Result.Results)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="fw-semibold">@result.Name</div>
+                                            <div class="text-secondary small">@result.Method @result.Url</div>
+                                        </td>
+                                        <td>
+                                            <span class="badge @GetStatusBadge(result)">@GetStatusLabel(result)</span>
+                                            @if (!string.IsNullOrWhiteSpace(result.FailureReason))
+                                            {
+                                                <div class="text-secondary small">@result.FailureReason</div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(result.BlockReason))
+                                            {
+                                                <div class="text-secondary small">@result.BlockReason</div>
+                                            }
+                                        </td>
+                                        <td>@(result.StatusCode?.ToString() ?? "-")</td>
+                                        <td>@TimeSpan.FromMilliseconds(result.DurationMs).TotalSeconds.ToString("0.##")s</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string RunId { get; set; } = string.Empty;
+
+    private ApiResult<RunDetailDto>? _response;
+    private bool _isLoading = true;
+
+    private IReadOnlyList<BreadcrumbItem> Breadcrumbs => new List<BreadcrumbItem>
+    {
+        new("Projects", "/app/projects"),
+        new("Run detail", $"/app/runs/{RunId}")
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _isLoading = true;
+        if (!Guid.TryParse(RunId, out var runId))
+        {
+            _response = ApiResult<RunDetailDto>.Failure("Run ID is not a valid GUID.", null);
+            _isLoading = false;
+            return;
+        }
+
+        _response = await ApiClient.GetRunDetailAsync(runId, CancellationToken.None);
+        _isLoading = false;
+    }
+
+    private static string GetStatusLabel(TestCaseResult result)
+    {
+        if (result.Blocked)
+            return "Blocked";
+
+        return result.Pass ? "Passed" : "Failed";
+    }
+
+    private static string GetStatusBadge(TestCaseResult result)
+    {
+        if (result.Blocked)
+            return "text-bg-warning text-dark";
+
+        return result.Pass ? "text-bg-success" : "text-bg-danger";
+    }
+}

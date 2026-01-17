@@ -194,3 +194,127 @@ body {
     border-color: #e2e8f0;
     color: #ffffff;
 }
+
+.app-shell {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    background: #f8fafc;
+}
+
+.app-sidebar {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.app-sidebar-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.app-sidebar-header a {
+    color: #ffffff;
+}
+
+.app-logo {
+    width: 28px;
+    height: 28px;
+}
+
+.app-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.app-nav-link {
+    color: #cbd5f5;
+    text-decoration: none;
+    padding: 8px 12px;
+    border-radius: 10px;
+}
+
+.app-nav-link.active,
+.app-nav-link:hover {
+    background: rgba(148, 163, 184, 0.2);
+    color: #ffffff;
+}
+
+.app-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.app-topbar {
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 20px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.app-topbar-title {
+    font-weight: 600;
+}
+
+.app-topbar-subtitle {
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.app-content {
+    padding: 24px 32px 40px;
+}
+
+.app-page {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.app-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.app-card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.app-state {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.app-state-error {
+    border: 1px solid rgba(248, 113, 113, 0.4);
+    background: #fff5f5;
+}
+
+.app-filter-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.app-breadcrumb {
+    margin-bottom: 0;
+}
+
+.app-breadcrumb .breadcrumb-item + .breadcrumb-item::before {
+    content: \"/\";
+}
