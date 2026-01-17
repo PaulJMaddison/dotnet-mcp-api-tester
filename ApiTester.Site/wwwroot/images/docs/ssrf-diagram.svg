@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" role="img" aria-labelledby="title desc">
+  <title id="title">SSRF protection flow</title>
+  <desc id="desc">Diagram showing how SSRF attempts are blocked by validation and allowlist controls.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#1f2937" />
+    </marker>
+    <style>
+      .label { font: 16px/1.4 "Inter", "Segoe UI", sans-serif; fill: #0f172a; }
+      .muted { fill: #475569; font-size: 14px; }
+      .box { fill: #f8fafc; stroke: #cbd5f5; stroke-width: 2; rx: 16; }
+      .danger { fill: #fef2f2; stroke: #fca5a5; stroke-width: 2; rx: 16; }
+      .accent { fill: #ecfeff; stroke: #22d3ee; stroke-width: 2; rx: 16; }
+      .arrow { stroke: #1f2937; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="900" height="520" fill="#ffffff" />
+
+  <rect class="box" x="40" y="60" width="220" height="90" />
+  <text class="label" x="150" y="105" text-anchor="middle">External attacker</text>
+  <text class="muted" x="150" y="130" text-anchor="middle">Crafted URL input</text>
+
+  <rect class="accent" x="330" y="60" width="220" height="90" />
+  <text class="label" x="440" y="105" text-anchor="middle">API Tester</text>
+  <text class="muted" x="440" y="130" text-anchor="middle">Receives request</text>
+
+  <rect class="box" x="330" y="200" width="220" height="110" />
+  <text class="label" x="440" y="235" text-anchor="middle">URL validation</text>
+  <text class="muted" x="440" y="260" text-anchor="middle">Scheme, DNS, IP checks</text>
+  <text class="muted" x="440" y="285" text-anchor="middle">Block internal ranges</text>
+
+  <rect class="box" x="620" y="200" width="220" height="110" />
+  <text class="label" x="730" y="235" text-anchor="middle">Allowlisted targets</text>
+  <text class="muted" x="730" y="260" text-anchor="middle">Trusted domains only</text>
+
+  <rect class="danger" x="620" y="360" width="220" height="110" />
+  <text class="label" x="730" y="395" text-anchor="middle">Metadata service</text>
+  <text class="muted" x="730" y="420" text-anchor="middle">Blocked destination</text>
+
+  <path class="arrow" d="M260 105 L330 105" />
+  <path class="arrow" d="M440 150 L440 200" />
+  <path class="arrow" d="M550 255 L620 255" />
+  <path class="arrow" d="M730 310 L730 360" />
+
+  <text class="muted" x="535" y="238">Valid URL</text>
+  <text class="muted" x="755" y="338">Blocked</text>
+
+  <rect class="box" x="40" y="360" width="220" height="110" />
+  <text class="label" x="150" y="395" text-anchor="middle">Audit log</text>
+  <text class="muted" x="150" y="420" text-anchor="middle">Capture SSRF attempt</text>
+  <path class="arrow" d="M330 255 L260 405" />
+</svg>
