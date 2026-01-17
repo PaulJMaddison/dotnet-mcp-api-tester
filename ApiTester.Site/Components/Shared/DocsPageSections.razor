@@ -1,0 +1,45 @@
+@using ApiTester.Site.Content
+
+@foreach (var section in Page.Sections)
+{
+    <section id="@section.Id" class="doc-section mb-4">
+        <h2 class="h5 fw-bold">@section.Heading</h2>
+        <p>@section.Body</p>
+        @if (section.Bullets.Any())
+        {
+            <ul class="doc-list">
+                @foreach (var bullet in section.Bullets)
+                {
+                    <li class="mb-2">@bullet</li>
+                }
+            </ul>
+        }
+        @if (section.Callouts.Any())
+        {
+            <div class="row g-3 mt-3">
+                @foreach (var callout in section.Callouts)
+                {
+                    <div class="col-md-6">
+                        <div class="p-3 bg-light border rounded-3 h-100">
+                            <h3 class="h6 fw-bold">@callout.Title</h3>
+                            <p class="small text-muted mb-0">@callout.Body</p>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+        @if (section.CodeSnippet is not null)
+        {
+            <div class="mt-3">
+                <CodeBlock Title="@section.CodeSnippet.Title"
+                           Description="@section.CodeSnippet.Description"
+                           Language="@section.CodeSnippet.Language"
+                           Code="@section.CodeSnippet.Code" />
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public DocPage Page { get; set; } = null!;
+}

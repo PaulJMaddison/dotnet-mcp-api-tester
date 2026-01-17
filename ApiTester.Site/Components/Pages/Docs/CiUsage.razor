@@ -1,0 +1,12 @@
+@page "/docs/ci-usage"
+@using ApiTester.Site.Content
+
+<PageTitle>CI usage | ApiTester docs</PageTitle>
+
+@code {
+    private DocPage Page => DocsContent.Current.Pages.First(page => page.Slug == "ci-usage");
+}
+
+<DocsShell Title="@Page.Title" Subtitle="@Page.Summary" ActiveUrl="/docs/ci-usage">
+    <DocsPageSections Page="@Page" />
+</DocsShell>

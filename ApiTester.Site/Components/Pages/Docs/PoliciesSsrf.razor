@@ -1,0 +1,12 @@
+@page "/docs/policies-ssrf"
+@using ApiTester.Site.Content
+
+<PageTitle>Policies & SSRF safety | ApiTester docs</PageTitle>
+
+@code {
+    private DocPage Page => DocsContent.Current.Pages.First(page => page.Slug == "policies-ssrf");
+}
+
+<DocsShell Title="@Page.Title" Subtitle="@Page.Summary" ActiveUrl="/docs/policies-ssrf">
+    <DocsPageSections Page="@Page" />
+</DocsShell>

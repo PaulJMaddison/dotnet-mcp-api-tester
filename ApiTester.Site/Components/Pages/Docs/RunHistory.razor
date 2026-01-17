@@ -1,0 +1,12 @@
+@page "/docs/run-history"
+@using ApiTester.Site.Content
+
+<PageTitle>Viewing run history | ApiTester docs</PageTitle>
+
+@code {
+    private DocPage Page => DocsContent.Current.Pages.First(page => page.Slug == "run-history");
+}
+
+<DocsShell Title="@Page.Title" Subtitle="@Page.Summary" ActiveUrl="/docs/run-history">
+    <DocsPageSections Page="@Page" />
+</DocsShell>

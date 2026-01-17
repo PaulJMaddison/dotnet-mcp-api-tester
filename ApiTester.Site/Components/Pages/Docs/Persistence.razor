@@ -1,0 +1,12 @@
+@page "/docs/persistence"
+@using ApiTester.Site.Content
+
+<PageTitle>Persistence setup | ApiTester docs</PageTitle>
+
+@code {
+    private DocPage Page => DocsContent.Current.Pages.First(page => page.Slug == "persistence");
+}
+
+<DocsShell Title="@Page.Title" Subtitle="@Page.Summary" ActiveUrl="/docs/persistence">
+    <DocsPageSections Page="@Page" />
+</DocsShell>

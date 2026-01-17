@@ -1,0 +1,12 @@
+@page "/docs/getting-started"
+@using ApiTester.Site.Content
+
+<PageTitle>Getting started | ApiTester docs</PageTitle>
+
+@code {
+    private DocPage Page => DocsContent.Current.Pages.First(page => page.Slug == "getting-started");
+}
+
+<DocsShell Title="@Page.Title" Subtitle="@Page.Summary" ActiveUrl="/docs/getting-started">
+    <DocsPageSections Page="@Page" />
+</DocsShell>
