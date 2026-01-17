@@ -13,14 +13,19 @@
                     <img class="site-logo" src="images/logo.svg" alt="ApiTester logo" />
                     <span>@Content.BrandName</span>
                 </NavLink>
-                <ul class="navbar-nav ms-auto mb-2 mb-lg-0 flex-row flex-wrap gap-3">
-                    @foreach (var item in Content.Navigation)
-                    {
-                        <li class="nav-item">
-                            <NavLink class="nav-link" href="@item.Url">@item.Label</NavLink>
-                        </li>
-                    }
-                </ul>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#primaryNav" aria-controls="primaryNav" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse site-nav" id="primaryNav">
+                    <ul class="navbar-nav ms-auto mb-2 mb-lg-0 gap-3">
+                        @foreach (var item in Content.Navigation)
+                        {
+                            <li class="nav-item">
+                                <NavLink class="nav-link" href="@item.Url">@item.Label</NavLink>
+                            </li>
+                        }
+                    </ul>
+                </div>
             </div>
         </nav>
     </header>
