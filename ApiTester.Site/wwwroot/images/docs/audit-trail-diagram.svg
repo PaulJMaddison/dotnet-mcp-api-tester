@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 520" role="img" aria-labelledby="title desc">
+  <title id="title">Audit trail flow</title>
+  <desc id="desc">Diagram showing user actions captured by the audit service and stored immutably with monitoring.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#0f172a" />
+    </marker>
+    <style>
+      .label { font: 16px/1.4 "Inter", "Segoe UI", sans-serif; fill: #0f172a; }
+      .muted { fill: #475569; font-size: 14px; }
+      .box { fill: #f8fafc; stroke: #cbd5f5; stroke-width: 2; rx: 16; }
+      .accent { fill: #ecfdf3; stroke: #22c55e; stroke-width: 2; rx: 16; }
+      .storage { fill: #eef2ff; stroke: #818cf8; stroke-width: 2; rx: 16; }
+      .arrow { stroke: #0f172a; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="920" height="520" fill="#ffffff" />
+
+  <rect class="box" x="40" y="80" width="220" height="90" />
+  <text class="label" x="150" y="120" text-anchor="middle">User action</text>
+  <text class="muted" x="150" y="145" text-anchor="middle">Login, test, export</text>
+
+  <rect class="accent" x="320" y="80" width="220" height="90" />
+  <text class="label" x="430" y="120" text-anchor="middle">API request</text>
+  <text class="muted" x="430" y="145" text-anchor="middle">Authenticated call</text>
+
+  <rect class="box" x="600" y="80" width="240" height="90" />
+  <text class="label" x="720" y="120" text-anchor="middle">Audit logger</text>
+  <text class="muted" x="720" y="145" text-anchor="middle">Normalize + sign event</text>
+
+  <rect class="storage" x="600" y="230" width="240" height="110" />
+  <text class="label" x="720" y="270" text-anchor="middle">Immutable log store</text>
+  <text class="muted" x="720" y="295" text-anchor="middle">WORM retention</text>
+  <text class="muted" x="720" y="320" text-anchor="middle">Encrypted archives</text>
+
+  <rect class="box" x="320" y="260" width="220" height="90" />
+  <text class="label" x="430" y="300" text-anchor="middle">Monitoring</text>
+  <text class="muted" x="430" y="325" text-anchor="middle">Alerts + reports</text>
+
+  <rect class="box" x="40" y="260" width="220" height="90" />
+  <text class="label" x="150" y="300" text-anchor="middle">Compliance review</text>
+  <text class="muted" x="150" y="325" text-anchor="middle">Exports + approvals</text>
+
+  <path class="arrow" d="M260 125 L320 125" />
+  <path class="arrow" d="M540 125 L600 125" />
+  <path class="arrow" d="M720 170 L720 230" />
+  <path class="arrow" d="M600 285 L540 305" />
+  <path class="arrow" d="M320 305 L260 305" />
+</svg>
