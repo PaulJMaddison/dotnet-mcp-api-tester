@@ -2,7 +2,25 @@
 
 @code {
     private DeveloperDocsContent Content { get; } = MarketingContent.Current.DeveloperDocs;
+    private PageMetadata Metadata => Content.Metadata;
 }
+
+<PageTitle>@Metadata.Title</PageTitle>
+<HeadContent>
+    <meta name="description" content="@Metadata.Description" />
+    <meta property="og:title" content="@Metadata.OgTitle" />
+    <meta property="og:description" content="@Metadata.OgDescription" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="@Metadata.CanonicalUrl" />
+    <meta property="og:image" content="@Metadata.OgImage" />
+    <meta property="og:image:alt" content="@Metadata.OgImageAlt" />
+    <meta name="twitter:card" content="@MarketingContent.Current.Metadata.TwitterCard" />
+    <meta name="twitter:title" content="@Metadata.OgTitle" />
+    <meta name="twitter:description" content="@Metadata.OgDescription" />
+    <meta name="twitter:image" content="@Metadata.OgImage" />
+    <meta name="twitter:image:alt" content="@Metadata.OgImageAlt" />
+    <link rel="canonical" href="@Metadata.CanonicalUrl" />
+</HeadContent>
 
 <section class="page-hero bg-light py-5">
     <div class="container">
@@ -24,13 +42,10 @@
                 </ol>
             </div>
             <div class="col-lg-6">
-                <figure class="diagram-visual">
-                    <img class="img-fluid" src="/assets/marketing/ai-mcp-pipeline.svg" alt="Developer docs workflow illustrating MCP, RAG, evidence, and eval reports." loading="lazy" />
-                    <figcaption class="mt-3 text-muted small">
-                        <span class="fw-semibold d-block">@Content.WorkflowPlaceholder.Title</span>
-                        @Content.WorkflowPlaceholder.Description
-                    </figcaption>
-                </figure>
+                <div class="diagram-placeholder">
+                    <div class="placeholder-grid">@Content.WorkflowPlaceholder.Title</div>
+                    <p class="mb-0">@Content.WorkflowPlaceholder.Description</p>
+                </div>
             </div>
         </div>
     </div>
@@ -49,6 +64,22 @@
                 </ul>
             </div>
             <div class="col-lg-6">
+                <h2 class="h4 fw-bold">@Content.EnvironmentTitle</h2>
+                <ul class="list-unstyled">
+                    @foreach (var step in Content.EnvironmentSteps)
+                    {
+                        <li class="mb-2">@step</li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="py-5">
+    <div class="container">
+        <div class="row g-4">
+            <div class="col-lg-6">
                 <h2 class="h4 fw-bold">@Content.CiTitle</h2>
                 <ol class="ps-3">
                     @foreach (var step in Content.CiSteps)
@@ -56,6 +87,17 @@
                         <li class="mb-2">@step</li>
                     }
                 </ol>
+            </div>
+            <div class="col-lg-6">
+                <div class="d-flex flex-column gap-4">
+                    @foreach (var snippet in Content.CodeSnippets)
+                    {
+                        <CodeBlock Title="@snippet.Title"
+                                   Description="@snippet.Description"
+                                   Language="@snippet.Language"
+                                   Code="@snippet.Code" />
+                    }
+                </div>
             </div>
         </div>
     </div>

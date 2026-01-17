@@ -1,23 +1,26 @@
-﻿@page "/"
+@page "/"
 
 @code {
     private HomePageContent Content { get; } = MarketingContent.Current.Home;
-    private IReadOnlyList<(string Src, string Alt)> PersonaVisuals { get; } = new List<(string, string)>
-    {
-        (
-            "/assets/marketing/persona-dev-qa-engineer.svg",
-            "Illustration of a developer coordinating with QA on release readiness."
-        ),
-        (
-            "/assets/marketing/persona-dev-qa-engineer.svg",
-            "Illustration of a QA engineer reviewing a test run summary."
-        ),
-        (
-            "/assets/marketing/persona-security-compliance-lead.svg",
-            "Illustration of a security and compliance lead with governance controls."
-        )
-    };
+    private PageMetadata Metadata => Content.Metadata;
 }
+
+<PageTitle>@Metadata.Title</PageTitle>
+<HeadContent>
+    <meta name="description" content="@Metadata.Description" />
+    <meta property="og:title" content="@Metadata.OgTitle" />
+    <meta property="og:description" content="@Metadata.OgDescription" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="@Metadata.CanonicalUrl" />
+    <meta property="og:image" content="@Metadata.OgImage" />
+    <meta property="og:image:alt" content="@Metadata.OgImageAlt" />
+    <meta name="twitter:card" content="@MarketingContent.Current.Metadata.TwitterCard" />
+    <meta name="twitter:title" content="@Metadata.OgTitle" />
+    <meta name="twitter:description" content="@Metadata.OgDescription" />
+    <meta name="twitter:image" content="@Metadata.OgImage" />
+    <meta name="twitter:image:alt" content="@Metadata.OgImageAlt" />
+    <link rel="canonical" href="@Metadata.CanonicalUrl" />
+</HeadContent>
 
 <section class="hero-section bg-light py-5">
     <div class="container">
@@ -31,13 +34,10 @@
                 </div>
             </div>
             <div class="col-lg-6">
-                <figure class="diagram-visual h-100">
-                    <img class="img-fluid" src="/assets/marketing/og-devqa-compliance.svg" alt="Illustration of developer, QA, and compliance teams sharing evidence." loading="lazy" />
-                    <figcaption class="mt-3 text-muted small">
-                        <span class="fw-semibold d-block">@Content.HeroPlaceholder.Title</span>
-                        @Content.HeroPlaceholder.Description
-                    </figcaption>
-                </figure>
+                <div class="diagram-placeholder">
+                    <div class="placeholder-grid">@Content.HeroPlaceholder.Title</div>
+                    <p class="mb-0">@Content.HeroPlaceholder.Description</p>
+                </div>
             </div>
         </div>
     </div>
@@ -47,19 +47,10 @@
     <div class="container">
         <h2 class="fw-bold">@Content.PersonaTitle</h2>
         <div class="row g-4 mt-2">
-            @for (var index = 0; index < Content.PersonaTiles.Count; index++)
+            @foreach (var tile in Content.PersonaTiles)
             {
-                var tile = Content.PersonaTiles[index];
-                var visual = PersonaVisuals[index % PersonaVisuals.Count];
-                <div class="col-md-4">
-                    <div class="card h-100 border-0 shadow-sm">
-                        <div class="card-body">
-                            <img class="img-fluid persona-visual mb-3" src="@visual.Src" alt="@visual.Alt" loading="lazy" />
-                            <h3 class="h5">@tile.Title</h3>
-                            <p class="mb-2">@tile.Outcome</p>
-                            <p class="text-muted mb-0">@tile.Proof</p>
-                        </div>
-                    </div>
+                <div class="col-md-6 col-lg-3">
+                    <PersonaCard Title="@tile.Title" Outcome="@tile.Outcome" Proof="@tile.Proof" />
                 </div>
             }
         </div>
@@ -82,13 +73,10 @@
                 </ol>
             </div>
             <div class="col-lg-7">
-                <figure class="diagram-visual">
-                    <img class="img-fluid" src="/assets/marketing/workflow-dev-qa-validation.svg" alt="Workflow illustrating plan definition, controlled execution, and evidence sharing." loading="lazy" />
-                    <figcaption class="mt-3 text-muted small">
-                        <span class="fw-semibold d-block">@Content.WorkflowPlaceholder.Title</span>
-                        @Content.WorkflowPlaceholder.Description
-                    </figcaption>
-                </figure>
+                <div class="diagram-placeholder">
+                    <div class="placeholder-grid">@Content.WorkflowPlaceholder.Title</div>
+                    <p class="mb-0">@Content.WorkflowPlaceholder.Description</p>
+                </div>
             </div>
         </div>
     </div>
@@ -97,19 +85,11 @@
 <section class="py-5">
     <div class="container">
         <h2 class="fw-bold">@Content.ProofTitle</h2>
-        <div class="row g-4 mt-2">
-            @foreach (var proof in Content.ProofPoints)
-            {
-                <div class="col-md-4">
-                    <div class="card h-100 border-0 shadow-sm">
-                        <div class="card-body">
-                            <h3 class="h6 text-uppercase">@proof.Title</h3>
-                            <p class="mb-0">@proof.Description</p>
-                        </div>
-                    </div>
-                </div>
-            }
-        </div>
+        <FeatureGrid Items="@Content.ProofPoints"
+                     TitleSelector="point => point.Title"
+                     DescriptionSelector="point => point.Description"
+                     ColumnClass="col-md-6 col-lg-3"
+                     TitleClass="h6 text-uppercase" />
     </div>
 </section>
 
@@ -135,15 +115,14 @@
             </div>
 
             <div class="col-lg-6">
-                <img class="img-fluid rounded-4 shadow-sm visual-asset"
-                     src="/assets/marketing/ai-mcp-pipeline.svg"
-                     alt="AI assisted MCP workflow from spec import to evidence and eval reports."
-                     loading="lazy" decoding="async" />
+                <div class="diagram-placeholder">
+                    <div class="placeholder-grid">Evidence-first AI workflow</div>
+                    <p class="mb-0">Planned visual highlighting MCP execution, AI analysis, and evidence exports.</p>
+                </div>
             </div>
         </div>
     </div>
 </section>
-
 
 <section class="cta-section text-white py-5">
     <div class="container text-center">
