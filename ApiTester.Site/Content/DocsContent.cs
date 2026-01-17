@@ -375,6 +375,165 @@ public static class DocsContent
                                 "Tip",
                                 "Keep AI probe runs in a separate pipeline step so they never block releases.")
                         })
+                }),
+            new(
+                "environment-config",
+                "Environment configuration",
+                "Set BaseUrl, lead capture storage, and secrets without committing sensitive data.",
+                new List<DocSection>
+                {
+                    new(
+                        "base-url",
+                        "Configure ApiTesterWeb BaseUrl",
+                        "ApiTester.Site connects to ApiTester.Web for authenticated app views and API calls.",
+                        new List<string>
+                        {
+                            "Set BaseUrl to the HTTPS endpoint for ApiTester.Web.",
+                            "Prefer environment variables for production overrides.",
+                            "Verify the value matches your reverse proxy host."
+                        },
+                        new CodeSnippet(
+                            "BaseUrl setting",
+                            "Point the site to the ApiTester.Web API.",
+                            "json",
+                            "{\n  \"ApiTesterWeb\": {\n    \"BaseUrl\": \"https://api.example.com\"\n  }\n}"),
+                        Array.Empty<DocCallout>()),
+                    new(
+                        "lead-capture",
+                        "Configure lead capture storage",
+                        "Lead capture submissions are stored in the LeadCapture database.",
+                        new List<string>
+                        {
+                            "Sqlite is the default when no connection string is provided.",
+                            "Use a persistent volume or managed database in production.",
+                            "Back up the database alongside other release artifacts."
+                        },
+                        new CodeSnippet(
+                            "Lead capture connection string",
+                            "Store lead data in a dedicated database.",
+                            "json",
+                            "{\n  \"ConnectionStrings\": {\n    \"LeadCapture\": \"Data Source=/var/lib/apitester-site/leads.db\"\n  }\n}"),
+                        Array.Empty<DocCallout>()),
+                    new(
+                        "secrets",
+                        "Manage secrets safely",
+                        "Keep API keys and credentials out of source control and build artifacts.",
+                        new List<string>
+                        {
+                            "Do not commit appsettings.Production.json with secrets.",
+                            "Inject secrets with environment variables or a secret manager.",
+                            "Rotate keys regularly and revoke unused credentials."
+                        },
+                        null,
+                        new List<DocCallout>
+                        {
+                            new(
+                                "Security",
+                                "ApiTester.Site does not log API keys. Avoid adding custom logging for headers or tokens.")
+                        })
+                }),
+            new(
+                "deployment",
+                "Deployment guide",
+                "Deploy ApiTester.Site with IIS, Kestrel, or containers without exposing core logic.",
+                new List<DocSection>
+                {
+                    new(
+                        "iis",
+                        "Deploy behind IIS",
+                        "Use IIS as a reverse proxy with the ASP.NET Core Hosting Bundle installed.",
+                        new List<string>
+                        {
+                            "Publish with a Release build and copy the output to the IIS site directory.",
+                            "Enable HTTPS bindings and forward headers from the proxy.",
+                            "Run the app pool with a dedicated identity and least privilege."
+                        },
+                        new CodeSnippet(
+                            "Publish for IIS",
+                            "Generate the deployment output for IIS.",
+                            "bash",
+                            "dotnet publish ApiTester.Site/ApiTester.Site.csproj -c Release -o ./publish"),
+                        Array.Empty<DocCallout>()),
+                    new(
+                        "kestrel",
+                        "Run as a Kestrel service",
+                        "Kestrel can run as a systemd service behind Nginx or an L7 load balancer.",
+                        new List<string>
+                        {
+                            "Set ASPNETCORE_ENVIRONMENT=Production in the service definition.",
+                            "Bind Kestrel to localhost and let the proxy terminate TLS.",
+                            "Use a dedicated service account with a locked-down working directory."
+                        },
+                        new CodeSnippet(
+                            "systemd service",
+                            "Example systemd unit for ApiTester.Site.",
+                            "ini",
+                            "[Service]\nWorkingDirectory=/opt/apitester/site\nExecStart=/opt/apitester/site/ApiTester.Site\nEnvironment=ASPNETCORE_ENVIRONMENT=Production\nRestart=always\nUser=apitester"),
+                        Array.Empty<DocCallout>()),
+                    new(
+                        "container",
+                        "Container deployment",
+                        "Package the site in a container image and run it with minimal runtime dependencies.",
+                        new List<string>
+                        {
+                            "Expose only the HTTP port used by your reverse proxy.",
+                            "Mount a volume for LeadCapture storage if using Sqlite.",
+                            "Inject secrets via your orchestrator secret store."
+                        },
+                        new CodeSnippet(
+                            "Run container",
+                            "Example docker run command.",
+                            "bash",
+                            "docker run -d \\\n  -e ApiTesterWeb__BaseUrl=https://api.example.com \\\n  -e ConnectionStrings__LeadCapture=Data\\ Source=/data/leads.db \\\n  -v /srv/apitester-site:/data \\\n  -p 8080:8080 apitester/site:latest"),
+                        Array.Empty<DocCallout>())
+                }),
+            new(
+                "release-checklist",
+                "Release checklist",
+                "Verify configuration, secrets, and hosting readiness before shipping ApiTester.Site.",
+                new List<DocSection>
+                {
+                    new(
+                        "pre-release",
+                        "Pre-release validation",
+                        "Confirm configuration and secrets before deploying.",
+                        new List<string>
+                        {
+                            "Confirm ApiTesterWeb BaseUrl points to the correct environment.",
+                            "Validate LeadCapture storage backups and retention.",
+                            "Ensure no secrets are committed in appsettings.json or appsettings.Production.json."
+                        },
+                        null,
+                        Array.Empty<DocCallout>()),
+                    new(
+                        "deployment-steps",
+                        "Deployment steps",
+                        "Deploy the site and validate runtime health.",
+                        new List<string>
+                        {
+                            "Publish the Release build and deploy to the target host.",
+                            "Verify TLS certificates, reverse proxy headers, and health endpoints.",
+                            "Confirm that API keys are accepted and not written to logs."
+                        },
+                        null,
+                        new List<DocCallout>
+                        {
+                            new(
+                                "Security",
+                                "Review log sinks to confirm headers and request bodies are not logged.")
+                        }),
+                    new(
+                        "post-release",
+                        "Post-release checks",
+                        "Monitor the site after deployment.",
+                        new List<string>
+                        {
+                            "Validate lead submissions are stored successfully.",
+                            "Monitor error rates and latency for the first 24 hours.",
+                            "Rotate any temporary deployment credentials."
+                        },
+                        null,
+                        Array.Empty<DocCallout>())
                 })
         };
 
@@ -513,6 +672,14 @@ public static class DocsContent
                     new("Policies + SSRF safety", "/docs/policies-ssrf", "Lock outbound traffic to allowlists."),
                     new("Persistence setup", "/docs/persistence", "Choose SqlServer or file storage."),
                     new("CI usage", "/docs/ci-usage", "Run deterministic plans in pipelines.")
+                }),
+            new(
+                "Deployment",
+                new List<DocNavItem>
+                {
+                    new("Environment configuration", "/docs/environment-config", "Set BaseUrl, DB, and secrets."),
+                    new("Deployment guide", "/docs/deployment", "Ship the site on IIS, Kestrel, or containers."),
+                    new("Release checklist", "/docs/release-checklist", "Confirm readiness before releasing.")
                 }),
             new(
                 "Reference",
