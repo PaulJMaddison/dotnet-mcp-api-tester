@@ -2,7 +2,25 @@
 
 @code {
     private PricingPageContent Content { get; } = MarketingContent.Current.Pricing;
+    private PageMetadata Metadata => Content.Metadata;
 }
+
+<PageTitle>@Metadata.Title</PageTitle>
+<HeadContent>
+    <meta name="description" content="@Metadata.Description" />
+    <meta property="og:title" content="@Metadata.OgTitle" />
+    <meta property="og:description" content="@Metadata.OgDescription" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="@Metadata.CanonicalUrl" />
+    <meta property="og:image" content="@Metadata.OgImage" />
+    <meta property="og:image:alt" content="@Metadata.OgImageAlt" />
+    <meta name="twitter:card" content="@MarketingContent.Current.Metadata.TwitterCard" />
+    <meta name="twitter:title" content="@Metadata.OgTitle" />
+    <meta name="twitter:description" content="@Metadata.OgDescription" />
+    <meta name="twitter:image" content="@Metadata.OgImage" />
+    <meta name="twitter:image:alt" content="@Metadata.OgImageAlt" />
+    <link rel="canonical" href="@Metadata.CanonicalUrl" />
+</HeadContent>
 
 <section class="page-hero bg-light py-5">
     <div class="container">
@@ -78,31 +96,7 @@
             </div>
             <a class="btn btn-outline-primary" href="@Content.ComparisonCtaLink">@Content.ComparisonCtaLabel</a>
         </div>
-        <div class="table-responsive">
-            <table class="table table-bordered align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th scope="col">@Content.ComparisonHeader</th>
-                        @foreach (var plan in Content.Plans)
-                        {
-                            <th scope="col">@plan.Name</th>
-                        }
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var feature in Content.FeatureMatrix)
-                    {
-                        <tr>
-                            <th scope="row">@feature.Feature</th>
-                            @foreach (var value in feature.Values)
-                            {
-                                <td>@value</td>
-                            }
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+        <PricingTable Plans="@Content.Plans" Features="@Content.FeatureMatrix" ComparisonHeader="@Content.ComparisonHeader" />
     </div>
 </section>
 
@@ -110,19 +104,11 @@
     <div class="container">
         <h2 class="h4 fw-bold">@Content.UseCasesTitle</h2>
         <p class="text-muted">@Content.UseCasesSubtitle</p>
-        <div class="row g-4 mt-2">
-            @foreach (var useCase in Content.UseCases)
-            {
-                <div class="col-md-6 col-lg-3">
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <h3 class="h6 fw-bold">@useCase.Title</h3>
-                            <p class="text-muted mb-0">@useCase.Description</p>
-                        </div>
-                    </div>
-                </div>
-            }
-        </div>
+        <FeatureGrid Items="@Content.UseCases"
+                     TitleSelector="useCase => useCase.Title"
+                     DescriptionSelector="useCase => useCase.Description"
+                     ColumnClass="col-md-6 col-lg-3"
+                     TitleClass="h6 fw-bold" />
     </div>
 </section>
 

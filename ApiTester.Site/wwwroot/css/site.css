@@ -137,3 +137,36 @@ body {
     display: block;
     padding: 12px;
 }
+
+.code-block {
+    background: #0f172a;
+    border-radius: 16px;
+    padding: 16px;
+    color: #e2e8f0;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.25);
+}
+
+.code-block pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.9rem;
+}
+
+.code-block .code-header {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+}
+
+.code-block .copy-button {
+    background: transparent;
+    border: 1px solid rgba(226, 232, 240, 0.5);
+    color: #e2e8f0;
+}
+
+.code-block .copy-button:hover,
+.code-block .copy-button:focus {
+    border-color: #e2e8f0;
+    color: #ffffff;
+}

@@ -1,0 +1,33 @@
+@using ApiTester.Site.Content
+
+<div class="table-responsive">
+    <table class="table table-bordered align-middle">
+        <thead class="table-light">
+            <tr>
+                <th scope="col">@ComparisonHeader</th>
+                @foreach (var plan in Plans)
+                {
+                    <th scope="col">@plan.Name</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var feature in Features)
+            {
+                <tr>
+                    <th scope="row">@feature.Feature</th>
+                    @foreach (var value in feature.Values)
+                    {
+                        <td>@value</td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<PricingPlan> Plans { get; set; } = Array.Empty<PricingPlan>();
+    [Parameter] public IReadOnlyList<FeatureComparison> Features { get; set; } = Array.Empty<FeatureComparison>();
+    [Parameter] public string ComparisonHeader { get; set; } = "Capability";
+}

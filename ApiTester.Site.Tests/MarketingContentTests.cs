@@ -22,8 +22,8 @@ public class MarketingContentTests
 
         Assert.Contains("SSRF guard", controls);
         Assert.Contains("Policy allowlists", controls);
-        Assert.Contains("Audit logs", controls);
-        Assert.Contains("Project separation", controls);
+        Assert.Contains("Audit trail", controls);
+        Assert.Contains("Redaction", controls);
     }
 
     [Fact]
@@ -43,6 +43,14 @@ public class MarketingContentTests
     }
 
     [Fact]
+    public void HomeContent_IncludesVibeCoderPersona()
+    {
+        var personas = MarketingContent.Current.Home.PersonaTiles.Select(tile => tile.Title).ToList();
+
+        Assert.Contains("Vibe coder", personas);
+    }
+
+    [Fact]
     public void QaReportingContent_DescribesEvidenceAndExports()
     {
         var content = MarketingContent.Current.QaReporting;
@@ -54,6 +62,39 @@ public class MarketingContentTests
         Assert.Contains("run history", combined, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("deterministic", combined, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("export", combined, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DeveloperDocsContent_IncludesEnvironmentAndCodeSnippets()
+    {
+        var content = MarketingContent.Current.DeveloperDocs;
+
+        Assert.NotEmpty(content.EnvironmentSteps);
+        Assert.NotEmpty(content.CodeSnippets);
+        Assert.All(content.CodeSnippets, snippet => Assert.False(string.IsNullOrWhiteSpace(snippet.Code)));
+    }
+
+    [Fact]
+    public void PageMetadata_IsConfiguredForCorePages()
+    {
+        var pages = new[]
+        {
+            MarketingContent.Current.Home.Metadata,
+            MarketingContent.Current.Pricing.Metadata,
+            MarketingContent.Current.SecurityCompliance.Metadata,
+            MarketingContent.Current.QaReporting.Metadata,
+            MarketingContent.Current.DeveloperDocs.Metadata,
+            MarketingContent.Current.UseCases.Metadata,
+            MarketingContent.Current.About.Metadata
+        };
+
+        Assert.All(pages, page =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(page.Title));
+            Assert.False(string.IsNullOrWhiteSpace(page.Description));
+            Assert.False(string.IsNullOrWhiteSpace(page.CanonicalUrl));
+            Assert.False(string.IsNullOrWhiteSpace(page.OgImage));
+        });
     }
 
     private static string CombineText(params string[] segments)
