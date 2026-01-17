@@ -1,0 +1,82 @@
+@page "/app/leads"
+@layout ApiTester.Site.Components.Layout.AppLayout
+@inject ApiTester.Site.Services.ILeadCaptureStore LeadCaptureStore
+
+<PageTitle>Leads</PageTitle>
+
+<div class="app-page">
+    <AppBreadcrumbs Items="@Breadcrumbs" />
+
+    <div class="app-page-header">
+        <div>
+            <h1 class="h3 mb-1">Leads</h1>
+            <p class="text-secondary mb-0">Review contact submissions captured from the marketing site.</p>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="app-card app-state">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span class="ms-2">Loading leads...</span>
+        </div>
+    }
+    else if (_leads.Count == 0)
+    {
+        <div class="app-card app-state">
+            <h2 class="h6">No leads yet</h2>
+            <p class="text-secondary mb-0">Submissions from the contact form will appear here.</p>
+        </div>
+    }
+    else
+    {
+        <div class="app-card">
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th scope="col">Submitted</th>
+                            <th scope="col">Name</th>
+                            <th scope="col">Email</th>
+                            <th scope="col">Company</th>
+                            <th scope="col">Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var lead in _leads)
+                        {
+                            <tr>
+                                <td class="text-secondary small">@lead.SubmittedAt.ToLocalTime().ToString("MMM dd, yyyy HH:mm")</td>
+                                <td>@lead.FirstName @lead.LastName</td>
+                                <td>@lead.Email</td>
+                                <td>@(string.IsNullOrWhiteSpace(lead.Company) ? "—" : lead.Company)</td>
+                                <td class="text-secondary">@lead.Message</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly List<ApiTester.Site.Models.LeadCaptureSubmission> _leads = new();
+    private bool _isLoading = true;
+
+    private static readonly IReadOnlyList<BreadcrumbItem> Breadcrumbs =
+        new List<BreadcrumbItem>
+        {
+            new("Workspace", "/app/projects"),
+            new("Leads", "/app/leads")
+        };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var leads = await LeadCaptureStore.GetAllAsync(default);
+        _leads.AddRange(leads);
+        _isLoading = false;
+    }
+}

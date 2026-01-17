@@ -27,12 +27,14 @@ public class RoutingTests
         new object[] { typeof(UseCases), "/use-cases" },
         new object[] { typeof(About), "/about" },
         new object[] { typeof(Contact), "/contact" },
+        new object[] { typeof(ThankYou), "/thank-you" },
         new object[] { typeof(ThankYou), "/contact/thanks" },
         new object[] { typeof(Status), "/status" },
         new object[] { typeof(Features), "/features" },
         new object[] { typeof(SignIn), "/app/sign-in" },
         new object[] { typeof(Onboarding), "/app/onboarding" },
         new object[] { typeof(Projects), "/app/projects" },
+        new object[] { typeof(Leads), "/app/leads" },
         new object[] { typeof(ProjectRuns), "/app/projects/{projectKey}/runs" },
         new object[] { typeof(RunDetail), "/app/runs/{runId}" }
     };
