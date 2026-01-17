@@ -1,0 +1,29 @@
+@typeparam TItem
+
+<div class="row g-4">
+    @foreach (var item in Items)
+    {
+        <div class="@ColumnClass">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-body">
+                    <h3 class="@TitleClass">@TitleSelector(item)</h3>
+                    <p class="mb-0">@DescriptionSelector(item)</p>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<TItem> Items { get; set; } = Array.Empty<TItem>();
+    [Parameter] public Func<TItem, string> TitleSelector { get; set; } = default!;
+    [Parameter] public Func<TItem, string> DescriptionSelector { get; set; } = default!;
+    [Parameter] public string ColumnClass { get; set; } = "col-md-4";
+    [Parameter] public string TitleClass { get; set; } = "h6 text-uppercase";
+
+    protected override void OnParametersSet()
+    {
+        ArgumentNullException.ThrowIfNull(TitleSelector);
+        ArgumentNullException.ThrowIfNull(DescriptionSelector);
+    }
+}

@@ -2,7 +2,25 @@
 
 @code {
     private SecurityComplianceContent Content { get; } = MarketingContent.Current.SecurityCompliance;
+    private PageMetadata Metadata => Content.Metadata;
 }
+
+<PageTitle>@Metadata.Title</PageTitle>
+<HeadContent>
+    <meta name="description" content="@Metadata.Description" />
+    <meta property="og:title" content="@Metadata.OgTitle" />
+    <meta property="og:description" content="@Metadata.OgDescription" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="@Metadata.CanonicalUrl" />
+    <meta property="og:image" content="@Metadata.OgImage" />
+    <meta property="og:image:alt" content="@Metadata.OgImageAlt" />
+    <meta name="twitter:card" content="@MarketingContent.Current.Metadata.TwitterCard" />
+    <meta name="twitter:title" content="@Metadata.OgTitle" />
+    <meta name="twitter:description" content="@Metadata.OgDescription" />
+    <meta name="twitter:image" content="@Metadata.OgImage" />
+    <meta name="twitter:image:alt" content="@Metadata.OgImageAlt" />
+    <link rel="canonical" href="@Metadata.CanonicalUrl" />
+</HeadContent>
 
 <section class="page-hero bg-light py-5">
     <div class="container">
@@ -13,29 +31,23 @@
 
 <section class="py-5">
     <div class="container">
-        <div class="row g-4">
+        <div class="row g-4 align-items-center">
             <div class="col-lg-6">
                 <h2 class="h4 fw-bold">@Content.ControlsTitle</h2>
-                <ul class="list-unstyled">
-                    @foreach (var control in Content.Controls)
-                    {
-                        <li class="mb-3">
-                            <strong>@control.Title:</strong> @control.Description
-                        </li>
-                    }
-                </ul>
+                <FeatureGrid Items="@Content.Controls"
+                             TitleSelector="control => control.Title"
+                             DescriptionSelector="control => control.Description"
+                             ColumnClass="col-md-6"
+                             TitleClass="h6 text-uppercase" />
             </div>
             <div class="col-lg-6">
-                <figure class="diagram-visual">
-                    <img class="img-fluid" src="/assets/marketing/security-compliance-shield.svg" alt="Security compliance shield illustrating governance controls." loading="lazy" />
-                    <figcaption class="mt-3 text-muted small">
-                        <span class="fw-semibold d-block">@Content.ControlsPlaceholder.Title</span>
-                        @Content.ControlsPlaceholder.Description
-                    </figcaption>
-                </figure>
+                <div class="diagram-placeholder">
+                    <div class="placeholder-grid">@Content.ControlsPlaceholder.Title</div>
+                    <p class="mb-0">@Content.ControlsPlaceholder.Description</p>
+                </div>
             </div>
         </div>
-        <div class="row g-4 mt-3">
+        <div class="row g-4 mt-4">
             <div class="col-md-12">
                 <h3 class="h5 fw-bold">@Content.RetentionTitle</h3>
                 <ul class="list-unstyled">

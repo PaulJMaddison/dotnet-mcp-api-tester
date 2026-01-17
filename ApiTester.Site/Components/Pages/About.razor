@@ -2,7 +2,25 @@
 
 @code {
     private AboutContent Content { get; } = MarketingContent.Current.About;
+    private PageMetadata Metadata => Content.Metadata;
 }
+
+<PageTitle>@Metadata.Title</PageTitle>
+<HeadContent>
+    <meta name="description" content="@Metadata.Description" />
+    <meta property="og:title" content="@Metadata.OgTitle" />
+    <meta property="og:description" content="@Metadata.OgDescription" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="@Metadata.CanonicalUrl" />
+    <meta property="og:image" content="@Metadata.OgImage" />
+    <meta property="og:image:alt" content="@Metadata.OgImageAlt" />
+    <meta name="twitter:card" content="@MarketingContent.Current.Metadata.TwitterCard" />
+    <meta name="twitter:title" content="@Metadata.OgTitle" />
+    <meta name="twitter:description" content="@Metadata.OgDescription" />
+    <meta name="twitter:image" content="@Metadata.OgImage" />
+    <meta name="twitter:image:alt" content="@Metadata.OgImageAlt" />
+    <link rel="canonical" href="@Metadata.CanonicalUrl" />
+</HeadContent>
 
 <section class="page-hero bg-light py-5">
     <div class="container">
