@@ -294,7 +294,7 @@ public sealed record MarketingContent(
                 "Outcomes for every role",
                 homePersonaTiles,
                 "Workflow",
-                "A predictable path from spec to tests to evidence, with AI doing the tedious parts.",
+                "A predictable path from spec to tests to evidence, with AI doing the tedious parts and CI readiness built in.",
                 homeWorkflowSteps,
                 new VisualPlaceholder(
                     "Workflow animation placeholder",
