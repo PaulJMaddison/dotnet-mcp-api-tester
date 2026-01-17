@@ -1,0 +1,12 @@
+<svg width="360" height="360" viewBox="0 0 360 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grid-fade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7BA7FF" stop-opacity="0.08" />
+      <stop offset="1" stop-color="#5A86E5" stop-opacity="0.02" />
+    </linearGradient>
+    <pattern id="grid-lines" width="36" height="36" patternUnits="userSpaceOnUse">
+      <path d="M36 0H0V36" stroke="url(#grid-fade)" stroke-width="1" />
+    </pattern>
+  </defs>
+  <rect width="360" height="360" fill="url(#grid-lines)" />
+</svg>
