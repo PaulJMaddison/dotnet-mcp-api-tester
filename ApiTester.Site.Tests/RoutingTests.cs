@@ -1,5 +1,6 @@
 using System.Reflection;
 using ApiTester.Site.Components.Pages;
+using ApiTester.Site.Content;
 using Microsoft.AspNetCore.Components;
 
 namespace ApiTester.Site.Tests;
@@ -30,5 +31,18 @@ public class RoutingTests
             .ToList();
 
         Assert.Contains(expectedRoute, routes);
+    }
+
+    [Fact]
+    public void NavigationRoutes_MapToKnownPages()
+    {
+        var expectedRoutes = Routes.Select(route => route[1]?.ToString())
+            .Where(route => !string.IsNullOrWhiteSpace(route))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in MarketingContent.Current.Layout.Navigation)
+        {
+            Assert.Contains(item.Url, expectedRoutes);
+        }
     }
 }
