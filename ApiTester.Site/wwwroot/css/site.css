@@ -85,7 +85,10 @@ h6 {
 }
 
 .cta-section {
-    background: linear-gradient(120deg, #2563eb, #1d4ed8);
+    background-image: linear-gradient(120deg, #2563eb, #1d4ed8), url("../assets/patterns/bg-grid-glow.svg");
+    background-repeat: no-repeat;
+    background-position: center right;
+    background-size: cover, 640px auto;
 }
 
 .feature-card,
@@ -112,6 +115,34 @@ h6 {
     background-repeat: no-repeat;
     background-position: top right;
     background-size: 320px auto;
+}
+
+.hero-section {
+    background-image: url("../assets/patterns/bg-grid-glow.svg");
+    background-repeat: no-repeat;
+    background-position: top right;
+    background-size: 720px auto;
+}
+
+.page-hero {
+    background-image: url("../assets/patterns/bg-dots-soft.svg");
+    background-repeat: repeat;
+    background-position: center;
+    background-size: 240px auto;
+}
+
+.section-pattern-dots {
+    background-image: url("../assets/patterns/bg-dots-soft.svg");
+    background-repeat: repeat;
+    background-position: center;
+    background-size: 220px auto;
+}
+
+.section-pattern-grid {
+    background-image: url("../assets/patterns/bg-grid-glow.svg");
+    background-repeat: no-repeat;
+    background-position: center top;
+    background-size: 880px auto;
 }
 
 .pricing-card.featured {
