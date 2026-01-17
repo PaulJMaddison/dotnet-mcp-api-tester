@@ -48,6 +48,35 @@
             </div>
         </div>
         <div class="row g-4 mt-4">
+            <div class="col-lg-4">
+                <h3 class="h5 fw-bold">@Content.SsrfTitle</h3>
+                <ul class="list-unstyled">
+                    @foreach (var note in Content.SsrfNotes)
+                    {
+                        <li class="mb-2">@note</li>
+                    }
+                </ul>
+            </div>
+            <div class="col-lg-4">
+                <h3 class="h5 fw-bold">@Content.DataHandlingTitle</h3>
+                <ul class="list-unstyled">
+                    @foreach (var note in Content.DataHandlingNotes)
+                    {
+                        <li class="mb-2">@note</li>
+                    }
+                </ul>
+            </div>
+            <div class="col-lg-4">
+                <h3 class="h5 fw-bold">@Content.AuditTrailTitle</h3>
+                <ul class="list-unstyled">
+                    @foreach (var note in Content.AuditTrailNotes)
+                    {
+                        <li class="mb-2">@note</li>
+                    }
+                </ul>
+            </div>
+        </div>
+        <div class="row g-4 mt-4">
             <div class="col-md-12">
                 <h3 class="h5 fw-bold">@Content.RetentionTitle</h3>
                 <ul class="list-unstyled">
@@ -56,6 +85,23 @@
                         <li class="mb-2">@note</li>
                     }
                 </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="py-5 bg-light">
+    <div class="container">
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <h2 class="h5 fw-bold">@Content.DisclosureTitle</h2>
+                <p class="mb-3">@Content.DisclosureSubtitle</p>
+                <a class="btn btn-outline-primary" href="@Content.DisclosureContactLink">@Content.DisclosureContactLabel</a>
+            </div>
+            <div class="col-lg-6">
+                <h2 class="h5 fw-bold">@Content.StatusTitle</h2>
+                <p class="mb-3">@Content.StatusSubtitle</p>
+                <a class="btn btn-outline-primary" href="@Content.StatusLink">@Content.StatusLinkLabel</a>
             </div>
         </div>
     </div>
