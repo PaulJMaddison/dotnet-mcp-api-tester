@@ -1,0 +1,26 @@
+@if (Items.Count > 0)
+{
+    <nav aria-label="Breadcrumb">
+        <ol class="breadcrumb app-breadcrumb">
+            @for (var i = 0; i < Items.Count; i++)
+            {
+                var item = Items[i];
+                var isLast = i == Items.Count - 1;
+                <li class="breadcrumb-item @(isLast ? "active" : null)" aria-current="@(isLast ? "page" : null)">
+                    @if (!isLast && !string.IsNullOrWhiteSpace(item.Url))
+                    {
+                        <NavLink href="@item.Url">@item.Label</NavLink>
+                    }
+                    else
+                    {
+                        <span>@item.Label</span>
+                    }
+                </li>
+            }
+        </ol>
+    </nav>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<BreadcrumbItem> Items { get; set; } = Array.Empty<BreadcrumbItem>();
+}

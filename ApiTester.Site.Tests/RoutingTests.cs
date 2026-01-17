@@ -1,5 +1,6 @@
 using System.Reflection;
 using ApiTester.Site.Components.Pages;
+using ApiTester.Site.Components.Pages.App;
 using ApiTester.Site.Content;
 using Microsoft.AspNetCore.Components;
 
@@ -19,7 +20,10 @@ public class RoutingTests
         new object[] { typeof(Contact), "/contact" },
         new object[] { typeof(ThankYou), "/contact/thanks" },
         new object[] { typeof(Status), "/status" },
-        new object[] { typeof(Features), "/features" }
+        new object[] { typeof(Features), "/features" },
+        new object[] { typeof(Projects), "/app/projects" },
+        new object[] { typeof(ProjectRuns), "/app/projects/{projectKey}/runs" },
+        new object[] { typeof(RunDetail), "/app/runs/{runId}" }
     };
 
     [Theory]

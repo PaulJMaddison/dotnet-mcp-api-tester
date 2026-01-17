@@ -1,0 +1,86 @@
+@page "/app/projects"
+@layout ApiTester.Site.Components.Layout.AppLayout
+@inject IApiTesterWebClient ApiClient
+
+<PageTitle>Projects</PageTitle>
+
+<div class="app-page">
+    <AppBreadcrumbs Items="@Breadcrumbs" />
+
+    <div class="app-page-header">
+        <div>
+            <h1 class="h3 mb-1">Projects</h1>
+            <p class="text-secondary mb-0">Browse available projects in the workspace.</p>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="app-card app-state">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span class="ms-2">Loading projects...</span>
+        </div>
+    }
+    else if (_response?.Error is not null)
+    {
+        <div class="app-card app-state app-state-error">
+            <h2 class="h6">Unable to load projects</h2>
+            <p class="text-secondary">@_response.Error.Message</p>
+            @if (!string.IsNullOrWhiteSpace(_response.Error.Details))
+            {
+                <details>
+                    <summary>View error details</summary>
+                    <pre class="mb-0">@_response.Error.Details</pre>
+                </details>
+            }
+        </div>
+    }
+    else if (_response?.Data is null || _response.Data.Projects.Count == 0)
+    {
+        <div class="app-card app-state">
+            <h2 class="h6">No projects yet</h2>
+            <p class="text-secondary mb-0">Create a project in ApiTester Web to see it listed here.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @foreach (var project in _response.Data.Projects)
+            {
+                <div class="col-12 col-lg-6">
+                    <div class="app-card">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h2 class="h5 mb-1">@project.Name</h2>
+                                <div class="text-secondary small">Key: @project.ProjectKey</div>
+                                <div class="text-secondary small">Created @project.CreatedUtc.ToString("MMM dd, yyyy")</div>
+                            </div>
+                            <span class="badge text-bg-light">@project.ProjectId.ToString("N").Substring(0, 8)</span>
+                        </div>
+                        <div class="mt-3">
+                            <NavLink class="btn btn-primary" href="@($"/app/projects/{project.ProjectKey}/runs")">View runs</NavLink>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private readonly IReadOnlyList<BreadcrumbItem> Breadcrumbs = new List<BreadcrumbItem>
+    {
+        new("Projects", "/app/projects")
+    };
+
+    private ApiResult<ProjectListResponse>? _response;
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _response = await ApiClient.GetProjectsAsync(CancellationToken.None);
+        _isLoading = false;
+    }
+}

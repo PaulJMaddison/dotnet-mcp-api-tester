@@ -1,0 +1,33 @@
+@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <a class="skip-link" href="#app-main">Skip to app content</a>
+    <aside class="app-sidebar">
+        <div class="app-sidebar-header">
+            <NavLink class="d-flex align-items-center gap-2 text-decoration-none" href="/app/projects">
+                <img class="app-logo" src="images/logo-mark.svg" alt="ApiTester" />
+                <span class="fw-semibold">ApiTester</span>
+            </NavLink>
+            <span class="text-uppercase small text-secondary">App Shell</span>
+        </div>
+        <nav class="app-nav" aria-label="App">
+            <NavLink class="app-nav-link" href="/app/projects">Projects</NavLink>
+        </nav>
+    </aside>
+
+    <div class="app-main">
+        <header class="app-topbar">
+            <div>
+                <div class="app-topbar-title">Workspace</div>
+                <div class="app-topbar-subtitle">Read-only preview of projects and runs</div>
+            </div>
+            <div class="app-topbar-meta">
+                <span class="badge rounded-pill text-bg-light">Preview</span>
+            </div>
+        </header>
+
+        <section id="app-main" class="app-content">
+            @Body
+        </section>
+    </div>
+</div>

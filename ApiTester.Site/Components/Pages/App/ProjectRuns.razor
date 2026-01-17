@@ -1,0 +1,124 @@
+@page "/app/projects/{projectKey}/runs"
+@layout ApiTester.Site.Components.Layout.AppLayout
+@inject IApiTesterWebClient ApiClient
+
+<PageTitle>Runs</PageTitle>
+
+<div class="app-page">
+    <AppBreadcrumbs Items="@Breadcrumbs" />
+
+    <div class="app-page-header">
+        <div>
+            <h1 class="h3 mb-1">Runs for @ProjectKey</h1>
+            <p class="text-secondary mb-0">Latest run activity in this project.</p>
+        </div>
+    </div>
+
+    <div class="app-card app-filter-bar">
+        <div>
+            <div class="text-uppercase small text-secondary">Filters</div>
+            <div class="d-flex flex-wrap gap-3 mt-1">
+                <div><span class="fw-semibold">Operation:</span> @(string.IsNullOrWhiteSpace(OperationId) ? "All" : OperationId)</div>
+                <div><span class="fw-semibold">Take:</span> @(Take is > 0 ? Take.ToString() : "Default")</div>
+            </div>
+        </div>
+        <div class="text-secondary small">Use query params <code>?operationId=</code> and <code>&amp;take=</code> to refine.</div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="app-card app-state">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span class="ms-2">Loading runs...</span>
+        </div>
+    }
+    else if (_response?.Error is not null)
+    {
+        <div class="app-card app-state app-state-error">
+            <h2 class="h6">Unable to load runs</h2>
+            <p class="text-secondary">@_response.Error.Message</p>
+            @if (!string.IsNullOrWhiteSpace(_response.Error.Details))
+            {
+                <details>
+                    <summary>View error details</summary>
+                    <pre class="mb-0">@_response.Error.Details</pre>
+                </details>
+            }
+        </div>
+    }
+    else if (_response?.Data is null || _response.Data.Runs.Count == 0)
+    {
+        <div class="app-card app-state">
+            <h2 class="h6">No runs yet</h2>
+            <p class="text-secondary mb-0">Trigger a run from ApiTester Web to see results here.</p>
+        </div>
+    }
+    else
+    {
+        <div class="app-card">
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">Run</th>
+                            <th scope="col">Operation</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Cases</th>
+                            <th scope="col">Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var run in _response.Data.Runs)
+                        {
+                            <tr>
+                                <td>
+                                    <NavLink href="@($"/app/runs/{run.RunId}")">@run.RunId.ToString("N").Substring(0, 8)</NavLink>
+                                    <div class="text-secondary small">@run.StartedUtc.ToString("g")</div>
+                                </td>
+                                <td>@run.OperationId</td>
+                                <td>
+                                    <span class="badge text-bg-light">
+                                        @run.Snapshot.Passed passed / @run.Snapshot.Failed failed
+                                    </span>
+                                </td>
+                                <td>@run.Snapshot.TotalCases</td>
+                                <td>@TimeSpan.FromMilliseconds(run.Snapshot.TotalDurationMs).TotalSeconds.ToString("0.##")s</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string ProjectKey { get; set; } = string.Empty;
+    [SupplyParameterFromQuery] public string? OperationId { get; set; }
+    [SupplyParameterFromQuery] public int? Take { get; set; }
+
+    private ApiResult<RunSummaryResponse>? _response;
+    private bool _isLoading = true;
+
+    private IReadOnlyList<BreadcrumbItem> Breadcrumbs => new List<BreadcrumbItem>
+    {
+        new("Projects", "/app/projects"),
+        new($"{ProjectKey} runs", $"/app/projects/{ProjectKey}/runs")
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _isLoading = true;
+        if (string.IsNullOrWhiteSpace(ProjectKey))
+        {
+            _response = ApiResult<RunSummaryResponse>.Failure("Project key is required.", null);
+            _isLoading = false;
+            return;
+        }
+
+        _response = await ApiClient.GetRunsAsync(ProjectKey, OperationId, Take, CancellationToken.None);
+        _isLoading = false;
+    }
+}
