@@ -21,6 +21,8 @@ public class RoutingTests
         new object[] { typeof(ThankYou), "/contact/thanks" },
         new object[] { typeof(Status), "/status" },
         new object[] { typeof(Features), "/features" },
+        new object[] { typeof(SignIn), "/app/sign-in" },
+        new object[] { typeof(Onboarding), "/app/onboarding" },
         new object[] { typeof(Projects), "/app/projects" },
         new object[] { typeof(ProjectRuns), "/app/projects/{projectKey}/runs" },
         new object[] { typeof(RunDetail), "/app/runs/{runId}" }

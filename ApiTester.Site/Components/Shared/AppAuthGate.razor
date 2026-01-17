@@ -1,0 +1,33 @@
+@inject ApiTester.Site.Services.IApiKeySession ApiKeySession
+@inject NavigationManager NavigationManager
+@inject IHttpContextAccessor HttpContextAccessor
+
+@if (_isSignedIn)
+{
+    @ChildContent
+}
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private bool _isSignedIn;
+
+    protected override void OnInitialized()
+    {
+        _isSignedIn = ApiKeySession.HasApiKey;
+
+        if (!_isSignedIn)
+        {
+            var context = HttpContextAccessor.HttpContext;
+            if (context is not null && !context.Response.HasStarted)
+            {
+                context.Response.Redirect("/app/sign-in");
+            }
+            else
+            {
+                NavigationManager.NavigateTo("/app/sign-in");
+            }
+        }
+    }
+}
