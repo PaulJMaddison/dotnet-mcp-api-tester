@@ -100,6 +100,24 @@ body {
     box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
 }
 
+.doc-search-input {
+    border-radius: 999px;
+}
+
+.doc-search-results {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 12px;
+}
+
+.doc-search-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.doc-search-item:last-child {
+    border-bottom: none;
+}
+
 .contact-form {
     background: #ffffff;
     border-radius: 16px;

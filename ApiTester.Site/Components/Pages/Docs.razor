@@ -1,8 +1,10 @@
 @page "/docs"
+@using ApiTester.Site.Content
 
 @code {
-    private DeveloperDocsContent Content { get; } = MarketingContent.Current.DeveloperDocs;
-    private PageMetadata Metadata => Content.Metadata;
+    private DeveloperDocsContent Marketing => MarketingContent.Current.DeveloperDocs;
+    private PageMetadata Metadata => Marketing.Metadata;
+    private DocsLibrary Docs => DocsContent.Current;
 }
 
 <PageTitle>@Metadata.Title</PageTitle>
@@ -22,91 +24,39 @@
     <link rel="canonical" href="@Metadata.CanonicalUrl" />
 </HeadContent>
 
-<section class="page-hero bg-light py-5">
-    <div class="container">
-        <h1 class="display-5 fw-bold">@Content.HeroTitle</h1>
-        <p class="lead">@Content.HeroSubtitle</p>
-    </div>
-</section>
+<DocsShell Title="@Docs.Landing.HeroTitle" Subtitle="@Docs.Landing.HeroSubtitle" ActiveUrl="/docs">
+    <section class="doc-section mb-4">
+        <h2 class="h5 fw-bold">Why ApiTester docs?</h2>
+        <ul class="doc-list">
+            @foreach (var highlight in Docs.Landing.Highlights)
+            {
+                <li class="mb-2">@highlight</li>
+            }
+        </ul>
+    </section>
 
-<section class="py-5">
-    <div class="container">
-        <div class="row g-4">
-            <div class="col-lg-6">
-                <h2 class="h4 fw-bold">@Content.QuickstartTitle</h2>
-                <ol class="ps-3">
-                    @foreach (var step in Content.QuickstartSteps)
-                    {
-                        <li class="mb-2">@step</li>
-                    }
-                </ol>
+    @foreach (var group in Docs.Landing.NavGroups)
+    {
+        <section class="doc-section mb-4">
+            <h2 class="h5 fw-bold">@group.Title</h2>
+            <div class="row g-3">
+                @foreach (var item in group.Items)
+                {
+                    <div class="col-md-6">
+                        <div class="h-100 border rounded-3 p-3 bg-white">
+                            <h3 class="h6 fw-bold mb-2">@item.Title</h3>
+                            <p class="small text-muted">@item.Summary</p>
+                            <a class="text-decoration-none fw-semibold" href="@item.Url">Read guide →</a>
+                        </div>
+                    </div>
+                }
             </div>
-            <div class="col-lg-6">
-                <div class="diagram-placeholder">
-                    <div class="placeholder-grid">@Content.WorkflowPlaceholder.Title</div>
-                    <p class="mb-0">@Content.WorkflowPlaceholder.Description</p>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
+        </section>
+    }
 
-<section class="bg-white py-5">
-    <div class="container">
-        <div class="row g-4">
-            <div class="col-lg-6">
-                <h2 class="h4 fw-bold">@Content.McpTitle</h2>
-                <ul class="list-unstyled">
-                    @foreach (var highlight in Content.McpHighlights)
-                    {
-                        <li class="mb-2">@highlight</li>
-                    }
-                </ul>
-            </div>
-            <div class="col-lg-6">
-                <h2 class="h4 fw-bold">@Content.EnvironmentTitle</h2>
-                <ul class="list-unstyled">
-                    @foreach (var step in Content.EnvironmentSteps)
-                    {
-                        <li class="mb-2">@step</li>
-                    }
-                </ul>
-            </div>
-        </div>
-    </div>
-</section>
-
-<section class="py-5">
-    <div class="container">
-        <div class="row g-4">
-            <div class="col-lg-6">
-                <h2 class="h4 fw-bold">@Content.CiTitle</h2>
-                <ol class="ps-3">
-                    @foreach (var step in Content.CiSteps)
-                    {
-                        <li class="mb-2">@step</li>
-                    }
-                </ol>
-            </div>
-            <div class="col-lg-6">
-                <div class="d-flex flex-column gap-4">
-                    @foreach (var snippet in Content.CodeSnippets)
-                    {
-                        <CodeBlock Title="@snippet.Title"
-                                   Description="@snippet.Description"
-                                   Language="@snippet.Language"
-                                   Code="@snippet.Code" />
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<section class="cta-section text-white py-5">
-    <div class="container text-center">
-        <h2 class="fw-bold">@Content.CtaTitle</h2>
-        <p class="lead">@Content.CtaSubtitle</p>
-        <a class="btn btn-light btn-lg" href="@Content.CtaLink">@Content.CtaLabel</a>
-    </div>
-</section>
+    <section class="doc-section">
+        <h2 class="h5 fw-bold">@Docs.Landing.SupportTitle</h2>
+        <p class="mb-3">@Docs.Landing.SupportSubtitle</p>
+        <a class="btn btn-primary" href="/contact">Talk to the team</a>
+    </section>
+</DocsShell>

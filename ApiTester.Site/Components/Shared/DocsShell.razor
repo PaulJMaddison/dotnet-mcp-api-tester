@@ -1,0 +1,110 @@
+@using ApiTester.Site.Content
+
+<section class="page-hero bg-light py-5">
+    <div class="container">
+        <h1 class="display-5 fw-bold">@Title</h1>
+        @if (!string.IsNullOrWhiteSpace(Subtitle))
+        {
+            <p class="lead">@Subtitle</p>
+        }
+    </div>
+</section>
+
+<section class="py-5">
+    <div class="container">
+        <div class="row g-4">
+            <div class="col-lg-4">
+                <div class="doc-sidebar">
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold" for="docSearch">Search docs</label>
+                        <input id="docSearch"
+                               class="form-control doc-search-input"
+                               type="search"
+                               placeholder="Search docs"
+                               @bind="searchTerm"
+                               @bind:event="oninput" />
+                        @if (!string.IsNullOrWhiteSpace(searchTerm))
+                        {
+                            <div class="doc-search-results mt-3">
+                                @if (FilteredResults.Count == 0)
+                                {
+                                    <p class="small text-muted mb-0">No results. Try another keyword.</p>
+                                }
+                                else
+                                {
+                                    <ul class="list-unstyled mb-0">
+                                        @foreach (var entry in FilteredResults)
+                                        {
+                                            <li class="doc-search-item">
+                                                <a class="text-decoration-none" href="@entry.Url">@entry.Title</a>
+                                                <p class="small text-muted mb-0">@entry.Summary</p>
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="small text-muted mb-0">Type to filter headings, sections, and endpoints.</p>
+                        }
+                    </div>
+                    @foreach (var group in Docs.Landing.NavGroups)
+                    {
+                        <div class="mb-4">
+                            <h3 class="h6 text-uppercase text-muted">@group.Title</h3>
+                            <ul class="list-unstyled">
+                                @foreach (var item in group.Items)
+                                {
+                                    var isActive = string.Equals(item.Url, ActiveUrl, StringComparison.OrdinalIgnoreCase);
+                                    <li class="mb-2">
+                                        <a class="text-decoration-none @(isActive ? "fw-semibold text-primary" : "text-dark")" href="@item.Url">@item.Title</a>
+                                        <p class="small text-muted mb-0">@item.Summary</p>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="col-lg-8">
+                @ChildContent
+            </div>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string? ActiveUrl { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private DocsLibrary Docs { get; } = DocsContent.Current;
+    private string searchTerm = string.Empty;
+
+    private IReadOnlyList<DocSearchEntry> FilteredResults
+    {
+        get
+        {
+            var query = searchTerm?.Trim();
+            if (string.IsNullOrWhiteSpace(query) || query.Length < 2)
+            {
+                return Array.Empty<DocSearchEntry>();
+            }
+
+            return Docs.SearchIndex
+                .Where(entry => Matches(entry, query))
+                .OrderBy(entry => entry.Title)
+                .Take(8)
+                .ToList();
+        }
+    }
+
+    private static bool Matches(DocSearchEntry entry, string query)
+    {
+        return entry.Title.Contains(query, StringComparison.OrdinalIgnoreCase)
+               || entry.Summary.Contains(query, StringComparison.OrdinalIgnoreCase)
+               || entry.Keywords.Any(keyword => keyword.Contains(query, StringComparison.OrdinalIgnoreCase));
+    }
+}

@@ -1,0 +1,53 @@
+@page "/docs/api-reference"
+@using ApiTester.Site.Content
+
+<PageTitle>API reference | ApiTester docs</PageTitle>
+
+@code {
+    private DocsApiReference Reference => DocsContent.Current.ApiReference;
+}
+
+<DocsShell Title="@Reference.Title" Subtitle="@Reference.Summary" ActiveUrl="/docs/api-reference">
+    <section class="doc-section mb-4">
+        <h2 class="h5 fw-bold">Overview</h2>
+        <p>Use these curated endpoints to automate OpenAPI imports, plan runs, and run history retrieval.</p>
+        <ul class="doc-list">
+            <li class="mb-2">Authenticate every request with a bearer token.</li>
+            <li class="mb-2">All responses are JSON unless otherwise noted.</li>
+            <li class="mb-2">Run history endpoints respect project permissions.</li>
+        </ul>
+    </section>
+
+    @foreach (var endpoint in Reference.Endpoints)
+    {
+        <section id="@endpoint.Id" class="doc-section mb-4">
+            <h2 class="h5 fw-bold">
+                <span class="badge bg-primary me-2">@endpoint.Method</span>
+                @endpoint.Path
+            </h2>
+            <p class="mb-1"><strong>@endpoint.Summary</strong></p>
+            <p class="text-muted">@endpoint.Description</p>
+            <div class="mt-3">
+                <CodeBlock Title="@endpoint.RequestExample.Title"
+                           Description="@endpoint.RequestExample.Description"
+                           Language="@endpoint.RequestExample.Language"
+                           Code="@endpoint.RequestExample.Code" />
+            </div>
+            <div class="mt-3">
+                <CodeBlock Title="@endpoint.ResponseExample.Title"
+                           Description="@endpoint.ResponseExample.Description"
+                           Language="@endpoint.ResponseExample.Language"
+                           Code="@endpoint.ResponseExample.Code" />
+            </div>
+            @if (endpoint.Notes.Any())
+            {
+                <ul class="doc-list mt-3">
+                    @foreach (var note in endpoint.Notes)
+                    {
+                        <li class="mb-2">@note</li>
+                    }
+                </ul>
+            }
+        </section>
+    }
+</DocsShell>

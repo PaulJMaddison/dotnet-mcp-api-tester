@@ -1,0 +1,12 @@
+@page "/docs/import-openapi"
+@using ApiTester.Site.Content
+
+<PageTitle>Import OpenAPI | ApiTester docs</PageTitle>
+
+@code {
+    private DocPage Page => DocsContent.Current.Pages.First(page => page.Slug == "import-openapi");
+}
+
+<DocsShell Title="@Page.Title" Subtitle="@Page.Summary" ActiveUrl="/docs/import-openapi">
+    <DocsPageSections Page="@Page" />
+</DocsShell>

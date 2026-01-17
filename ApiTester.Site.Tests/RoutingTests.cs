@@ -1,6 +1,7 @@
 using System.Reflection;
 using ApiTester.Site.Components.Pages;
 using ApiTester.Site.Components.Pages.App;
+using ApiTester.Site.Components.Pages.Docs;
 using ApiTester.Site.Content;
 using Microsoft.AspNetCore.Components;
 
@@ -15,6 +16,14 @@ public class RoutingTests
         new object[] { typeof(Security), "/security" },
         new object[] { typeof(QaReporting), "/qa-reporting" },
         new object[] { typeof(Docs), "/docs" },
+        new object[] { typeof(GettingStarted), "/docs/getting-started" },
+        new object[] { typeof(ImportOpenApi), "/docs/import-openapi" },
+        new object[] { typeof(PoliciesSsrf), "/docs/policies-ssrf" },
+        new object[] { typeof(RunningTestPlans), "/docs/running-test-plans" },
+        new object[] { typeof(RunHistory), "/docs/run-history" },
+        new object[] { typeof(Persistence), "/docs/persistence" },
+        new object[] { typeof(CiUsage), "/docs/ci-usage" },
+        new object[] { typeof(ApiReference), "/docs/api-reference" },
         new object[] { typeof(UseCases), "/use-cases" },
         new object[] { typeof(About), "/about" },
         new object[] { typeof(Contact), "/contact" },
