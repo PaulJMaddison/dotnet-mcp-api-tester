@@ -145,6 +145,7 @@ app.UseSwaggerUI();
 app.UseWhen(
     context => context.Request.Path.StartsWithSegments("/api")
         || context.Request.Path.StartsWithSegments("/api-keys")
+        || context.Request.Path.StartsWithSegments("/runs")
         || context.Request.Path.StartsWithSegments("/audit")
         || context.Request.Path.StartsWithSegments("/admin"),
     builder =>

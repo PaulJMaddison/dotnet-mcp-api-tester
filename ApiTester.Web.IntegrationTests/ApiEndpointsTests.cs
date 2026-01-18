@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Net.Http.Json;
 using System.Net.Http.Headers;
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -243,6 +244,22 @@ public class ApiEndpointsTests
     }
 
     [Fact]
+    public async Task ImportOpenApi_ReturnsPayloadTooLarge_ForLargeRequestBody()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "Oversized", "oversized");
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+
+        var oversized = new string('a', OpenApiImportLimits.MaxRequestBodyBytes + 1024);
+        var specJson = $"{{\"openapi\":\"3.0.0\",\"info\":{{\"title\":\"Large\",\"version\":\"1.0\"}},\"x-notes\":\"{oversized}\"}}";
+        var content = BuildMultipartSpec(specJson);
+
+        var response = await client.PostAsync($"/api/projects/{project.ProjectId}/openapi/import", content);
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
+    }
+
+    [Fact]
     public async Task CreateProject_ReturnsPayloadTooLarge_ForLargeRequest()
     {
         using var factory = new ApiTesterWebFactory();
@@ -254,7 +271,7 @@ public class ApiEndpointsTests
 
         var response = await client.PostAsync("/api/projects", content);
 
-        Assert.True(response.StatusCode is HttpStatusCode.RequestEntityTooLarge or HttpStatusCode.BadRequest);
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, response.StatusCode);
     }
 
     [Fact]
@@ -547,6 +564,191 @@ public class ApiEndpointsTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("# Test Run Report", body);
+    }
+
+    [Fact]
+    public async Task RunReport_ReturnsHtmlFormat()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "HtmlReport", "html-report");
+        var run = await SeedRunAsync(factory, project, "op-html");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.GetAsync($"/api/runs/{run.RunId}/report?format=html");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("text/html", response.Content.Headers.ContentType?.ToString());
+        Assert.Contains("<h1>Test Run Report</h1>", body);
+    }
+
+    [Fact]
+    public async Task RunReport_ReturnsBadRequest_ForUnsupportedFormat()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "BadReport", "bad-report");
+        var run = await SeedRunAsync(factory, project, "op-bad");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.GetAsync($"/api/runs/{run.RunId}/report?format=pdf");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RunExports_ReturnExpectedFormats()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "Exports", "exports");
+        var run = await SeedRunAsync(factory, project, "op-export");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+
+        var junitResponse = await client.GetAsync($"/runs/{run.RunId}/export/junit");
+        var junit = await junitResponse.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, junitResponse.StatusCode);
+        Assert.Contains("application/junit+xml", junitResponse.Content.Headers.ContentType?.ToString());
+        Assert.Contains("<testsuite", junit);
+
+        var jsonResponse = await client.GetAsync($"/runs/{run.RunId}/export/json");
+        var json = await jsonResponse.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, jsonResponse.StatusCode);
+        Assert.Contains("application/json", jsonResponse.Content.Headers.ContentType?.ToString());
+        using var jsonDoc = JsonDocument.Parse(json);
+        Assert.True(jsonDoc.RootElement.TryGetProperty("runId", out _));
+
+        var csvResponse = await client.GetAsync($"/runs/{run.RunId}/export/csv");
+        var csv = await csvResponse.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, csvResponse.StatusCode);
+        Assert.Contains("text/csv", csvResponse.Content.Headers.ContentType?.ToString());
+        Assert.StartsWith("case_name,status", csv, StringComparison.OrdinalIgnoreCase);
+
+        var evidenceResponse = await client.GetAsync($"/runs/{run.RunId}/export/evidence-bundle");
+        var evidenceBytes = await evidenceResponse.Content.ReadAsByteArrayAsync();
+        Assert.Equal(HttpStatusCode.OK, evidenceResponse.StatusCode);
+        Assert.Contains("application/zip", evidenceResponse.Content.Headers.ContentType?.ToString());
+
+        using var stream = new MemoryStream(evidenceBytes);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var entryNames = archive.Entries.Select(entry => entry.FullName).ToList();
+        Assert.Contains("run.json", entryNames);
+        Assert.Contains("policy.json", entryNames);
+        Assert.Contains("audit.json", entryNames);
+    }
+
+    [Fact]
+    public async Task BaselineEndpoints_CreateListAndCompareRuns()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "Baselines", "baselines");
+        var baselineRun = await SeedRunAsync(factory, project, "op-baseline");
+        var run = await SeedRunAsync(factory, project, "op-baseline", DateTime.UtcNow.AddMinutes(-1));
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+
+        var createResponse = await client.PostAsJsonAsync("/api/baselines", new BaselineCreateRequest(baselineRun.RunId));
+        var createdBaseline = await createResponse.Content.ReadFromJsonAsync<BaselineDto>();
+        Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
+        Assert.NotNull(createdBaseline);
+        Assert.Equal(baselineRun.RunId, createdBaseline!.RunId);
+
+        var listResponse = await client.GetFromJsonAsync<BaselineListResponse>($"/api/baselines?projectKey={project.ProjectKey}&operationId=op-baseline&take=10");
+        Assert.NotNull(listResponse);
+        Assert.Contains(listResponse!.Baselines, baseline => baseline.RunId == baselineRun.RunId);
+
+        var setResponse = await client.PostAsync($"/api/runs/{run.RunId}/baseline/{baselineRun.RunId}", null);
+        Assert.Equal(HttpStatusCode.NoContent, setResponse.StatusCode);
+
+        var compareResponse = await client.GetAsync($"/api/runs/{run.RunId}/compare/{baselineRun.RunId}");
+        var comparePayload = await compareResponse.Content.ReadFromJsonAsync<RunComparisonResponse>();
+        Assert.Equal(HttpStatusCode.OK, compareResponse.StatusCode);
+        Assert.NotNull(comparePayload);
+        Assert.Equal(baselineRun.RunId, comparePayload!.BaselineRunId);
+
+        var compareToBaselineResponse = await client.GetAsync($"/api/runs/{run.RunId}/compare-to-baseline");
+        var compareToBaselinePayload = await compareToBaselineResponse.Content.ReadFromJsonAsync<RunComparisonResponse>();
+        Assert.Equal(HttpStatusCode.OK, compareToBaselineResponse.StatusCode);
+        Assert.NotNull(compareToBaselinePayload);
+        Assert.Equal(baselineRun.RunId, compareToBaselinePayload!.BaselineRunId);
+    }
+
+    [Theory]
+    [InlineData("/api/runs/not-a-guid/compare/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")]
+    [InlineData("/api/runs/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/compare/not-a-guid")]
+    [InlineData("/api/runs/not-a-guid/compare-to-baseline")]
+    public async Task CompareEndpoints_ReturnBadRequest_ForInvalidIds(string url)
+    {
+        using var factory = new ApiTesterWebFactory();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+
+        var response = await client.GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CompareEndpoints_ReturnNotFound_ForMissingRuns()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+
+        var compareResponse = await client.GetAsync($"/api/runs/{Guid.NewGuid()}/compare/{Guid.NewGuid()}");
+        var compareBaselineResponse = await client.GetAsync($"/api/runs/{Guid.NewGuid()}/compare-to-baseline");
+
+        Assert.Equal(HttpStatusCode.NotFound, compareResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, compareBaselineResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task CompareEndpoints_ReturnNotFound_WhenBaselineMissing()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "MissingBaseline", "missing-baseline");
+        var run = await SeedRunAsync(factory, project, "op-missing");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+
+        var compareResponse = await client.GetAsync($"/api/runs/{run.RunId}/compare/{Guid.NewGuid()}");
+        var compareBaselineResponse = await client.GetAsync($"/api/runs/{run.RunId}/compare-to-baseline");
+
+        Assert.Equal(HttpStatusCode.NotFound, compareResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, compareBaselineResponse.StatusCode);
     }
 
     [Fact]
