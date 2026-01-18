@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -1214,6 +1215,188 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
     return Results.Text(report, contentType);
 });
 
+app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, EntitlementService entitlements, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!entitlements.CanExport)
+        return FeatureNotAvailable("Export", entitlements);
+
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
+    var content = RunExportGenerator.GenerateJunit(redactedRun);
+
+    var exportMetadata = JsonSerializer.Serialize(new
+    {
+        Format = "junit"
+    }, jsonOptions);
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.ExportGenerated,
+        "run",
+        run.RunId.ToString(),
+        DateTime.UtcNow,
+        exportMetadata), ct);
+
+    return Results.Text(content, "application/junit+xml; charset=utf-8");
+});
+
+app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, EntitlementService entitlements, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!entitlements.CanExport)
+        return FeatureNotAvailable("Export", entitlements);
+
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
+    var payload = RunExportGenerator.GenerateJson(redactedRun, jsonOptions);
+
+    var exportMetadata = JsonSerializer.Serialize(new
+    {
+        Format = "json"
+    }, jsonOptions);
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.ExportGenerated,
+        "run",
+        run.RunId.ToString(),
+        DateTime.UtcNow,
+        exportMetadata), ct);
+
+    return Results.Text(payload, "application/json; charset=utf-8");
+});
+
+app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, EntitlementService entitlements, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!entitlements.CanExport)
+        return FeatureNotAvailable("Export", entitlements);
+
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
+    var payload = RunExportGenerator.GenerateCsv(redactedRun);
+
+    var exportMetadata = JsonSerializer.Serialize(new
+    {
+        Format = "csv"
+    }, jsonOptions);
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.ExportGenerated,
+        "run",
+        run.RunId.ToString(),
+        DateTime.UtcNow,
+        exportMetadata), ct);
+
+    return Results.Text(payload, "text/csv; charset=utf-8");
+});
+
+app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!entitlements.CanExport)
+        return FeatureNotAvailable("Export", entitlements);
+
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
+    var runJson = RunExportGenerator.GenerateJson(redactedRun, jsonOptions);
+    var policyJson = JsonSerializer.Serialize(new
+    {
+        redactedRun.RunId,
+        redactedRun.PolicySnapshot
+    }, jsonOptions);
+
+    var auditEvents = await auditStore.ListAsync(orgContext.OrganisationId, 200, null, null, null, ct);
+    var auditSubset = auditEvents
+        .Where(evt => string.Equals(evt.TargetType, "run", StringComparison.OrdinalIgnoreCase) &&
+                      string.Equals(evt.TargetId, redactedRun.RunId.ToString(), StringComparison.OrdinalIgnoreCase))
+        .Take(100)
+        .ToList();
+
+    var auditJson = JsonSerializer.Serialize(new
+    {
+        redactedRun.RunId,
+        Events = auditSubset
+    }, jsonOptions);
+
+    using var stream = new MemoryStream();
+    using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true))
+    {
+        AddZipEntry(archive, "run.json", runJson);
+        AddZipEntry(archive, "policy.json", policyJson);
+        AddZipEntry(archive, "audit.json", auditJson);
+    }
+
+    var exportMetadata = JsonSerializer.Serialize(new
+    {
+        Format = "evidence-bundle"
+    }, jsonOptions);
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.ExportGenerated,
+        "run",
+        run.RunId.ToString(),
+        DateTime.UtcNow,
+        exportMetadata), ct);
+
+    return Results.File(stream.ToArray(), "application/zip", $"{redactedRun.RunId}-evidence.zip");
+});
+
 app.MapPost("/api/runs/{runId}/baseline/{baselineRunId}", async (string runId, string baselineRunId, ITestRunStore store, HttpContext httpContext) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
@@ -1312,6 +1495,14 @@ app.Run();
 
 static IResult InvalidRequest(string detail)
     => Results.Problem(title: "Invalid request", detail: detail, statusCode: StatusCodes.Status400BadRequest);
+
+static void AddZipEntry(ZipArchive archive, string name, string content)
+{
+    var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+    using var entryStream = entry.Open();
+    using var writer = new StreamWriter(entryStream, Encoding.UTF8);
+    writer.Write(content);
+}
 
 static IResult FeatureNotAvailable(string feature, EntitlementService entitlements)
     => Results.Problem(
