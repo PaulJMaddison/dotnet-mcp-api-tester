@@ -29,7 +29,7 @@ else if (Model.Projects.Count == 0)
 else
 {
     <div class="table-card">
-        <table>
+        <table data-testid="projects-table">
             <thead>
                 <tr>
                     <th scope="col">Name</th>
@@ -41,10 +41,10 @@ else
             <tbody>
                 @foreach (var project in Model.Projects)
                 {
-                    <tr>
+                    <tr data-testid="project-row">
                         <td>@(string.IsNullOrWhiteSpace(project.Name) ? "Untitled Project" : project.Name)</td>
                         <td>
-                            <a href="/projects/@project.ProjectId">@project.ProjectKey</a>
+                            <a href="/projects/@project.ProjectId" data-testid="project-link">@project.ProjectKey</a>
                         </td>
                         <td>@DisplayFormatters.FormatUtc(project.CreatedUtc)</td>
                         <td>@project.ProjectId</td>

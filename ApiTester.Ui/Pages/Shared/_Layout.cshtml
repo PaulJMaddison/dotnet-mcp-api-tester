@@ -36,7 +36,7 @@
                     {
                         <form class="inline-form" method="post" asp-page="/Auth/SignOut">
                             @Html.AntiForgeryToken()
-                            <button class="button button-ghost" type="submit">Sign out</button>
+                            <button class="button button-ghost" type="submit" data-testid="sign-out-button">Sign out</button>
                         </form>
                     }
                 </div>

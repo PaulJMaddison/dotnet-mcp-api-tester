@@ -11,21 +11,21 @@
     <p class="page-intro">Enter the workspace API key to unlock projects, runs, and onboarding guidance.</p>
 </section>
 
-<form method="post" class="auth-form">
+<form method="post" class="auth-form" data-testid="sign-in-form">
     <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
     @Html.AntiForgeryToken()
     <div class="form-field">
         <label for="api-key">API key</label>
-        <input id="api-key" name="ApiKey" type="password" autocomplete="current-password" spellcheck="false" required />
+        <input id="api-key" name="ApiKey" type="password" autocomplete="current-password" spellcheck="false" required data-testid="api-key-input" />
         <small>Your key is stored in a server-side session and never written to the browser.</small>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
-        <div class="error-state" role="alert">@Model.ErrorMessage</div>
+        <div class="error-state" role="alert" data-testid="sign-in-error">@Model.ErrorMessage</div>
     }
 
-    <button class="button" type="submit">Continue</button>
+    <button class="button" type="submit" data-testid="sign-in-submit">Continue</button>
 </form>
 
 <div class="auth-footer">
