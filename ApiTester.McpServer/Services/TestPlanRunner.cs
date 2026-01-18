@@ -153,6 +153,7 @@ public sealed class TestPlanRunner
         {
             RunId = Guid.NewGuid(),
             OrganisationId = organisationId,
+            TenantId = organisationId,
             Actor = auditActor,
             Environment = environmentSnapshot,
             PolicySnapshot = policySnapshot,

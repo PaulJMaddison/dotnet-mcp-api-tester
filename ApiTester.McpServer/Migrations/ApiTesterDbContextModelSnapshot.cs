@@ -34,6 +34,9 @@ namespace ApiTester.McpServer.Migrations
                     b.Property<Guid>("ProjectId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("SpecHash")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -56,6 +59,8 @@ namespace ApiTester.McpServer.Migrations
                     b.HasKey("SpecId");
 
                     b.HasIndex("ProjectId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("ProjectId", "SpecHash")
                         .IsUnique();
@@ -107,6 +112,9 @@ namespace ApiTester.McpServer.Migrations
                     b.Property<Guid>("OrganisationId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("OwnerKey")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -123,9 +131,11 @@ namespace ApiTester.McpServer.Migrations
 
                     b.HasIndex("OrganisationId");
 
+                    b.HasIndex("TenantId");
+
                     b.HasIndex("OwnerKey");
 
-                    b.HasIndex("OrganisationId", "ProjectKey")
+                    b.HasIndex("TenantId", "ProjectKey")
                         .IsUnique();
 
                     b.ToTable("Projects");
@@ -415,6 +425,9 @@ namespace ApiTester.McpServer.Migrations
                     b.Property<Guid>("OrganisationId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("Passed")
                         .HasColumnType("int");
 
@@ -441,6 +454,8 @@ namespace ApiTester.McpServer.Migrations
                     b.HasIndex("BaselineRunId");
 
                     b.HasIndex("OrganisationId");
+
+                    b.HasIndex("TenantId");
 
                     b.HasIndex("ProjectId", "StartedUtc");
 

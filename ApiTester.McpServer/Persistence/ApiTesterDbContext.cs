@@ -32,6 +32,7 @@ public sealed class ApiTesterDbContext : DbContext
             b.Property(x => x.Name).HasMaxLength(200).IsRequired();
             b.HasIndex(x => x.Name);
             b.HasIndex(x => x.OrganisationId);
+            b.HasIndex(x => x.TenantId);
 
             b.HasOne(x => x.Organisation)
                 .WithMany(o => o.Projects)
@@ -50,6 +51,7 @@ public sealed class ApiTesterDbContext : DbContext
             b.HasIndex(x => x.BaselineRunId);
             b.HasIndex(x => x.SpecId);
             b.HasIndex(x => x.OrganisationId);
+            b.HasIndex(x => x.TenantId);
 
             b.HasOne(x => x.Project)
                 .WithMany(p => p.Runs)
@@ -101,7 +103,7 @@ public sealed class ApiTesterDbContext : DbContext
                 .HasMaxLength(100)
                 .IsRequired();
 
-            b.HasIndex(x => new { x.OrganisationId, x.ProjectKey }).IsUnique();
+            b.HasIndex(x => new { x.TenantId, x.ProjectKey }).IsUnique();
             b.HasIndex(x => x.OwnerKey);
         });
 
@@ -127,6 +129,7 @@ public sealed class ApiTesterDbContext : DbContext
             b.Property(x => x.SpecJson).IsRequired();
             b.Property(x => x.SpecHash).HasMaxLength(64).IsRequired();
             b.HasIndex(x => x.ProjectId);
+            b.HasIndex(x => x.TenantId);
             b.HasIndex(x => new { x.ProjectId, x.SpecHash }).IsUnique();
 
             b.HasOne(x => x.Project)

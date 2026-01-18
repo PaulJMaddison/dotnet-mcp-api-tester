@@ -1,4 +1,5 @@
-﻿using ApiTester.McpServer.Persistence.Stores;
+﻿using ApiTester.McpServer.Models;
+using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Runtime;
 using ApiTester.McpServer.Services;
 using Microsoft.Extensions.Logging;
@@ -120,6 +121,7 @@ public sealed class OpenApiTools
         var specHash = ComputeSha256Hex(specText);
 
         await _specs.UpsertAsync(
+            tenantId: OrgDefaults.DefaultOrganisationId,
             projectId: currentProjectId.Value,
             title: title,
             version: version,

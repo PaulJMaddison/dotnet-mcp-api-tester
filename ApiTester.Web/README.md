@@ -2,7 +2,7 @@
 
 ## Authentication
 
-All `/api` routes require an API key via the `X-Api-Key` header. Configure one or more keys in configuration:
+All routes except `/health` require an API key via the `X-Api-Key` header. Configure one or more keys in configuration:
 
 - `Auth:ApiKey` for a single key
 - `Auth:ApiKeys` for multiple keys

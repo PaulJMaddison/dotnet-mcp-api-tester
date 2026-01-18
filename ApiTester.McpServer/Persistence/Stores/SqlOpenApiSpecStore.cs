@@ -13,47 +13,51 @@ public sealed class SqlOpenApiSpecStore : IOpenApiSpecStore
         _db = db;
     }
 
-    public async Task<OpenApiSpecRecord?> GetAsync(Guid projectId, CancellationToken ct)
+    public async Task<OpenApiSpecRecord?> GetAsync(Guid tenantId, Guid projectId, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         var entity = await _db.OpenApiSpecs
             .AsNoTracking()
-            .Where(s => s.ProjectId == projectId)
+            .Where(s => s.ProjectId == projectId && s.TenantId == tenantId)
             .OrderByDescending(s => s.CreatedUtc)
             .FirstOrDefaultAsync(ct);
 
         return entity is null
             ? null
-            : new OpenApiSpecRecord(entity.SpecId, entity.ProjectId, entity.Title, entity.Version, entity.SpecJson, entity.SpecHash, entity.CreatedUtc);
+            : new OpenApiSpecRecord(entity.SpecId, entity.ProjectId, entity.TenantId, entity.Title, entity.Version, entity.SpecJson, entity.SpecHash, entity.CreatedUtc);
     }
 
-    public async Task<IReadOnlyList<OpenApiSpecRecord>> ListAsync(Guid projectId, CancellationToken ct)
+    public async Task<IReadOnlyList<OpenApiSpecRecord>> ListAsync(Guid tenantId, Guid projectId, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         var entities = await _db.OpenApiSpecs
             .AsNoTracking()
-            .Where(s => s.ProjectId == projectId)
+            .Where(s => s.ProjectId == projectId && s.TenantId == tenantId)
             .OrderByDescending(s => s.CreatedUtc)
             .ToListAsync(ct);
 
         return entities
-            .Select(entity => new OpenApiSpecRecord(entity.SpecId, entity.ProjectId, entity.Title, entity.Version, entity.SpecJson, entity.SpecHash, entity.CreatedUtc))
+            .Select(entity => new OpenApiSpecRecord(entity.SpecId, entity.ProjectId, entity.TenantId, entity.Title, entity.Version, entity.SpecJson, entity.SpecHash, entity.CreatedUtc))
             .ToList();
     }
 
-    public async Task<OpenApiSpecRecord?> GetByIdAsync(Guid specId, CancellationToken ct)
+    public async Task<OpenApiSpecRecord?> GetByIdAsync(Guid tenantId, Guid specId, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         var entity = await _db.OpenApiSpecs
             .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.SpecId == specId, ct);
+            .FirstOrDefaultAsync(s => s.SpecId == specId && s.TenantId == tenantId, ct);
 
         return entity is null
             ? null
-            : new OpenApiSpecRecord(entity.SpecId, entity.ProjectId, entity.Title, entity.Version, entity.SpecJson, entity.SpecHash, entity.CreatedUtc);
+            : new OpenApiSpecRecord(entity.SpecId, entity.ProjectId, entity.TenantId, entity.Title, entity.Version, entity.SpecJson, entity.SpecHash, entity.CreatedUtc);
     }
 
-    public async Task<OpenApiSpecRecord> UpsertAsync(Guid projectId, string title, string version, string specJson, string specHash, DateTime createdUtc, CancellationToken ct)
+    public async Task<OpenApiSpecRecord> UpsertAsync(Guid tenantId, Guid projectId, string title, string version, string specJson, string specHash, DateTime createdUtc, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         var entity = await _db.OpenApiSpecs
-            .FirstOrDefaultAsync(s => s.ProjectId == projectId && s.SpecHash == specHash, ct);
+            .FirstOrDefaultAsync(s => s.ProjectId == projectId && s.SpecHash == specHash && s.TenantId == tenantId, ct);
 
         if (entity is null)
         {
@@ -61,6 +65,7 @@ public sealed class SqlOpenApiSpecStore : IOpenApiSpecStore
             {
                 SpecId = Guid.NewGuid(),
                 ProjectId = projectId,
+                TenantId = tenantId,
                 SpecHash = specHash,
                 Title = title,
                 Version = version,
@@ -72,12 +77,13 @@ public sealed class SqlOpenApiSpecStore : IOpenApiSpecStore
 
         await _db.SaveChangesAsync(ct);
 
-        return new OpenApiSpecRecord(entity.SpecId, entity.ProjectId, entity.Title, entity.Version, entity.SpecJson, entity.SpecHash, entity.CreatedUtc);
+        return new OpenApiSpecRecord(entity.SpecId, entity.ProjectId, entity.TenantId, entity.Title, entity.Version, entity.SpecJson, entity.SpecHash, entity.CreatedUtc);
     }
 
-    public async Task<bool> DeleteAsync(Guid specId, CancellationToken ct)
+    public async Task<bool> DeleteAsync(Guid tenantId, Guid specId, CancellationToken ct)
     {
-        var entity = await _db.OpenApiSpecs.FirstOrDefaultAsync(s => s.SpecId == specId, ct);
+        tenantId = NormalizeTenantId(tenantId);
+        var entity = await _db.OpenApiSpecs.FirstOrDefaultAsync(s => s.SpecId == specId && s.TenantId == tenantId, ct);
         if (entity is null)
             return false;
 
@@ -85,4 +91,7 @@ public sealed class SqlOpenApiSpecStore : IOpenApiSpecStore
         await _db.SaveChangesAsync(ct);
         return true;
     }
+
+    private static Guid NormalizeTenantId(Guid tenantId)
+        => tenantId == Guid.Empty ? OrgDefaults.DefaultOrganisationId : tenantId;
 }

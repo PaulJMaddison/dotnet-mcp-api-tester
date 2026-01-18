@@ -4,6 +4,7 @@ public sealed class TestRunEntity
 {
     public Guid RunId { get; set; }
     public Guid OrganisationId { get; set; }
+    public Guid TenantId { get; set; }
     public OrganisationEntity? Organisation { get; set; }
     public Guid ProjectId { get; set; }
     public ProjectEntity? Project { get; set; }

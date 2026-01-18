@@ -16,8 +16,9 @@ public sealed class SqlRunStore : IRunStore
         _logger = logger;
     }
 
-    public async Task SaveAsync(Guid projectId, Guid runId, string operationId, DateTime startedUtc, DateTime completedUtc, TestRunResult result, CancellationToken ct)
+    public async Task SaveAsync(Guid tenantId, Guid projectId, Guid runId, string operationId, DateTime startedUtc, DateTime completedUtc, TestRunResult result, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         _logger.LogInformation(
             "Saving run {RunId} for project {ProjectId} operation {OperationId}",
             runId,
@@ -30,6 +31,8 @@ public sealed class SqlRunStore : IRunStore
         {
             RunId = runId,
             ProjectId = projectId,
+            OrganisationId = tenantId,
+            TenantId = tenantId,
             OperationId = operationId,
             StartedUtc = startedUtc,
             CompletedUtc = completedUtc,
@@ -60,12 +63,13 @@ public sealed class SqlRunStore : IRunStore
         await _db.SaveChangesAsync(ct);
     }
 
-    public async Task<object?> GetAsync(Guid runId, CancellationToken ct)
+    public async Task<object?> GetAsync(Guid tenantId, Guid runId, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         var run = await _db.TestRuns
             .AsNoTracking()
             .Include(x => x.Results)
-            .FirstOrDefaultAsync(x => x.RunId == runId, ct);
+            .FirstOrDefaultAsync(x => x.RunId == runId && x.TenantId == tenantId, ct);
 
         if (run is null) return null;
 
@@ -126,11 +130,12 @@ public sealed class SqlRunStore : IRunStore
         };
     }
 
-    public async Task<object> ListAsync(Guid? projectId, int take, CancellationToken ct)
+    public async Task<object> ListAsync(Guid tenantId, Guid? projectId, int take, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         take = take <= 0 ? 20 : Math.Min(take, 200);
 
-        var q = _db.TestRuns.AsNoTracking();
+        var q = _db.TestRuns.AsNoTracking().Where(x => x.TenantId == tenantId);
 
         if (projectId.HasValue)
             q = q.Where(x => x.ProjectId == projectId.Value);
@@ -163,4 +168,7 @@ public sealed class SqlRunStore : IRunStore
             runs
         };
     }
+
+    private static Guid NormalizeTenantId(Guid tenantId)
+        => tenantId == Guid.Empty ? OrgDefaults.DefaultOrganisationId : tenantId;
 }

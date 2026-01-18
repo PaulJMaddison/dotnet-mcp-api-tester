@@ -91,16 +91,16 @@ public sealed class TestPlanRunnerTests
             return Task.CompletedTask;
         }
 
-        public Task<TestRunRecord?> GetAsync(Guid organisationId, Guid runId)
+        public Task<TestRunRecord?> GetAsync(Guid tenantId, Guid runId)
             => Task.FromResult<TestRunRecord?>(null);
 
-        public Task<bool> SetBaselineAsync(Guid organisationId, Guid runId, Guid baselineRunId)
+        public Task<bool> SetBaselineAsync(Guid tenantId, Guid runId, Guid baselineRunId)
             => Task.FromResult(false);
 
-        public Task<PagedResult<TestRunRecord>> ListAsync(Guid organisationId, string projectKey, PageRequest request, SortField sortField, SortDirection direction, string? operationId = null)
+        public Task<PagedResult<TestRunRecord>> ListAsync(Guid tenantId, string projectKey, PageRequest request, SortField sortField, SortDirection direction, string? operationId = null)
             => Task.FromResult(new PagedResult<TestRunRecord>(Array.Empty<TestRunRecord>(), 0, null));
 
-        public Task<int> PruneAsync(Guid organisationId, DateTimeOffset cutoffUtc, CancellationToken ct)
+        public Task<int> PruneAsync(Guid tenantId, DateTimeOffset cutoffUtc, CancellationToken ct)
             => Task.FromResult(0);
     }
 
