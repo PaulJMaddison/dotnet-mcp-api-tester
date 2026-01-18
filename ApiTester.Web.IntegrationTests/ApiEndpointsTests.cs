@@ -7,11 +7,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Entities;
+using ApiTester.McpServer.Models;
 using ApiTester.Web;
 using ApiTester.Web.Auth;
 using ApiTester.Web.AI;
 using ApiTester.Web.Contracts;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -502,6 +504,11 @@ public class ApiEndpointsTests
                 };
                 config.AddInMemoryCollection(settings);
             });
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IAiProvider>();
+                services.AddSingleton<IAiProvider>(new FixedAiProvider(aiPayload));
+            });
         });
 
         var project = await SeedProjectAsync(factory, "ProAi", "pro-ai");
@@ -672,6 +679,130 @@ public class ApiEndpointsTests
         var response = await client.PostAsJsonAsync("/api/ai/suggest-tests", new AiSuggestTestsRequest(project.ProjectId.ToString(), "listPets"));
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AiGenerateDocsEndpoint_ReturnsForbidden_ForFreeTier()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Free"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "FreeDocs", "free-docs");
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+
+        var response = await client.PostAsJsonAsync("/api/ai/generate-docs", new AiGenerateDocsRequest(project.ProjectId.ToString()));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AiGenerateDocsEndpoint_ReturnsConflict_ForMissingSpec()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
+        var project = await SeedProjectAsync(factory, "DocsEmpty", "docs-empty");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsJsonAsync("/api/ai/generate-docs", new AiGenerateDocsRequest(project.ProjectId.ToString()));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AiGenerateDocsEndpoint_RedactsRunExamples()
+    {
+        const string secretToken = "secret-token";
+        var runId = Guid.NewGuid();
+
+        var aiPayload = $$"""
+        {
+          "title": "Pet API docs",
+          "summary": "Docs with redaction coverage.",
+          "sections": [
+            {
+              "operationId": "listPets",
+              "method": "GET",
+              "path": "/pets",
+              "title": "List pets",
+              "summary": "Retrieve pets.",
+              "markdown": "### GET /pets\nExample token: {secretToken}",
+              "examples": [
+                {
+                  "title": "Success response",
+                  "runId": "{runId}",
+                  "caseName": "Case",
+                  "statusCode": 200,
+                  "responseSnippet": "token={secretToken}"
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IAiProvider>();
+                services.AddSingleton<IAiProvider>(new FixedAiProvider(aiPayload));
+            });
+        });
+
+        await UpdateOrgSettingsAsync(
+            factory,
+            ApiTesterWebFactory.OrganisationAlphaId,
+            new OrgSettings(OrgPlan.Pro),
+            new[] { secretToken });
+
+        var project = await SeedProjectAsync(factory, "DocsRedaction", "docs-redaction");
+        await SeedSpecAsync(factory, project, BuildExplainSpecJson());
+        await SeedRunAsync(factory, project, "listPets", responseSnippet: $"token={secretToken}", runId: runId);
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsJsonAsync("/api/ai/generate-docs", new AiGenerateDocsRequest(project.ProjectId.ToString()));
+        var payload = await response.Content.ReadFromJsonAsync<GeneratedDocsResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.DoesNotContain(secretToken, payload!.Markdown, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("[REDACTED]", payload.Markdown, StringComparison.OrdinalIgnoreCase);
+
+        var fetched = await client.GetFromJsonAsync<GeneratedDocsResponse>($"/api/projects/{project.ProjectId}/docs/generated");
+        Assert.NotNull(fetched);
+        Assert.DoesNotContain(secretToken, fetched!.Markdown, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("[REDACTED]", fetched.Markdown, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1059,7 +1190,35 @@ public class ApiEndpointsTests
         return project;
     }
 
-    private static async Task<TestRunEntity> SeedRunAsync(WebApplicationFactory<Program> factory, ProjectEntity project, string operationId, DateTime? startedUtc = null)
+    private static async Task UpdateOrgSettingsAsync(
+        WebApplicationFactory<Program> factory,
+        Guid organisationId,
+        OrgSettings settings,
+        IReadOnlyList<string>? redactionRules = null)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var entity = await db.Organisations.FirstOrDefaultAsync(o => o.OrganisationId == organisationId);
+        if (entity is null)
+            return;
+
+        entity.OrgSettingsJson = JsonSerializer.Serialize(settings);
+        if (redactionRules is not null)
+            entity.RedactionRulesJson = JsonSerializer.Serialize(redactionRules);
+
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<TestRunEntity> SeedRunAsync(
+        WebApplicationFactory<Program> factory,
+        ProjectEntity project,
+        string operationId,
+        DateTime? startedUtc = null,
+        string? responseSnippet = null,
+        string? url = null,
+        Guid? runId = null)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
@@ -1069,7 +1228,7 @@ public class ApiEndpointsTests
 
         var run = new TestRunEntity
         {
-            RunId = Guid.NewGuid(),
+            RunId = runId ?? Guid.NewGuid(),
             OrganisationId = project.OrganisationId,
             ProjectId = project.ProjectId,
             OperationId = operationId,
@@ -1086,10 +1245,11 @@ public class ApiEndpointsTests
                 {
                     Name = "Case",
                     Method = "GET",
-                    Url = "https://example.test",
+                    Url = url ?? "https://example.test",
                     StatusCode = 200,
                     DurationMs = 120,
-                    Pass = true
+                    Pass = true,
+                    ResponseSnippet = responseSnippet
                 }
             ]
         };

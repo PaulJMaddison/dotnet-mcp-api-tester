@@ -17,6 +17,7 @@ public sealed class ApiTesterDbContext : DbContext
     public DbSet<RunAnnotationEntity> RunAnnotations => Set<RunAnnotationEntity>();
     public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
     public DbSet<AiInsightEntity> AiInsights => Set<AiInsightEntity>();
+    public DbSet<GeneratedDocsEntity> GeneratedDocs => Set<GeneratedDocsEntity>();
     public DbSet<UserEntity> Users => Set<UserEntity>();
     public DbSet<MembershipEntity> Memberships => Set<MembershipEntity>();
     public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
@@ -251,6 +252,25 @@ public sealed class ApiTesterDbContext : DbContext
             b.Property(x => x.JsonPayload).IsRequired();
             b.HasIndex(x => new { x.OrganisationId, x.ProjectId, x.RunId });
             b.HasIndex(x => new { x.OrganisationId, x.OperationId });
+        });
+
+        modelBuilder.Entity<GeneratedDocsEntity>(b =>
+        {
+            b.HasKey(x => x.DocsId);
+            b.Property(x => x.DocsJson).IsRequired();
+            b.HasIndex(x => new { x.OrganisationId, x.ProjectId }).IsUnique();
+            b.HasIndex(x => x.ProjectId);
+            b.HasIndex(x => x.OrganisationId);
+
+            b.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(x => x.Organisation)
+                .WithMany()
+                .HasForeignKey(x => x.OrganisationId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ApiKeyEntity>(b =>
