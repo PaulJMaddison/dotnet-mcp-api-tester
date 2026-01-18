@@ -2,7 +2,7 @@
 
 @code {
     private QaReportingContent Content { get; } = MarketingContent.Current.QaReporting;
-    private PageMetadata Metadata => Content.Metadata;
+    private ApiTester.Site.Content.PageMetadata Metadata => Content.Metadata;
 }
 
 <PageTitle>@Metadata.Title</PageTitle>

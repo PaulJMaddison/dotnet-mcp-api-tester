@@ -14,22 +14,16 @@ public sealed record ProjectRecord
     // This is the constructor System.Text.Json will use.
     // Note: ownerKey is nullable to tolerate older persisted files.
     [JsonConstructor]
-    public ProjectRecord(Guid projectId, Guid? organisationId, string? ownerKey, string name, string projectKey, DateTime createdUtc)
+    public ProjectRecord(Guid projectId, Guid organisationId, string? ownerKey, string name, string projectKey, DateTime createdUtc)
     {
         ProjectId = projectId;
-        OrganisationId = organisationId.HasValue && organisationId.Value != Guid.Empty
-            ? organisationId.Value
+        OrganisationId = organisationId != Guid.Empty
+            ? organisationId
             : OrgDefaults.DefaultOrganisationId;
         OwnerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey;
         Name = name;
         ProjectKey = projectKey;
         CreatedUtc = createdUtc;
-    }
-
-    // Convenience ctor used by code when you don't care about OwnerKey.
-    public ProjectRecord(Guid projectId, Guid organisationId, string ownerKey, string name, string projectKey, DateTime createdUtc)
-        : this(projectId, organisationId, ownerKey, name, projectKey, createdUtc)
-    {
     }
 
     // Convenience ctor used by code when you don't care about OwnerKey.

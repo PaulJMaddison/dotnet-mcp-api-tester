@@ -2,7 +2,7 @@
 
 @code {
     private PricingPageContent Content { get; } = MarketingContent.Current.Pricing;
-    private PageMetadata Metadata => Content.Metadata;
+    private ApiTester.Site.Content.PageMetadata Metadata => Content.Metadata;
 
     private static string GetPlanIcon(string planName) => planName switch
     {

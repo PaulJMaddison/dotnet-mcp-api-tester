@@ -2,7 +2,7 @@
 
 @code {
     private HomePageContent Content { get; } = MarketingContent.Current.Home;
-    private PageMetadata Metadata => Content.Metadata;
+    private ApiTester.Site.Content.PageMetadata Metadata => Content.Metadata;
 
     private (string Src, string Alt) GetPersonaIcon(string title)
         => title switch

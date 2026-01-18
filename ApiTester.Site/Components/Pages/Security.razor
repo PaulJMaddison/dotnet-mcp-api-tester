@@ -2,7 +2,7 @@
 
 @code {
     private SecurityComplianceContent Content { get; } = MarketingContent.Current.SecurityCompliance;
-    private PageMetadata Metadata => Content.Metadata;
+    private ApiTester.Site.Content.PageMetadata Metadata => Content.Metadata;
 }
 
 <PageTitle>@Metadata.Title</PageTitle>

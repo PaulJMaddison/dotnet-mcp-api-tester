@@ -3,6 +3,7 @@ using ApiTester.Site.Services;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ApiTester.Site.Tests;
 
@@ -16,10 +17,9 @@ public class AuthGateTests
         context.Services.AddSingleton<IHttpContextAccessor>(new HttpContextAccessor());
 
         var cut = context.RenderComponent<AppAuthGate>(parameters => parameters.AddChildContent("<p>Protected</p>"));
-        var navigation = context.Services.GetRequiredService<NavigationManager>() as TestNavigationManager;
+        var navigation = context.Services.GetRequiredService<NavigationManager>();
 
-        Assert.NotNull(navigation);
-        Assert.EndsWith("/app/sign-in", navigation!.Uri, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith("/app/sign-in", navigation.Uri, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Protected", cut.Markup);
     }
 

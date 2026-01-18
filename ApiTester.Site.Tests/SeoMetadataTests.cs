@@ -1,7 +1,8 @@
-using System.Reflection;
 using ApiTester.Site.Components.Pages;
 using ApiTester.Site.Components.Pages.Docs;
 using Bunit;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 
 namespace ApiTester.Site.Tests;
 
@@ -41,15 +42,17 @@ public class SeoMetadataTests
         Assert.NotNull(cut.Find("meta[name=\"description\"]"));
     }
 
-    private static IRenderedComponent RenderPage(TestContext context, Type componentType)
+    private static IRenderedFragment RenderPage(TestContext context, Type componentType)
     {
-        var renderMethod = typeof(TestContext).GetMethods(BindingFlags.Instance | BindingFlags.Public)
-            .First(method => method is { Name: "RenderComponent", IsGenericMethodDefinition: true }
-                             && method.GetParameters().Length == 0);
+        RenderFragment fragment = builder =>
+        {
+            builder.OpenComponent<HeadOutlet>(0);
+            builder.CloseComponent();
+            builder.OpenComponent(1, componentType);
+            builder.CloseComponent();
+        };
 
-        var genericMethod = renderMethod.MakeGenericMethod(componentType);
-
-        return (IRenderedComponent)genericMethod.Invoke(context, Array.Empty<object>())!;
+        return context.Render(fragment);
     }
 }
 

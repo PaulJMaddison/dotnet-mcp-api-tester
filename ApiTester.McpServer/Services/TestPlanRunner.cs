@@ -12,6 +12,8 @@ namespace ApiTester.McpServer.Services;
 
 public sealed class TestPlanRunner
 {
+    public const string HttpClientName = "TestPlanRunner";
+
     private readonly OpenApiStore _store;
     private readonly ApiRuntimeConfig _cfg;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -283,8 +285,14 @@ public sealed class TestPlanRunner
             };
         }
 
-        var client = _httpClientFactory.CreateClient();
-        client.Timeout = _cfg.Policy.Timeout;
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        if (_cfg.Policy.Timeout > TimeSpan.Zero && _cfg.Policy.Timeout != Timeout.InfiniteTimeSpan)
+        {
+            timeoutCts.CancelAfter(_cfg.Policy.Timeout);
+        }
+
+        var requestToken = timeoutCts.Token;
         using var req = new HttpRequestMessage(new HttpMethod(plan.Method), uri);
 
         if (!string.IsNullOrWhiteSpace(_cfg.BearerToken))
@@ -301,7 +309,7 @@ public sealed class TestPlanRunner
         var sw = Stopwatch.StartNew();
         try
         {
-            using var resp = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            using var resp = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, requestToken);
             sw.Stop();
 
             var status = (int)resp.StatusCode;
@@ -310,7 +318,7 @@ public sealed class TestPlanRunner
             byte[] bodyBytes = Array.Empty<byte>();
             if (resp.Content is not null)
             {
-                bodyBytes = await resp.Content.ReadAsByteArrayAsync(ct);
+                bodyBytes = await resp.Content.ReadAsByteArrayAsync(requestToken);
                 var max = Math.Min(bodyBytes.Length, _cfg.Policy.MaxResponseBodyBytes);
                 snippet = Encoding.UTF8.GetString(bodyBytes, 0, max);
                 if (bodyBytes.Length > max) snippet += "\n... (truncated)";

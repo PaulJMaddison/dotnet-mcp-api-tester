@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using System.Net.Http;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
@@ -86,6 +87,11 @@ builder.Services.AddScoped<ApiRuntimeConfig>(sp =>
     return runtime;
 });
 builder.Services.AddScoped<TestPlanRunner>();
+builder.Services.AddHttpClient(TestPlanRunner.HttpClientName)
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        UseProxy = false
+    });
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<RunComparisonService>();
 builder.Services.AddScoped<BaselineComparisonService>();

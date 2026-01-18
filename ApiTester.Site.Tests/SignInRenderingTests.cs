@@ -1,6 +1,7 @@
 using ApiTester.Site.Components.Pages.App;
 using ApiTester.Site.Services;
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ApiTester.Site.Tests;
 

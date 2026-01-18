@@ -32,7 +32,8 @@ else if (Model.NotFound)
 }
 else if (Model.Run is not null)
 {
-    var classification = Model.Run.Result.ClassificationSummary;
+    var classification = Model.Run.Result.ClassificationSummary
+        ?? new ApiTester.Ui.Clients.ResultClassificationSummary(0, 0, 0, 0, 0);
     var realFail = classification.Fail + classification.BlockedUnexpected;
 
     <h2>Run Summary</h2>

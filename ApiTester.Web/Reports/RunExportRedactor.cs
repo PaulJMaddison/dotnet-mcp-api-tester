@@ -27,6 +27,7 @@ public static class RunExportRedactor
                 run.PolicySnapshot.TimeoutSeconds,
                 run.PolicySnapshot.MaxRequestBodyBytes,
                 run.PolicySnapshot.MaxResponseBodyBytes,
+                run.PolicySnapshot.ValidateSchema,
                 run.PolicySnapshot.RetryOnFlake,
                 run.PolicySnapshot.MaxRetries);
 
