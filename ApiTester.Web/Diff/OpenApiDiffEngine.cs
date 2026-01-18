@@ -20,6 +20,7 @@ public static class OpenApiDiffChange
     public const string ParameterRequirednessChanged = "ParameterRequirednessChanged";
     public const string ResponseCodeAdded = "ResponseCodeAdded";
     public const string ResponseCodeRemoved = "ResponseCodeRemoved";
+    public const string ResponseSchemaChanged = "ResponseSchemaChanged";
     public const string NoChanges = "NoChanges";
 }
 
@@ -198,8 +199,12 @@ public static class OpenApiDiffEngine
         OpenApiOperation beforeOp,
         OpenApiOperation afterOp)
     {
-        var beforeCodes = beforeOp.Responses?.Keys?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var afterCodes = afterOp.Responses?.Keys?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var beforeResponses = beforeOp.Responses?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
+            ?? new Dictionary<string, OpenApiResponse>(StringComparer.OrdinalIgnoreCase);
+        var afterResponses = afterOp.Responses?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase)
+            ?? new Dictionary<string, OpenApiResponse>(StringComparer.OrdinalIgnoreCase);
+        var beforeCodes = beforeResponses.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var afterCodes = afterResponses.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var code in beforeCodes)
         {
@@ -226,6 +231,101 @@ public static class OpenApiDiffEngine
                     $"Response code '{code}' was added."));
             }
         }
+
+        foreach (var code in beforeCodes.Intersect(afterCodes, StringComparer.OrdinalIgnoreCase))
+        {
+            var beforeResponse = beforeResponses[code];
+            var afterResponse = afterResponses[code];
+            CompareResponseSchemas(diffs, path, method, code, beforeResponse, afterResponse);
+        }
+    }
+
+    private static void CompareResponseSchemas(
+        ICollection<OpenApiDiffItem> diffs,
+        string path,
+        OperationType method,
+        string code,
+        OpenApiResponse beforeResponse,
+        OpenApiResponse afterResponse)
+    {
+        var beforeSchemas = BuildResponseSchemaMap(beforeResponse);
+        var afterSchemas = BuildResponseSchemaMap(afterResponse);
+
+        foreach (var contentType in beforeSchemas.Keys.Union(afterSchemas.Keys, StringComparer.OrdinalIgnoreCase))
+        {
+            beforeSchemas.TryGetValue(contentType, out var beforeSignature);
+            afterSchemas.TryGetValue(contentType, out var afterSignature);
+
+            if (string.Equals(beforeSignature, afterSignature, StringComparison.Ordinal))
+                continue;
+
+            diffs.Add(new OpenApiDiffItem(
+                OpenApiDiffClassification.Breaking,
+                OpenApiDiffChange.ResponseSchemaChanged,
+                path,
+                FormatMethod(method),
+                $"Response schema for '{code}' ({contentType}) changed."));
+        }
+    }
+
+    private static Dictionary<string, string> BuildResponseSchemaMap(OpenApiResponse response)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (response.Content is null)
+            return map;
+
+        foreach (var entry in response.Content)
+        {
+            var signature = BuildSchemaSignature(entry.Value?.Schema, 0, new HashSet<OpenApiSchema>());
+            map[entry.Key] = signature;
+        }
+
+        return map;
+    }
+
+    private static string BuildSchemaSignature(OpenApiSchema? schema, int depth, HashSet<OpenApiSchema> visited)
+    {
+        if (schema is null)
+            return "none";
+
+        if (!visited.Add(schema))
+            return "recursion";
+
+        if (depth > 4)
+            return "depth-limit";
+
+        var parts = new List<string>
+        {
+            $"ref:{schema.Reference?.Id ?? schema.Reference?.ExternalResource ?? string.Empty}",
+            $"type:{schema.Type ?? string.Empty}",
+            $"format:{schema.Format ?? string.Empty}",
+            $"nullable:{schema.Nullable.ToString().ToLowerInvariant()}"
+        };
+
+        if (schema.Enum?.Count > 0)
+        {
+            var enums = schema.Enum.Select(value => value?.ToString() ?? string.Empty).OrderBy(value => value, StringComparer.Ordinal);
+            parts.Add($"enum:{string.Join(",", enums)}");
+        }
+
+        if (schema.Required?.Count > 0)
+        {
+            var required = schema.Required.OrderBy(name => name, StringComparer.Ordinal);
+            parts.Add($"required:{string.Join(",", required)}");
+        }
+
+        if (schema.Properties?.Count > 0)
+        {
+            var properties = schema.Properties
+                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .Select(pair => $"{pair.Key}:{BuildSchemaSignature(pair.Value, depth + 1, visited)}");
+            parts.Add($"properties:{string.Join("|", properties)}");
+        }
+
+        if (schema.Items is not null)
+            parts.Add($"items:{BuildSchemaSignature(schema.Items, depth + 1, visited)}");
+
+        return string.Join("|", parts);
     }
 
     private static Dictionary<string, OpenApiParameter> BuildParameterMap(OpenApiPathItem pathItem, OpenApiOperation operation)

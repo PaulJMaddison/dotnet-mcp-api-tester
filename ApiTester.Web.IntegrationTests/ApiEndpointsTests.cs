@@ -866,7 +866,8 @@ public class ApiEndpointsTests
         [property: JsonPropertyName("projectId")] Guid ProjectId,
         [property: JsonPropertyName("title")] string Title,
         [property: JsonPropertyName("version")] string Version,
-        [property: JsonPropertyName("createdUtc")] DateTime CreatedUtc);
+        [property: JsonPropertyName("specHash")] string SpecHash,
+        [property: JsonPropertyName("uploadedUtc")] DateTime UploadedUtc);
 
     public sealed record TestPlanResponse(
         [property: JsonPropertyName("projectId")] Guid ProjectId,

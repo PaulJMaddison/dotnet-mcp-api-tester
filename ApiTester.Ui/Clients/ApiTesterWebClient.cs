@@ -257,7 +257,8 @@ public sealed record OpenApiSpecMetadataDto(
     Guid ProjectId,
     string Title,
     string Version,
-    DateTime CreatedUtc);
+    string SpecHash,
+    DateTime UploadedUtc);
 
 public sealed record TestPlanResponse(
     Guid ProjectId,
