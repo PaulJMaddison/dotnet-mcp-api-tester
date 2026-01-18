@@ -1,5 +1,6 @@
 using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
+using ApiTester.McpServer.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -15,7 +16,10 @@ public sealed class FileTestRunStoreTests
 
         try
         {
-            var store = new FileTestRunStore(new AppConfig { WorkingDirectory = tempDir }, NullLogger<FileTestRunStore>.Instance);
+            var appConfig = new AppConfig { WorkingDirectory = tempDir };
+            var orgStore = new FileOrganisationStore(appConfig);
+            var redactionService = new RedactionService();
+            var store = new FileTestRunStore(appConfig, NullLogger<FileTestRunStore>.Instance, orgStore, redactionService);
             var started = new DateTimeOffset(2024, 1, 1, 12, 0, 0, TimeSpan.FromHours(2));
             var completed = started.AddMinutes(1);
 

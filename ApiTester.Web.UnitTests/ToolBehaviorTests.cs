@@ -113,7 +113,10 @@ public sealed class RunHistoryToolsTests
         var tempDir = CreateTempDir();
         try
         {
-            var store = new FileTestRunStore(new AppConfig { WorkingDirectory = tempDir }, NullLogger<FileTestRunStore>.Instance);
+            var appConfig = new AppConfig { WorkingDirectory = tempDir };
+            var orgStore = new FileOrganisationStore(appConfig);
+            var redactionService = new RedactionService();
+            var store = new FileTestRunStore(appConfig, NullLogger<FileTestRunStore>.Instance, orgStore, redactionService);
             var tools = new RunHistoryTools(store, NullLogger<RunHistoryTools>.Instance);
 
             await store.SaveAsync(BuildRun("default", "op-a"));
@@ -136,7 +139,10 @@ public sealed class RunHistoryToolsTests
         var tempDir = CreateTempDir();
         try
         {
-            var store = new FileTestRunStore(new AppConfig { WorkingDirectory = tempDir }, NullLogger<FileTestRunStore>.Instance);
+            var appConfig = new AppConfig { WorkingDirectory = tempDir };
+            var orgStore = new FileOrganisationStore(appConfig);
+            var redactionService = new RedactionService();
+            var store = new FileTestRunStore(appConfig, NullLogger<FileTestRunStore>.Instance, orgStore, redactionService);
             var tools = new RunHistoryTools(store, NullLogger<RunHistoryTools>.Instance);
 
             await store.SaveAsync(BuildRun("default", "op-a"));
@@ -161,7 +167,10 @@ public sealed class RunHistoryToolsTests
         var tempDir = CreateTempDir();
         try
         {
-            var store = new FileTestRunStore(new AppConfig { WorkingDirectory = tempDir }, NullLogger<FileTestRunStore>.Instance);
+            var appConfig = new AppConfig { WorkingDirectory = tempDir };
+            var orgStore = new FileOrganisationStore(appConfig);
+            var redactionService = new RedactionService();
+            var store = new FileTestRunStore(appConfig, NullLogger<FileTestRunStore>.Instance, orgStore, redactionService);
             var tools = new RunHistoryTools(store, NullLogger<RunHistoryTools>.Instance);
 
             var response = await tools.ApiGetRun(Guid.NewGuid().ToString());

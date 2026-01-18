@@ -179,6 +179,7 @@ public sealed class ApiTesterDbContext : DbContext
             b.HasKey(x => x.OrganisationId);
             b.Property(x => x.Name).HasMaxLength(200).IsRequired();
             b.Property(x => x.Slug).HasMaxLength(80).IsRequired();
+            b.Property(x => x.RedactionRulesJson);
             b.HasIndex(x => x.Slug).IsUnique();
         });
 

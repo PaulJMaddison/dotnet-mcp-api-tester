@@ -1,5 +1,6 @@
 ﻿using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Serialization;
+using ApiTester.McpServer.Services;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -9,11 +10,19 @@ public sealed class FileTestRunStore : ITestRunStore
 {
     private readonly AppConfig _cfg;
     private readonly ILogger<FileTestRunStore> _logger;
+    private readonly IOrganisationStore _organisationStore;
+    private readonly RedactionService _redactionService;
 
-    public FileTestRunStore(AppConfig cfg, ILogger<FileTestRunStore> logger)
+    public FileTestRunStore(
+        AppConfig cfg,
+        ILogger<FileTestRunStore> logger,
+        IOrganisationStore organisationStore,
+        RedactionService redactionService)
     {
         _cfg = cfg;
         _logger = logger;
+        _organisationStore = organisationStore;
+        _redactionService = redactionService;
     }
 
     private string RootPath => Path.Combine(_cfg.WorkingDirectory, "run-history");
@@ -45,7 +54,9 @@ public sealed class FileTestRunStore : ITestRunStore
             ownerKey,
             projectKey,
             path);
-        record.Result.ClassificationSummary = ResultClassificationRules.Summarize(record.Result.Results);
+        var org = await _organisationStore.GetAsync(organisationId, CancellationToken.None);
+        var redactedResult = _redactionService.RedactResult(record.Result, org?.RedactionRules);
+        redactedResult.ClassificationSummary = ResultClassificationRules.Summarize(redactedResult.Results);
 
         var recordToSave = new TestRunRecord
         {
@@ -61,7 +72,7 @@ public sealed class FileTestRunStore : ITestRunStore
             BaselineRunId = record.BaselineRunId,
             StartedUtc = record.StartedUtc.ToUniversalTime(),
             CompletedUtc = record.CompletedUtc.ToUniversalTime(),
-            Result = record.Result
+            Result = redactedResult
         };
 
         var json = JsonSerializer.Serialize(recordToSave, JsonDefaults.Default);
@@ -233,6 +244,38 @@ public sealed class FileTestRunStore : ITestRunStore
             : null;
 
         return new PagedResult<TestRunRecord>(page, total, nextOffset);
+    }
+
+    public async Task<int> PruneAsync(Guid organisationId, DateTimeOffset cutoffUtc, CancellationToken ct)
+    {
+        organisationId = NormalizeOrganisationId(organisationId);
+
+        var orgDir = OrgPath(organisationId);
+        if (!Directory.Exists(orgDir))
+            return 0;
+
+        var deleted = 0;
+
+        foreach (var projectDir in Directory.EnumerateDirectories(orgDir))
+        {
+            foreach (var file in Directory.EnumerateFiles(projectDir, "*.json", SearchOption.TopDirectoryOnly))
+            {
+                ct.ThrowIfCancellationRequested();
+                var json = await File.ReadAllTextAsync(file, ct);
+                var record = JsonSerializer.Deserialize<TestRunRecord>(json, JsonDefaults.Default);
+                if (record is null)
+                    continue;
+
+                var completed = record.CompletedUtc == default ? record.StartedUtc : record.CompletedUtc;
+                if (completed < cutoffUtc)
+                {
+                    File.Delete(file);
+                    deleted++;
+                }
+            }
+        }
+
+        return deleted;
     }
 
     private static string Sanitize(string s)

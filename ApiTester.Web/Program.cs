@@ -41,6 +41,7 @@ builder.Services.AddApiTesterPersistence(builder.Configuration);
 builder.Services.Configure<ExecutionOptions>(builder.Configuration.GetSection("Execution"));
 builder.Services.AddSingleton<OpenApiStore>();
 builder.Services.AddSingleton<SsrfGuard>();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ApiRuntimeConfig>(sp =>
 {
     var options = sp.GetRequiredService<IOptions<ExecutionOptions>>().Value;
@@ -90,6 +91,7 @@ builder.Services.AddSingleton<IAiClient, NullAiClient>();
 builder.Services.Configure<EntitlementOptions>(builder.Configuration.GetSection("Entitlements"));
 builder.Services.AddSingleton<EntitlementService>();
 builder.Services.AddScoped<OrgContextResolver>();
+builder.Services.AddScoped<IRetentionPruner, RetentionPruner>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -131,7 +133,8 @@ app.UseSwaggerUI();
 app.UseWhen(
     context => context.Request.Path.StartsWithSegments("/api")
         || context.Request.Path.StartsWithSegments("/api-keys")
-        || context.Request.Path.StartsWithSegments("/audit"),
+        || context.Request.Path.StartsWithSegments("/audit")
+        || context.Request.Path.StartsWithSegments("/admin"),
     builder =>
     {
         builder.UseMiddleware<ApiKeyAuthMiddleware>();
@@ -231,6 +234,23 @@ app.MapGet("/audit", async (int? take, string? action, string? from, string? to,
 
     var records = await auditStore.ListAsync(orgContext.OrganisationId, normalizedTake, action, fromUtc, toUtc, ct);
     return Results.Ok(AuditMapping.ToListResponse(records));
+});
+
+app.MapPost("/admin/prune", async (IRetentionPruner pruner, HttpContext httpContext, CancellationToken ct) =>
+{
+    var orgContext = httpContext.GetOrgContext();
+    var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
+    if (adminCheck is not null)
+        return adminCheck;
+
+    var result = await pruner.PruneAsync(orgContext.OrganisationId, ct);
+    return Results.Ok(new
+    {
+        result.OrganisationId,
+        result.RetentionDays,
+        result.CutoffUtc,
+        result.RunsPruned
+    });
 });
 
 app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKeyStore, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
@@ -750,8 +770,10 @@ app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async 
     string projectId,
     string operationId,
     IProjectStore projectStore,
+    IOrganisationStore orgStore,
     IOpenApiSpecStore specStore,
     ITestPlanStore planStore,
+    RedactionService redactionService,
     HttpContext httpContext,
     CancellationToken ct) =>
 {
@@ -785,7 +807,9 @@ app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async 
 
     var (path, method, op) = match.Value;
     var plan = TestPlanFactory.Create(op, method, path, operationId.Trim());
-    var planJson = JsonSerializer.Serialize(plan, jsonOptions);
+    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var redactedPlan = redactionService.RedactPlan(plan, org?.RedactionRules);
+    var planJson = JsonSerializer.Serialize(redactedPlan, jsonOptions);
 
     var record = await planStore.UpsertAsync(id, operationId.Trim(), planJson, DateTime.UtcNow, ct);
     return Results.Ok(new TestPlanResponse(record.ProjectId, record.OperationId, record.PlanJson, record.CreatedUtc));
@@ -825,11 +849,13 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     string operationId,
     string? environment,
     IProjectStore projectStore,
+    IOrganisationStore orgStore,
     IOpenApiSpecStore specStore,
     ITestPlanStore planStore,
     IEnvironmentStore environmentStore,
     TestPlanRunner runner,
     ApiRuntimeConfig runtime,
+    RedactionService redactionService,
     IAuditEventStore auditStore,
     HttpContext httpContext,
     ILogger<Program> logger,
@@ -887,7 +913,9 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
 
         var (path, method, op) = match.Value;
         plan = TestPlanFactory.Create(op, method, path, trimmedOperationId);
-        var planJson = JsonSerializer.Serialize(plan, jsonOptions);
+        var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+        var redactedPlan = redactionService.RedactPlan(plan, org?.RedactionRules);
+        var planJson = JsonSerializer.Serialize(redactedPlan, jsonOptions);
         await planStore.UpsertAsync(id, trimmedOperationId, planJson, DateTime.UtcNow, ct);
     }
     else
