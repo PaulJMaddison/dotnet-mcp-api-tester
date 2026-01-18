@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Rag;
 using ApiTester.McpServer.Runtime;
@@ -39,7 +40,7 @@ public sealed class RagTools
         if (current is null)
             return new { ok = false, reason = "No current project. Pass projectId or call ApiSetCurrentProject or ApiCreateProject first." };
 
-        var specs = await _specs.ListAsync(current.Value, ct).ConfigureAwait(false);
+        var specs = await _specs.ListAsync(OrgDefaults.DefaultOrganisationId, current.Value, ct).ConfigureAwait(false);
 
         var indexedChunks = 0;
 

@@ -16,9 +16,9 @@ public sealed class FileProjectStore : IProjectStore
 
     private string FilePath => Path.Combine(_cfg.WorkingDirectory, "run-history", "projects.json");
 
-    public async Task<ProjectRecord> CreateAsync(Guid organisationId, string ownerKey, string name, CancellationToken ct)
+    public async Task<ProjectRecord> CreateAsync(Guid tenantId, string ownerKey, string name, CancellationToken ct)
     {
-        organisationId = NormalizeOrganisationId(organisationId);
+        tenantId = NormalizeTenantId(tenantId);
         ownerKey = NormalizeOwnerKey(ownerKey);
         name = (name ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(name))
@@ -30,11 +30,11 @@ public sealed class FileProjectStore : IProjectStore
         try
         {
             var list = await LoadAsync(ct);
-            var existing = list.FirstOrDefault(p => p.OrganisationId == organisationId && p.ProjectKey.Equals(key, StringComparison.OrdinalIgnoreCase));
+            var existing = list.FirstOrDefault(p => p.TenantId == tenantId && p.ProjectKey.Equals(key, StringComparison.OrdinalIgnoreCase));
             if (existing is not null)
                 return existing;
 
-            var record = new ProjectRecord(Guid.NewGuid(), organisationId, ownerKey, name, key, DateTime.UtcNow);
+            var record = new ProjectRecord(Guid.NewGuid(), tenantId, tenantId, ownerKey, name, key, DateTime.UtcNow);
             list.Add(record);
             await SaveAsync(list, ct);
             return record;
@@ -45,11 +45,11 @@ public sealed class FileProjectStore : IProjectStore
         }
     }
 
-    public async Task<PagedResult<ProjectRecord>> ListAsync(Guid organisationId, PageRequest request, SortField sortField, SortDirection direction, CancellationToken ct)
+    public async Task<PagedResult<ProjectRecord>> ListAsync(Guid tenantId, PageRequest request, SortField sortField, SortDirection direction, CancellationToken ct)
     {
-        organisationId = NormalizeOrganisationId(organisationId);
+        tenantId = NormalizeTenantId(tenantId);
         var list = await LoadAsync(ct);
-        list = list.Where(p => p.OrganisationId == organisationId).ToList();
+        list = list.Where(p => p.TenantId == tenantId).ToList();
 
         var ordered = sortField switch
         {
@@ -74,25 +74,26 @@ public sealed class FileProjectStore : IProjectStore
         return new PagedResult<ProjectRecord>(page, total, nextOffset);
     }
 
-    public async Task<ProjectRecord?> GetAsync(Guid organisationId, Guid projectId, CancellationToken ct)
+    public async Task<ProjectRecord?> GetAsync(Guid tenantId, Guid projectId, CancellationToken ct)
     {
-        organisationId = NormalizeOrganisationId(organisationId);
+        tenantId = NormalizeTenantId(tenantId);
         var list = await LoadAsync(ct);
-        return list.FirstOrDefault(p => p.ProjectId == projectId && p.OrganisationId == organisationId);
+        return list.FirstOrDefault(p => p.ProjectId == projectId && p.TenantId == tenantId);
     }
 
-    public async Task<ProjectRecord?> GetByKeyAsync(Guid organisationId, string projectKey, CancellationToken ct)
+    public async Task<ProjectRecord?> GetByKeyAsync(Guid tenantId, string projectKey, CancellationToken ct)
     {
-        organisationId = NormalizeOrganisationId(organisationId);
+        tenantId = NormalizeTenantId(tenantId);
         projectKey = NormalizeProjectKey(projectKey);
         var list = await LoadAsync(ct);
-        return list.FirstOrDefault(p => p.OrganisationId == organisationId && p.ProjectKey.Equals(projectKey, StringComparison.OrdinalIgnoreCase));
+        return list.FirstOrDefault(p => p.TenantId == tenantId && p.ProjectKey.Equals(projectKey, StringComparison.OrdinalIgnoreCase));
     }
 
-    public async Task<bool> ExistsAsync(Guid projectId, CancellationToken ct)
+    public async Task<bool> ExistsAsync(Guid tenantId, Guid projectId, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         var list = await LoadAsync(ct);
-        return list.Any(p => p.ProjectId == projectId);
+        return list.Any(p => p.ProjectId == projectId && p.TenantId == tenantId);
     }
 
     private async Task<List<ProjectRecord>> LoadAsync(CancellationToken ct)
@@ -120,12 +121,27 @@ public sealed class FileProjectStore : IProjectStore
 
     private static ProjectRecord NormalizeOrg(ProjectRecord record)
     {
-        if (record.OrganisationId == Guid.Empty)
-            return record with { OrganisationId = OrgDefaults.DefaultOrganisationId };
-        if (!string.IsNullOrWhiteSpace(record.OwnerKey))
-            return record;
+        var normalizedOrg = record.OrganisationId == Guid.Empty
+            ? OrgDefaults.DefaultOrganisationId
+            : record.OrganisationId;
+        var normalizedTenant = record.TenantId == Guid.Empty ? normalizedOrg : record.TenantId;
+        var normalizedOwnerKey = string.IsNullOrWhiteSpace(record.OwnerKey)
+            ? OwnerKeyDefaults.Default
+            : record.OwnerKey;
 
-        return record with { OwnerKey = OwnerKeyDefaults.Default };
+        if (normalizedOrg == record.OrganisationId
+            && normalizedTenant == record.TenantId
+            && normalizedOwnerKey == record.OwnerKey)
+        {
+            return record;
+        }
+
+        return record with
+        {
+            OrganisationId = normalizedOrg,
+            TenantId = normalizedTenant,
+            OwnerKey = normalizedOwnerKey
+        };
     }
 
     private static string NormalizeOwnerKey(string ownerKey)
@@ -134,8 +150,8 @@ public sealed class FileProjectStore : IProjectStore
         return string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey;
     }
 
-    private static Guid NormalizeOrganisationId(Guid organisationId)
-        => organisationId == Guid.Empty ? OrgDefaults.DefaultOrganisationId : organisationId;
+    private static Guid NormalizeTenantId(Guid tenantId)
+        => tenantId == Guid.Empty ? OrgDefaults.DefaultOrganisationId : tenantId;
 
     private static string NormalizeProjectKey(string projectKey)
     {

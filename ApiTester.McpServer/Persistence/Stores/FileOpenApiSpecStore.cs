@@ -18,41 +18,45 @@ public sealed class FileOpenApiSpecStore : IOpenApiSpecStore
 
     private string FilePath => Path.Combine(_cfg.WorkingDirectory, "openapi-specs.json");
 
-    public async Task<OpenApiSpecRecord?> GetAsync(Guid projectId, CancellationToken ct)
+    public async Task<OpenApiSpecRecord?> GetAsync(Guid tenantId, Guid projectId, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         var list = await LoadAsync(ct);
         return list
-            .Where(s => s.ProjectId == projectId)
+            .Where(s => s.ProjectId == projectId && s.TenantId == tenantId)
             .OrderByDescending(s => s.CreatedUtc)
             .FirstOrDefault();
     }
 
-    public async Task<IReadOnlyList<OpenApiSpecRecord>> ListAsync(Guid projectId, CancellationToken ct)
+    public async Task<IReadOnlyList<OpenApiSpecRecord>> ListAsync(Guid tenantId, Guid projectId, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         var list = await LoadAsync(ct);
         return list
-            .Where(s => s.ProjectId == projectId)
+            .Where(s => s.ProjectId == projectId && s.TenantId == tenantId)
             .OrderByDescending(s => s.CreatedUtc)
             .ToList();
     }
 
-    public async Task<OpenApiSpecRecord?> GetByIdAsync(Guid specId, CancellationToken ct)
+    public async Task<OpenApiSpecRecord?> GetByIdAsync(Guid tenantId, Guid specId, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         var list = await LoadAsync(ct);
-        return list.FirstOrDefault(s => s.SpecId == specId);
+        return list.FirstOrDefault(s => s.SpecId == specId && s.TenantId == tenantId);
     }
 
-    public async Task<OpenApiSpecRecord> UpsertAsync(Guid projectId, string title, string version, string specJson, string specHash, DateTime createdUtc, CancellationToken ct)
+    public async Task<OpenApiSpecRecord> UpsertAsync(Guid tenantId, Guid projectId, string title, string version, string specJson, string specHash, DateTime createdUtc, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         await _mutex.WaitAsync(ct);
         try
         {
             var list = await LoadAsync(ct);
-            var index = list.FindIndex(s => s.ProjectId == projectId && s.SpecHash == specHash);
+            var index = list.FindIndex(s => s.ProjectId == projectId && s.SpecHash == specHash && s.TenantId == tenantId);
             if (index >= 0)
                 return list[index];
 
-            var record = new OpenApiSpecRecord(Guid.NewGuid(), projectId, title, version, specJson, specHash, createdUtc);
+            var record = new OpenApiSpecRecord(Guid.NewGuid(), projectId, tenantId, title, version, specJson, specHash, createdUtc);
             list.Add(record);
 
             await SaveAsync(list, ct);
@@ -64,13 +68,14 @@ public sealed class FileOpenApiSpecStore : IOpenApiSpecStore
         }
     }
 
-    public async Task<bool> DeleteAsync(Guid specId, CancellationToken ct)
+    public async Task<bool> DeleteAsync(Guid tenantId, Guid specId, CancellationToken ct)
     {
+        tenantId = NormalizeTenantId(tenantId);
         await _mutex.WaitAsync(ct);
         try
         {
             var list = await LoadAsync(ct);
-            var removed = list.RemoveAll(spec => spec.SpecId == specId) > 0;
+            var removed = list.RemoveAll(spec => spec.SpecId == specId && spec.TenantId == tenantId) > 0;
             if (removed)
                 await SaveAsync(list, ct);
 
@@ -96,6 +101,7 @@ public sealed class FileOpenApiSpecStore : IOpenApiSpecStore
             .Select(record => string.IsNullOrWhiteSpace(record.SpecHash)
                 ? record with { SpecHash = ComputeSpecHash(record.SpecJson) }
                 : record)
+            .Select(NormalizeTenant)
             .ToList();
     }
 
@@ -112,4 +118,15 @@ public sealed class FileOpenApiSpecStore : IOpenApiSpecStore
         var hash = sha.ComputeHash(bytes);
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
+
+    private static OpenApiSpecRecord NormalizeTenant(OpenApiSpecRecord record)
+    {
+        if (record.TenantId != Guid.Empty)
+            return record;
+
+        return record with { TenantId = OrgDefaults.DefaultOrganisationId };
+    }
+
+    private static Guid NormalizeTenantId(Guid tenantId)
+        => tenantId == Guid.Empty ? OrgDefaults.DefaultOrganisationId : tenantId;
 }

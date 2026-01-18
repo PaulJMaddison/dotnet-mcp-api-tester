@@ -1,3 +1,4 @@
+using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
 
 namespace ApiTester.Web.UnitTests;
@@ -18,12 +19,12 @@ public sealed class OpenApiSpecStoreTests
             var specHash = "abc123";
             var createdUtc = DateTime.UtcNow;
 
-            var first = await store.UpsertAsync(projectId, "Sample", "1.0.0", specJson, specHash, createdUtc, CancellationToken.None);
-            var second = await store.UpsertAsync(projectId, "Sample", "1.0.0", specJson, specHash, createdUtc.AddMinutes(5), CancellationToken.None);
+            var first = await store.UpsertAsync(OrgDefaults.DefaultOrganisationId, projectId, "Sample", "1.0.0", specJson, specHash, createdUtc, CancellationToken.None);
+            var second = await store.UpsertAsync(OrgDefaults.DefaultOrganisationId, projectId, "Sample", "1.0.0", specJson, specHash, createdUtc.AddMinutes(5), CancellationToken.None);
 
             Assert.Equal(first.SpecId, second.SpecId);
 
-            var list = await store.ListAsync(projectId, CancellationToken.None);
+            var list = await store.ListAsync(OrgDefaults.DefaultOrganisationId, projectId, CancellationToken.None);
             Assert.Single(list);
         }
         finally

@@ -124,16 +124,16 @@ public sealed class BaselineComparisonServiceTests
 
         public Task SaveAsync(TestRunRecord record) => Task.CompletedTask;
 
-        public Task<TestRunRecord?> GetAsync(Guid organisationId, Guid runId)
+        public Task<TestRunRecord?> GetAsync(Guid tenantId, Guid runId)
             => Task.FromResult(_runs.TryGetValue(runId, out var record) ? record : null);
 
-        public Task<bool> SetBaselineAsync(Guid organisationId, Guid runId, Guid baselineRunId)
+        public Task<bool> SetBaselineAsync(Guid tenantId, Guid runId, Guid baselineRunId)
             => Task.FromResult(false);
 
-        public Task<PagedResult<TestRunRecord>> ListAsync(Guid organisationId, string projectKey, PageRequest request, SortField sortField, SortDirection direction, string? operationId = null)
+        public Task<PagedResult<TestRunRecord>> ListAsync(Guid tenantId, string projectKey, PageRequest request, SortField sortField, SortDirection direction, string? operationId = null)
             => Task.FromResult(new PagedResult<TestRunRecord>(Array.Empty<TestRunRecord>(), 0, null));
 
-        public Task<int> PruneAsync(Guid organisationId, DateTimeOffset cutoffUtc, CancellationToken ct)
+        public Task<int> PruneAsync(Guid tenantId, DateTimeOffset cutoffUtc, CancellationToken ct)
             => Task.FromResult(0);
     }
 
@@ -146,13 +146,13 @@ public sealed class BaselineComparisonServiceTests
             _baseline = baseline;
         }
 
-        public Task<BaselineRecord?> GetAsync(Guid organisationId, string projectKey, string operationId, CancellationToken ct)
+        public Task<BaselineRecord?> GetAsync(Guid tenantId, string projectKey, string operationId, CancellationToken ct)
             => Task.FromResult(_baseline);
 
-        public Task<IReadOnlyList<BaselineRecord>> ListAsync(Guid organisationId, string? projectKey, string? operationId, int take, CancellationToken ct)
+        public Task<IReadOnlyList<BaselineRecord>> ListAsync(Guid tenantId, string? projectKey, string? operationId, int take, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<BaselineRecord>>(Array.Empty<BaselineRecord>());
 
-        public Task<BaselineRecord?> SetAsync(Guid organisationId, string projectKey, string operationId, Guid runId, CancellationToken ct)
+        public Task<BaselineRecord?> SetAsync(Guid tenantId, string projectKey, string operationId, Guid runId, CancellationToken ct)
             => Task.FromResult<BaselineRecord?>(null);
     }
 }

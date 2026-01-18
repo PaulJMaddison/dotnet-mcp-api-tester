@@ -40,6 +40,7 @@ var appConfig = AppConfig.Load(builder.Configuration);
 builder.Services.AddSingleton(appConfig);
 
 builder.Services.AddApiTesterPersistence(builder.Configuration);
+builder.Services.AddHttpContextAccessor();
 
 builder.Services.Configure<ExecutionOptions>(builder.Configuration.GetSection("Execution"));
 builder.Services.AddSingleton<OpenApiStore>();
@@ -110,6 +111,17 @@ builder.Services.Configure<EntitlementOptions>(builder.Configuration.GetSection(
 builder.Services.AddSingleton<EntitlementService>();
 builder.Services.AddScoped<OrgContextResolver>();
 builder.Services.AddScoped<IRetentionPruner, RetentionPruner>();
+builder.Services.AddScoped<ITenantContext>(sp =>
+{
+    var httpContext = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
+    if (httpContext?.Items.TryGetValue(TenantContextMiddleware.ContextItemName, out var value) == true
+        && value is ITenantContext tenantContext)
+    {
+        return tenantContext;
+    }
+
+    return new TenantContext(OrgDefaults.DefaultOrganisationId);
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -149,15 +161,11 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseWhen(
-    context => context.Request.Path.StartsWithSegments("/api")
-        || context.Request.Path.StartsWithSegments("/api-keys")
-        || context.Request.Path.StartsWithSegments("/projects")
-        || context.Request.Path.StartsWithSegments("/runs")
-        || context.Request.Path.StartsWithSegments("/audit")
-        || context.Request.Path.StartsWithSegments("/admin"),
+    context => !context.Request.Path.StartsWithSegments("/health"),
     builder =>
     {
         builder.UseMiddleware<ApiKeyAuthMiddleware>();
+        builder.UseMiddleware<TenantContextMiddleware>();
         builder.UseMiddleware<OrgContextMiddleware>();
     });
 
@@ -219,7 +227,8 @@ v1.MapGet("/projects", async (int? pageSize, string? pageToken, int? skip, strin
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var result = await store.ListAsync(orgContext.OrganisationId, new PageRequest(normalizedPageSize, offset), sortField, direction, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var result = await store.ListAsync(tenantContext.TenantId, new PageRequest(normalizedPageSize, offset), sortField, direction, ct);
     var metadata = new PageMetadata(result.Total, normalizedPageSize, result.NextOffset?.ToString());
     return Results.Ok(ProjectMapping.ToListResponse(metadata, result.Items));
 });
@@ -234,8 +243,9 @@ v1.MapPost("/projects", async (ProjectCreateRequest request, IProjectStore store
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await store.CreateAsync(orgContext.OrganisationId, orgContext.OwnerKey, request!.Name!, ct);
-    logger.LogInformation("Created project {ProjectId} for org {OrganisationId} with name {ProjectName}", project.ProjectId, orgContext.OrganisationId, project.Name);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await store.CreateAsync(tenantContext.TenantId, orgContext.OwnerKey, request!.Name!, ct);
+    logger.LogInformation("Created project {ProjectId} for org {OrganisationId} with name {ProjectName}", project.ProjectId, tenantContext.TenantId, project.Name);
     return Results.Ok(ProjectMapping.ToDto(project));
 });
 
@@ -258,7 +268,8 @@ v1.MapPut("/projects/current", async (ProjectCurrentRequest request, IProjectSto
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await store.GetAsync(orgContext.OrganisationId, request.ProjectId, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await store.GetAsync(tenantContext.TenantId, request.ProjectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(store, request.ProjectId, ct);
 
@@ -279,11 +290,12 @@ v1.MapGet("/projects/{projectId}/specs", async (string projectId, IOpenApiSpecSt
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var records = await specStore.ListAsync(id, ct);
+    var records = await specStore.ListAsync(tenantContext.TenantId, id, ct);
     return Results.Ok(records.Select(OpenApiMapping.ToMetadataDto));
 });
 
@@ -300,15 +312,16 @@ v1.MapDelete("/projects/{projectId}/specs/{specId}", async (string projectId, st
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var record = await specStore.GetByIdAsync(specGuid, ct);
+    var record = await specStore.GetByIdAsync(tenantContext.TenantId, specGuid, ct);
     if (record is null || record.ProjectId != id)
         return Results.NotFound();
 
-    var removed = await specStore.DeleteAsync(specGuid, ct);
+    var removed = await specStore.DeleteAsync(tenantContext.TenantId, specGuid, ct);
     return removed ? Results.NoContent() : Results.NotFound();
 });
 
@@ -322,11 +335,12 @@ v1.MapGet("/projects/{projectId}/operations", async (string projectId, IOpenApiS
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var spec = await specStore.GetAsync(id, ct);
+    var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
         return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before listing operations.", statusCode: StatusCodes.Status409Conflict);
 
@@ -363,11 +377,12 @@ v1.MapGet("/projects/{projectId}/operations/describe", async (string projectId, 
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var spec = await specStore.GetAsync(id, ct);
+    var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
         return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before describing operations.", statusCode: StatusCodes.Status409Conflict);
 
@@ -446,10 +461,11 @@ v1.MapPut("/runtime/policy", async (ApiPolicyUpdateRequest request, ApiRuntimeCo
         return InvalidRequest(error);
 
     var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
     var metadataJson = JsonSerializer.Serialize(ToPolicyResponse(runtime.Policy), jsonOptions);
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.PolicySet,
         "policy",
@@ -469,10 +485,11 @@ v1.MapPost("/runtime/policy/reset", async (ApiRuntimeConfig runtime, IAuditEvent
     ApiPolicyDefaults.ApplySafeDefaults(runtime.Policy);
 
     var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
     var metadataJson = JsonSerializer.Serialize(ToPolicyResponse(runtime.Policy), jsonOptions);
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.PolicyReset,
         "policy",
@@ -504,10 +521,11 @@ v1.MapPut("/runtime/base-url", async (ApiRuntimeBaseUrlRequest request, ApiRunti
     runtime.SetBaseUrl(normalizedBaseUrl);
 
     var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
     var metadataJson = JsonSerializer.Serialize(new { baseUrl = runtime.BaseUrl }, jsonOptions);
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.BaseUrlSet,
         "runtime",
@@ -550,10 +568,11 @@ v1.MapPost("/runtime/reset", async (ApiRuntimeConfig runtime, IAuditEventStore a
     runtime.ResetRuntime();
 
     var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
     var metadataJson = JsonSerializer.Serialize(ToPolicyResponse(runtime.Policy), jsonOptions);
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.PolicyReset,
         "policy",
@@ -586,11 +605,12 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/generate", async (
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var spec = await specStore.GetAsync(id, ct);
+    var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
         return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before generating a test plan.", statusCode: StatusCodes.Status409Conflict);
 
@@ -605,7 +625,7 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/generate", async (
 
     var (path, method, op) = match.Value;
     var plan = TestPlanFactory.Create(op, method, path, operationId.Trim());
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     var redactedPlan = redactionService.RedactPlan(plan, org?.RedactionRules);
     var planJson = JsonSerializer.Serialize(redactedPlan, jsonOptions);
 
@@ -641,11 +661,12 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/run", async (
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var spec = await specStore.GetAsync(id, ct);
+    var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
         return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before executing runs.", statusCode: StatusCodes.Status409Conflict);
 
@@ -682,7 +703,7 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/run", async (
 
         var (path, method, op) = match.Value;
         plan = TestPlanFactory.Create(op, method, path, trimmedOperationId);
-        var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+        var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
         var redactedPlan = redactionService.RedactPlan(plan, org?.RedactionRules);
         var planJson = JsonSerializer.Serialize(redactedPlan, jsonOptions);
         await planStore.UpsertAsync(id, trimmedOperationId, planJson, DateTime.UtcNow, ct);
@@ -701,7 +722,7 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/run", async (
     }
 
     logger.LogInformation("Executing run for project {ProjectId} operation {OperationId}", project.ProjectId, trimmedOperationId);
-    var run = await runner.RunPlanAsync(plan, project.ProjectKey, orgContext.OrganisationId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
+    var run = await runner.RunPlanAsync(plan, project.ProjectKey, tenantContext.TenantId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
     logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, trimmedOperationId);
 
     var runMetadata = JsonSerializer.Serialize(new
@@ -714,7 +735,7 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/run", async (
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.RunExecuted,
         "run",
@@ -750,7 +771,8 @@ v1.MapGet("/runs", async (string? projectKey, string? operationId, int? pageSize
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetByKeyAsync(orgContext.OrganisationId, projectKey!.Trim(), ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetByKeyAsync(tenantContext.TenantId, projectKey!.Trim(), ct);
     if (project is null)
         return Results.NotFound();
 
@@ -760,7 +782,7 @@ v1.MapGet("/runs", async (string? projectKey, string? operationId, int? pageSize
         normalizedOperationId ?? "(all)");
 
     var result = await store.ListAsync(
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         projectKey!.Trim(),
         new PageRequest(normalizedPageSize, offset),
         sortField,
@@ -780,7 +802,8 @@ v1.MapGet("/runs/{runId}", async (string runId, ITestRunStore store, HttpContext
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
     return run is null
         ? Results.NotFound()
         : Results.Ok(RunMapping.ToDetailDto(run));
@@ -789,7 +812,8 @@ v1.MapGet("/runs/{runId}", async (string runId, ITestRunStore store, HttpContext
 app.MapGet("/api/orgs/current", async (IOrganisationStore orgStore, HttpContext httpContext, CancellationToken ct) =>
 {
     var orgContext = httpContext.GetOrgContext();
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     return org is null
         ? Results.NotFound()
         : Results.Ok(OrgMapping.ToDto(org));
@@ -798,14 +822,15 @@ app.MapGet("/api/orgs/current", async (IOrganisationStore orgStore, HttpContext 
 app.MapGet("/api/orgs/current/members", async (IOrganisationStore orgStore, IUserStore userStore, IMembershipStore membershipStore, HttpContext httpContext, CancellationToken ct) =>
 {
     var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
     if (!OrgRoleAccess.CanViewMembers(orgContext.Role))
         return Results.StatusCode(StatusCodes.Status403Forbidden);
 
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     if (org is null)
         return Results.NotFound();
 
-    var memberships = await membershipStore.ListByOrganisationAsync(orgContext.OrganisationId, ct);
+    var memberships = await membershipStore.ListByOrganisationAsync(tenantContext.TenantId, ct);
     var members = new List<OrgMemberDto>(memberships.Count);
 
     foreach (var membership in memberships)
@@ -823,6 +848,7 @@ app.MapGet("/api/orgs/current/members", async (IOrganisationStore orgStore, IUse
 app.MapGet("/audit", async (int? take, string? action, string? from, string? to, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
     var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
     var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
     if (adminCheck is not null)
         return adminCheck;
@@ -840,18 +866,19 @@ app.MapGet("/audit", async (int? take, string? action, string? from, string? to,
     if (fromUtc.HasValue && toUtc.HasValue && fromUtc > toUtc)
         return InvalidRequest("from must be earlier than to.");
 
-    var records = await auditStore.ListAsync(orgContext.OrganisationId, normalizedTake, action, fromUtc, toUtc, ct);
+    var records = await auditStore.ListAsync(tenantContext.TenantId, normalizedTake, action, fromUtc, toUtc, ct);
     return Results.Ok(AuditMapping.ToListResponse(records));
 });
 
 app.MapPost("/admin/prune", async (IRetentionPruner pruner, HttpContext httpContext, CancellationToken ct) =>
 {
     var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
     var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
     if (adminCheck is not null)
         return adminCheck;
 
-    var result = await pruner.PruneAsync(orgContext.OrganisationId, ct);
+    var result = await pruner.PruneAsync(tenantContext.TenantId, ct);
     return Results.Ok(new
     {
         result.OrganisationId,
@@ -873,6 +900,7 @@ app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKey
         return InvalidRequest("ExpiresUtc must be in the future.");
 
     var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
     var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
     if (adminCheck is not null)
         return adminCheck;
@@ -880,7 +908,7 @@ app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKey
     var token = ApiKeyToken.Generate();
     var hash = ApiKeyHasher.Hash(token.Token);
     var record = await apiKeyStore.CreateAsync(
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         request!.Name!,
         ApiKeyScopes.Serialize(normalizedScopes),
@@ -898,7 +926,7 @@ app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKey
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.ApiKeyCreated,
         "api_key",
@@ -912,11 +940,12 @@ app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKey
 app.MapGet("/api-keys", async (IApiKeyStore apiKeyStore, HttpContext httpContext, CancellationToken ct) =>
 {
     var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
     var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
     if (adminCheck is not null)
         return adminCheck;
 
-    var keys = await apiKeyStore.ListAsync(orgContext.OrganisationId, ct);
+    var keys = await apiKeyStore.ListAsync(tenantContext.TenantId, ct);
     return Results.Ok(ApiKeyMapping.ToListResponse(keys));
 });
 
@@ -926,11 +955,12 @@ app.MapPost("/api-keys/{id}/revoke", async (string id, IApiKeyStore apiKeyStore,
         return InvalidRequest(error);
 
     var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
     var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
     if (adminCheck is not null)
         return adminCheck;
 
-    var record = await apiKeyStore.RevokeAsync(orgContext.OrganisationId, keyId, DateTime.UtcNow, ct);
+    var record = await apiKeyStore.RevokeAsync(tenantContext.TenantId, keyId, DateTime.UtcNow, ct);
     if (record is null)
         return Results.NotFound();
 
@@ -942,7 +972,7 @@ app.MapPost("/api-keys/{id}/revoke", async (string id, IApiKeyStore apiKeyStore,
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.ApiKeyRevoked,
         "api_key",
@@ -972,7 +1002,8 @@ app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, 
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var result = await store.ListAsync(orgContext.OrganisationId, new PageRequest(normalizedPageSize, offset), sortField, direction, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var result = await store.ListAsync(tenantContext.TenantId, new PageRequest(normalizedPageSize, offset), sortField, direction, ct);
     var metadata = new PageMetadata(result.Total, normalizedPageSize, result.NextOffset?.ToString());
     return Results.Ok(ProjectMapping.ToListResponse(metadata, result.Items));
 });
@@ -987,8 +1018,9 @@ app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore 
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await store.CreateAsync(orgContext.OrganisationId, orgContext.OwnerKey, request!.Name!, ct);
-    logger.LogInformation("Created project {ProjectId} for org {OrganisationId} with name {ProjectName}", project.ProjectId, orgContext.OrganisationId, project.Name);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await store.CreateAsync(tenantContext.TenantId, orgContext.OwnerKey, request!.Name!, ct);
+    logger.LogInformation("Created project {ProjectId} for org {OrganisationId} with name {ProjectName}", project.ProjectId, tenantContext.TenantId, project.Name);
     return Results.Ok(ProjectMapping.ToDto(project));
 });
 
@@ -1002,7 +1034,8 @@ app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore s
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await store.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await store.GetAsync(tenantContext.TenantId, id, ct);
     return project is null
         ? await NotFoundOrForbiddenAsync(store, id, ct)
         : Results.Ok(ProjectMapping.ToDto(project));
@@ -1018,7 +1051,8 @@ app.MapGet("/api/projects/{projectId}/environments", async (string projectId, IP
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -1042,7 +1076,8 @@ app.MapPost("/api/projects/{projectId}/environments", async (string projectId, E
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -1071,7 +1106,8 @@ app.MapGet("/api/projects/{projectId}/environments/{environmentId}", async (stri
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -1100,7 +1136,8 @@ app.MapPut("/api/projects/{projectId}/environments/{environmentId}", async (stri
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -1132,7 +1169,8 @@ app.MapDelete("/api/projects/{projectId}/environments/{environmentId}", async (s
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -1157,11 +1195,12 @@ app.MapGet("/api/projects/{projectId}/openapi", async (string projectId, IOpenAp
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var record = await specStore.GetAsync(id, ct);
+    var record = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     return record is null
         ? Results.NotFound()
         : Results.Ok(OpenApiMapping.ToMetadataDto(record));
@@ -1177,11 +1216,12 @@ app.MapGet("/api/projects/{projectId}/specs", async (string projectId, IOpenApiS
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var records = await specStore.ListAsync(id, ct);
+    var records = await specStore.ListAsync(tenantContext.TenantId, id, ct);
     return Results.Ok(records.Select(OpenApiMapping.ToMetadataDto));
 });
 
@@ -1195,7 +1235,8 @@ app.MapGet("/api/projects/{projectId}/specs/diff", async (string projectId, stri
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -1208,11 +1249,11 @@ app.MapGet("/api/projects/{projectId}/specs/diff", async (string projectId, stri
     if (!RequestValidation.TryParseGuid(to, out var specBId, out var specBError))
         return InvalidRequest(specBError);
 
-    var recordA = await specStore.GetByIdAsync(specAId, ct);
+    var recordA = await specStore.GetByIdAsync(tenantContext.TenantId, specAId, ct);
     if (recordA is null || recordA.ProjectId != id)
         return Results.NotFound();
 
-    var recordB = await specStore.GetByIdAsync(specBId, ct);
+    var recordB = await specStore.GetByIdAsync(tenantContext.TenantId, specBId, ct);
     if (recordB is null || recordB.ProjectId != id)
         return Results.NotFound();
 
@@ -1249,11 +1290,12 @@ app.MapGet("/api/specs/{specId}", async (string specId, IOpenApiSpecStore specSt
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var record = await specStore.GetByIdAsync(id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var record = await specStore.GetByIdAsync(tenantContext.TenantId, id, ct);
     if (record is null)
         return Results.NotFound();
 
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, record.ProjectId, ct);
+    var project = await projectStore.GetAsync(tenantContext.TenantId, record.ProjectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, record.ProjectId, ct);
 
@@ -1269,20 +1311,21 @@ app.MapGet("/specs/{specA}/diff/{specB}", async (string specA, string specB, IOp
         return InvalidRequest(specBError);
 
     var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
 
-    var recordA = await specStore.GetByIdAsync(specAId, ct);
+    var recordA = await specStore.GetByIdAsync(tenantContext.TenantId, specAId, ct);
     if (recordA is null)
         return Results.NotFound();
 
-    var projectA = await projectStore.GetAsync(orgContext.OrganisationId, recordA.ProjectId, ct);
+    var projectA = await projectStore.GetAsync(tenantContext.TenantId, recordA.ProjectId, ct);
     if (projectA is null)
         return await NotFoundOrForbiddenAsync(projectStore, recordA.ProjectId, ct);
 
-    var recordB = await specStore.GetByIdAsync(specBId, ct);
+    var recordB = await specStore.GetByIdAsync(tenantContext.TenantId, specBId, ct);
     if (recordB is null)
         return Results.NotFound();
 
-    var projectB = await projectStore.GetAsync(orgContext.OrganisationId, recordB.ProjectId, ct);
+    var projectB = await projectStore.GetAsync(tenantContext.TenantId, recordB.ProjectId, ct);
     if (projectB is null)
         return await NotFoundOrForbiddenAsync(projectStore, recordB.ProjectId, ct);
 
@@ -1331,11 +1374,12 @@ app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async 
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var spec = await specStore.GetAsync(id, ct);
+    var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
         return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before generating a test plan.", statusCode: StatusCodes.Status409Conflict);
 
@@ -1350,7 +1394,7 @@ app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async 
 
     var (path, method, op) = match.Value;
     var plan = TestPlanFactory.Create(op, method, path, operationId.Trim());
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     var redactedPlan = redactionService.RedactPlan(plan, org?.RedactionRules);
     var planJson = JsonSerializer.Serialize(redactedPlan, jsonOptions);
 
@@ -1377,7 +1421,8 @@ app.MapGet("/api/projects/{projectId}/testplans/{operationId}", async (
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -1415,11 +1460,12 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var spec = await specStore.GetAsync(id, ct);
+    var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
         return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before executing runs.", statusCode: StatusCodes.Status409Conflict);
 
@@ -1456,7 +1502,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
 
         var (path, method, op) = match.Value;
         plan = TestPlanFactory.Create(op, method, path, trimmedOperationId);
-        var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+        var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
         var redactedPlan = redactionService.RedactPlan(plan, org?.RedactionRules);
         var planJson = JsonSerializer.Serialize(redactedPlan, jsonOptions);
         await planStore.UpsertAsync(id, trimmedOperationId, planJson, DateTime.UtcNow, ct);
@@ -1475,7 +1521,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     }
 
     logger.LogInformation("Executing run for project {ProjectId} operation {OperationId}", project.ProjectId, trimmedOperationId);
-    var run = await runner.RunPlanAsync(plan, project.ProjectKey, orgContext.OrganisationId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
+    var run = await runner.RunPlanAsync(plan, project.ProjectKey, tenantContext.TenantId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
     logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, trimmedOperationId);
 
     var runMetadata = JsonSerializer.Serialize(new
@@ -1488,7 +1534,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.RunExecuted,
         "run",
@@ -1527,7 +1573,8 @@ app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pag
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetByKeyAsync(orgContext.OrganisationId, projectKey!.Trim(), ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetByKeyAsync(tenantContext.TenantId, projectKey!.Trim(), ct);
     if (project is null)
         return Results.NotFound();
 
@@ -1537,7 +1584,7 @@ app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pag
         normalizedOperationId ?? "(all)");
 
     var result = await store.ListAsync(
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         projectKey!.Trim(),
         new PageRequest(normalizedPageSize, offset),
         sortField,
@@ -1557,7 +1604,8 @@ app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, HttpCo
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
     return run is null
         ? Results.NotFound()
         : Results.Ok(RunMapping.ToDetailDto(run));
@@ -1573,7 +1621,8 @@ app.MapGet("/api/runs/{runId}/summary", async (string runId, ITestRunStore store
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
     return run is null
         ? Results.NotFound()
         : Results.Ok(RunMapping.ToSummaryCounts(run));
@@ -1589,7 +1638,8 @@ app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, 
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
     return run is null
         ? Results.NotFound()
         : Results.Ok(RunMapping.ToAuditResponse(run));
@@ -1605,7 +1655,8 @@ app.MapGet("/api/runs/{runId}/compliance-report", async (string runId, ITestRunS
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
     return run is null
         ? Results.NotFound()
         : Results.Ok(RunMapping.ToComplianceReport(run));
@@ -1621,7 +1672,8 @@ app.MapGet("/api/runs/{runId}/annotations", async (string runId, ITestRunStore r
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await runStore.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await runStore.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
 
@@ -1645,7 +1697,8 @@ app.MapPost("/api/runs/{runId}/annotations", async (string runId, RunAnnotationC
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await runStore.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await runStore.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
 
@@ -1667,7 +1720,8 @@ app.MapGet("/api/runs/{runId}/annotations/{annotationId}", async (string runId, 
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await runStore.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await runStore.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
 
@@ -1696,7 +1750,8 @@ app.MapPut("/api/runs/{runId}/annotations/{annotationId}", async (string runId, 
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await runStore.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await runStore.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
 
@@ -1721,7 +1776,8 @@ app.MapDelete("/api/runs/{runId}/annotations/{annotationId}", async (string runI
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await runStore.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await runStore.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
 
@@ -1749,7 +1805,8 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
 
@@ -1765,7 +1822,7 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.ExportGenerated,
         "run",
@@ -1789,11 +1846,12 @@ app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore stor
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
 
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
     var content = RunExportGenerator.GenerateJunit(redactedRun);
 
@@ -1804,7 +1862,7 @@ app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore stor
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.ExportGenerated,
         "run",
@@ -1828,11 +1886,12 @@ app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
 
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
     var payload = RunExportGenerator.GenerateJson(redactedRun, jsonOptions);
 
@@ -1843,7 +1902,7 @@ app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.ExportGenerated,
         "run",
@@ -1867,11 +1926,12 @@ app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store,
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
 
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
     var payload = RunExportGenerator.GenerateCsv(redactedRun);
 
@@ -1882,7 +1942,7 @@ app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store,
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.ExportGenerated,
         "run",
@@ -1906,11 +1966,12 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
 
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
     var runJson = RunExportGenerator.GenerateJson(redactedRun, jsonOptions);
     var policyJson = JsonSerializer.Serialize(new
@@ -1919,7 +1980,7 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
         redactedRun.PolicySnapshot
     }, jsonOptions);
 
-    var auditEvents = await auditStore.ListAsync(orgContext.OrganisationId, 200, null, null, null, ct);
+    var auditEvents = await auditStore.ListAsync(tenantContext.TenantId, 200, null, null, null, ct);
     var auditSubset = auditEvents
         .Where(evt => string.Equals(evt.TargetType, "run", StringComparison.OrdinalIgnoreCase) &&
                       string.Equals(evt.TargetId, redactedRun.RunId.ToString(), StringComparison.OrdinalIgnoreCase))
@@ -1954,7 +2015,7 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.ExportGenerated,
         "run",
@@ -1978,7 +2039,8 @@ app.MapPost("/api/runs/{runId}/baseline/{baselineRunId}", async (string runId, s
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var updated = await store.SetBaselineAsync(orgContext.OrganisationId, id, baselineId);
+    var tenantContext = httpContext.GetTenantContext();
+    var updated = await store.SetBaselineAsync(tenantContext.TenantId, id, baselineId);
     return updated ? Results.NoContent() : Results.NotFound();
 });
 
@@ -1992,11 +2054,12 @@ app.MapPost("/api/baselines", async (BaselineCreateRequest request, ITestRunStor
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, request.RunId);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, request.RunId);
     if (run is null)
         return Results.NotFound();
 
-    var baseline = await baselineStore.SetAsync(orgContext.OrganisationId, run.ProjectKey, run.OperationId, run.RunId, ct);
+    var baseline = await baselineStore.SetAsync(tenantContext.TenantId, run.ProjectKey, run.OperationId, run.RunId, ct);
     if (baseline is null)
         return Results.NotFound();
 
@@ -2013,7 +2076,8 @@ app.MapGet("/api/baselines", async (string? projectKey, string? operationId, int
         return InvalidRequest("take must be between 1 and 500.");
 
     var orgContext = httpContext.GetOrgContext();
-    var baselines = await baselineStore.ListAsync(orgContext.OrganisationId, projectKey, operationId, take ?? 50, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var baselines = await baselineStore.ListAsync(tenantContext.TenantId, projectKey, operationId, take ?? 50, ct);
     var response = baselines
         .Select(baseline => new BaselineDto(baseline.RunId, baseline.ProjectKey, baseline.OperationId, baseline.SetUtc))
         .ToList();
@@ -2034,11 +2098,12 @@ app.MapGet("/api/runs/{runId}/compare/{baselineRunId}", async (string runId, str
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
 
-    var baseline = await store.GetAsync(orgContext.OrganisationId, baselineId);
+    var baseline = await store.GetAsync(tenantContext.TenantId, baselineId);
     if (baseline is null)
         return Results.NotFound();
 
@@ -2056,7 +2121,8 @@ app.MapGet("/api/runs/{runId}/compare-to-baseline", async (string runId, Baselin
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var result = await comparison.CompareAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var result = await comparison.CompareAsync(tenantContext.TenantId, id, ct);
 
     return result.Status switch
     {
@@ -2079,7 +2145,8 @@ app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunSto
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
 
@@ -2117,11 +2184,12 @@ async Task<IResult> ExplainAiEndpointAsync(
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, projectId, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, projectId, ct);
 
-    var spec = await specStore.GetAsync(projectId, ct);
+    var spec = await specStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (spec is null)
         return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before generating an explanation.", statusCode: StatusCodes.Status409Conflict);
 
@@ -2136,7 +2204,7 @@ async Task<IResult> ExplainAiEndpointAsync(
         return Results.NotFound();
 
     var (path, method, op) = match.Value;
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     if (org is null)
         return Results.NotFound();
 
@@ -2189,11 +2257,12 @@ async Task<IResult> SuggestAiTestsEndpointAsync(
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, projectId, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, projectId, ct);
 
-    var spec = await specStore.GetAsync(projectId, ct);
+    var spec = await specStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (spec is null)
         return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before requesting AI suggestions.", statusCode: StatusCodes.Status409Conflict);
 
@@ -2208,7 +2277,7 @@ async Task<IResult> SuggestAiTestsEndpointAsync(
         return Results.NotFound();
 
     var (path, method, op) = match.Value;
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     if (org is null)
         return Results.NotFound();
 
@@ -2261,15 +2330,16 @@ async Task<IResult> SummariseRunAiEndpointAsync(
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await runStore.GetAsync(orgContext.OrganisationId, runId);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await runStore.GetAsync(tenantContext.TenantId, runId);
     if (run is null)
         return Results.NotFound();
 
-    var project = await projectStore.GetByKeyAsync(orgContext.OrganisationId, run.ProjectKey, ct);
+    var project = await projectStore.GetByKeyAsync(tenantContext.TenantId, run.ProjectKey, ct);
     if (project is null)
         return Results.NotFound();
 
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     if (org is null)
         return Results.NotFound();
 
@@ -2332,15 +2402,16 @@ async Task<IResult> ComplianceReportAiEndpointAsync(
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var run = await runStore.GetAsync(orgContext.OrganisationId, runId);
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await runStore.GetAsync(tenantContext.TenantId, runId);
     if (run is null)
         return Results.NotFound();
 
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     if (org is null)
         return Results.NotFound();
 
-    var auditEvents = await auditStore.ListAsync(orgContext.OrganisationId, 200, null, null, null, ct);
+    var auditEvents = await auditStore.ListAsync(tenantContext.TenantId, 200, null, null, null, ct);
     var auditSubset = auditEvents
         .Where(evt => string.Equals(evt.TargetType, "run", StringComparison.OrdinalIgnoreCase) &&
                       string.Equals(evt.TargetId, run.RunId.ToString(), StringComparison.OrdinalIgnoreCase))
@@ -2385,11 +2456,12 @@ async Task<IResult> GenerateDocsAiEndpointAsync(
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, projectId, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, projectId, ct);
 
-    var spec = await specStore.GetAsync(projectId, ct);
+    var spec = await specStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (spec is null)
         return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before generating docs.", statusCode: StatusCodes.Status409Conflict);
 
@@ -2404,14 +2476,14 @@ async Task<IResult> GenerateDocsAiEndpointAsync(
     if (operations == 0)
         return Results.Problem(title: "OpenAPI operations missing", detail: "OpenAPI spec must include operations with operationId values.", statusCode: StatusCodes.Status409Conflict);
 
-    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     if (org is null)
         return Results.NotFound();
 
     try
     {
         var runs = await runStore.ListAsync(
-            orgContext.OrganisationId,
+            tenantContext.TenantId,
             project.ProjectKey,
             new PageRequest(100, 0),
             SortField.StartedUtc,
@@ -2420,7 +2492,7 @@ async Task<IResult> GenerateDocsAiEndpointAsync(
         var input = new AiDocsGenerationInput(org, project, spec, doc, runs.Items);
         var result = await docsService.GenerateAsync(input, ct);
         var record = await docsStore.UpsertAsync(
-            orgContext.OrganisationId,
+            tenantContext.TenantId,
             project.ProjectId,
             spec.SpecId,
             result.RawResponse,
@@ -2459,11 +2531,12 @@ async Task<IResult> GetGeneratedDocsAsync(
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var record = await docsStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var record = await docsStore.GetAsync(tenantContext.TenantId, id, ct);
     if (record is null)
         return Results.NotFound();
 
@@ -2501,15 +2574,16 @@ async Task<IResult> RunDraftPlanFromAiAsync(
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
     var draft = await draftStore.GetAsync(draftGuid, ct);
     if (draft is null)
         return Results.NotFound();
 
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, draft.ProjectId, ct);
+    var project = await projectStore.GetAsync(tenantContext.TenantId, draft.ProjectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, draft.ProjectId, ct);
 
-    var spec = await specStore.GetAsync(draft.ProjectId, ct);
+    var spec = await specStore.GetAsync(tenantContext.TenantId, draft.ProjectId, ct);
     if (spec is null)
         return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before executing runs.", statusCode: StatusCodes.Status409Conflict);
 
@@ -2546,7 +2620,7 @@ async Task<IResult> RunDraftPlanFromAiAsync(
     }
 
     logger.LogInformation("Executing draft run {DraftId} for project {ProjectId} operation {OperationId}", draft.DraftId, project.ProjectId, draft.OperationId);
-    var run = await runner.RunPlanAsync(plan, project.ProjectKey, orgContext.OrganisationId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
+    var run = await runner.RunPlanAsync(plan, project.ProjectKey, tenantContext.TenantId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
     logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, draft.OperationId);
 
     var runMetadata = JsonSerializer.Serialize(new
@@ -2559,7 +2633,7 @@ async Task<IResult> RunDraftPlanFromAiAsync(
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
-        orgContext.OrganisationId,
+        tenantContext.TenantId,
         orgContext.UserId,
         AuditActions.RunExecuted,
         "run",
@@ -2596,11 +2670,12 @@ app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpec
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var record = await specStore.GetByIdAsync(id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var record = await specStore.GetByIdAsync(tenantContext.TenantId, id, ct);
     if (record is null)
         return Results.NotFound();
 
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, record.ProjectId, ct);
+    var project = await projectStore.GetAsync(tenantContext.TenantId, record.ProjectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, record.ProjectId, ct);
 
@@ -2648,7 +2723,7 @@ static IResult? RequireAdminKeyAccess(HttpContext context, OrgContext orgContext
 
 static async Task<IResult> NotFoundOrForbiddenAsync(IProjectStore store, Guid projectId, CancellationToken ct)
 {
-    if (await store.ExistsAsync(projectId, ct))
+    if (await store.ExistsAsync(tenantContext.TenantId, projectId, ct))
         return Results.StatusCode(StatusCodes.Status403Forbidden);
 
     return Results.NotFound();
@@ -2913,7 +2988,8 @@ static async Task<IResult> ImportOpenApiSpecAsync(
         return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -3060,7 +3136,7 @@ static async Task<IResult> ImportOpenApiSpecAsync(
         version = string.IsNullOrWhiteSpace(version) ? "unknown" : version.Trim();
 
         var specHash = ComputeSpecHash(specJson);
-        var record = await specStore.UpsertAsync(project.ProjectId, title, version, specJson, specHash, DateTime.UtcNow, ct);
+        var record = await specStore.UpsertAsync(tenantContext.TenantId, project.ProjectId, title, version, specJson, specHash, DateTime.UtcNow, ct);
         logger.LogInformation(
             "Imported OpenAPI spec for project {ProjectId} titled {Title} version {Version} from {SpecSource}",
             project.ProjectId,

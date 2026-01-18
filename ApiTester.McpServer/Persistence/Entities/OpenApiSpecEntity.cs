@@ -4,6 +4,7 @@ public sealed class OpenApiSpecEntity
 {
     public Guid SpecId { get; set; }
     public Guid ProjectId { get; set; }
+    public Guid TenantId { get; set; }
     public string Title { get; set; } = "";
     public string Version { get; set; } = "";
     public string SpecJson { get; set; } = "";

@@ -6,17 +6,17 @@ public interface ITestRunStore
 {
     Task SaveAsync(TestRunRecord record);
 
-    Task<TestRunRecord?> GetAsync(Guid organisationId, Guid runId);
+    Task<TestRunRecord?> GetAsync(Guid tenantId, Guid runId);
 
-    Task<bool> SetBaselineAsync(Guid organisationId, Guid runId, Guid baselineRunId);
+    Task<bool> SetBaselineAsync(Guid tenantId, Guid runId, Guid baselineRunId);
 
     Task<PagedResult<TestRunRecord>> ListAsync(
-        Guid organisationId,
+        Guid tenantId,
         string projectKey,
         PageRequest request,
         SortField sortField,
         SortDirection direction,
         string? operationId = null);
 
-    Task<int> PruneAsync(Guid organisationId, DateTimeOffset cutoffUtc, CancellationToken ct);
+    Task<int> PruneAsync(Guid tenantId, DateTimeOffset cutoffUtc, CancellationToken ct);
 }

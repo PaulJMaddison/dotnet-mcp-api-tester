@@ -13,19 +13,19 @@ public sealed class SqlProjectStore : IProjectStore
         _db = db;
     }
 
-    public async Task<ProjectRecord> CreateAsync(Guid organisationId, string ownerKey, string name, CancellationToken ct)
+    public async Task<ProjectRecord> CreateAsync(Guid tenantId, string ownerKey, string name, CancellationToken ct)
     {
         name = (name ?? "").Trim();
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Project name is required.", nameof(name));
 
-        organisationId = NormalizeOrganisationId(organisationId);
+        tenantId = NormalizeTenantId(tenantId);
         ownerKey = NormalizeOwnerKey(ownerKey);
         var key = ProjectKeyGenerator.FromName(name);
 
         var existing = await _db.Projects.AsNoTracking()
-            .Where(x => x.OrganisationId == organisationId && x.ProjectKey == key)
-            .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
+            .Where(x => x.TenantId == tenantId && x.ProjectKey == key)
+            .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.TenantId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
             .FirstOrDefaultAsync(ct);
         if (existing is not null)
             return existing;
@@ -33,7 +33,8 @@ public sealed class SqlProjectStore : IProjectStore
         var entity = new ProjectEntity
         {
             ProjectId = Guid.NewGuid(),
-            OrganisationId = organisationId,
+            OrganisationId = tenantId,
+            TenantId = tenantId,
             OwnerKey = ownerKey,
             ProjectKey = key,
             Name = name,
@@ -44,13 +45,13 @@ public sealed class SqlProjectStore : IProjectStore
         try
         {
             await _db.SaveChangesAsync(ct);
-            return new ProjectRecord(entity.ProjectId, entity.OrganisationId, entity.OwnerKey, entity.Name, entity.ProjectKey, entity.CreatedUtc);
+            return new ProjectRecord(entity.ProjectId, entity.OrganisationId, entity.TenantId, entity.OwnerKey, entity.Name, entity.ProjectKey, entity.CreatedUtc);
         }
         catch (DbUpdateException)
         {
             var fallback = await _db.Projects.AsNoTracking()
-                .Where(x => x.OrganisationId == organisationId && x.ProjectKey == key)
-                .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
+                .Where(x => x.TenantId == tenantId && x.ProjectKey == key)
+                .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.TenantId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
                 .FirstOrDefaultAsync(ct);
             if (fallback is not null)
                 return fallback;
@@ -59,10 +60,10 @@ public sealed class SqlProjectStore : IProjectStore
         }
     }
 
-    public async Task<PagedResult<ProjectRecord>> ListAsync(Guid organisationId, PageRequest request, SortField sortField, SortDirection direction, CancellationToken ct)
+    public async Task<PagedResult<ProjectRecord>> ListAsync(Guid tenantId, PageRequest request, SortField sortField, SortDirection direction, CancellationToken ct)
     {
-        organisationId = NormalizeOrganisationId(organisationId);
-        var baseQuery = _db.Projects.AsNoTracking().Where(x => x.OrganisationId == organisationId);
+        tenantId = NormalizeTenantId(tenantId);
+        var baseQuery = _db.Projects.AsNoTracking().Where(x => x.TenantId == tenantId);
         var total = await baseQuery.CountAsync(ct);
 
         var ordered = sortField switch
@@ -78,7 +79,7 @@ public sealed class SqlProjectStore : IProjectStore
         var projects = await ordered
             .Skip(request.Offset)
             .Take(request.PageSize)
-            .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
+            .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.TenantId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
             .ToListAsync(ct);
 
         int? nextOffset = request.Offset + projects.Count < total
@@ -88,30 +89,33 @@ public sealed class SqlProjectStore : IProjectStore
         return new PagedResult<ProjectRecord>(projects, total, nextOffset);
     }
 
-    public async Task<ProjectRecord?> GetAsync(Guid organisationId, Guid projectId, CancellationToken ct)
+    public async Task<ProjectRecord?> GetAsync(Guid tenantId, Guid projectId, CancellationToken ct)
     {
-        organisationId = NormalizeOrganisationId(organisationId);
+        tenantId = NormalizeTenantId(tenantId);
         return await _db.Projects
             .AsNoTracking()
-            .Where(x => x.ProjectId == projectId && x.OrganisationId == organisationId)
-            .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
+            .Where(x => x.ProjectId == projectId && x.TenantId == tenantId)
+            .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.TenantId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<ProjectRecord?> GetByKeyAsync(Guid organisationId, string projectKey, CancellationToken ct)
+    public async Task<ProjectRecord?> GetByKeyAsync(Guid tenantId, string projectKey, CancellationToken ct)
     {
-        organisationId = NormalizeOrganisationId(organisationId);
+        tenantId = NormalizeTenantId(tenantId);
         projectKey = NormalizeProjectKey(projectKey);
 
         return await _db.Projects
             .AsNoTracking()
-            .Where(x => x.OrganisationId == organisationId && x.ProjectKey == projectKey)
-            .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
+            .Where(x => x.TenantId == tenantId && x.ProjectKey == projectKey)
+            .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.TenantId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
             .FirstOrDefaultAsync(ct);
     }
 
-    public Task<bool> ExistsAsync(Guid projectId, CancellationToken ct)
-        => _db.Projects.AnyAsync(x => x.ProjectId == projectId, ct);
+    public Task<bool> ExistsAsync(Guid tenantId, Guid projectId, CancellationToken ct)
+    {
+        tenantId = NormalizeTenantId(tenantId);
+        return _db.Projects.AnyAsync(x => x.ProjectId == projectId && x.TenantId == tenantId, ct);
+    }
 
     private static string NormalizeOwnerKey(string ownerKey)
     {
@@ -125,6 +129,6 @@ public sealed class SqlProjectStore : IProjectStore
         return string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey;
     }
 
-    private static Guid NormalizeOrganisationId(Guid organisationId)
-        => organisationId == Guid.Empty ? OrgDefaults.DefaultOrganisationId : organisationId;
+    private static Guid NormalizeTenantId(Guid tenantId)
+        => tenantId == Guid.Empty ? OrgDefaults.DefaultOrganisationId : tenantId;
 }

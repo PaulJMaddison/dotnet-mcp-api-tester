@@ -4,6 +4,7 @@ public sealed class TestRunRecord
 {
     public Guid RunId { get; set; }
     public Guid OrganisationId { get; set; } = OrgDefaults.DefaultOrganisationId;
+    public Guid TenantId { get; set; } = OrgDefaults.DefaultOrganisationId;
     public string Actor { get; init; } = OwnerKeyDefaults.Default;
     public TestRunEnvironmentSnapshot? Environment { get; init; }
     public ApiExecutionPolicySnapshot? PolicySnapshot { get; init; }

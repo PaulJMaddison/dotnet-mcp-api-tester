@@ -23,20 +23,20 @@ public sealed class ApiKeyAuthMiddleware
         var apiKey = apiKeyHeader.ToString();
         if (!ApiKeyToken.TryGetPrefix(apiKey, out var prefix))
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return;
         }
 
         var record = await apiKeys.GetByPrefixAsync(prefix, context.RequestAborted);
         if (record is null)
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return;
         }
 
         if (!ApiKeyHasher.Verify(apiKey, record.Hash) || !ApiKeyAccessEvaluator.IsActive(record, DateTime.UtcNow))
         {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return;
         }
 
