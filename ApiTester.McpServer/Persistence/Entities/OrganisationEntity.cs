@@ -8,6 +8,7 @@ public sealed class OrganisationEntity
     public DateTime CreatedUtc { get; set; }
     public int? RetentionDays { get; set; }
     public string? RedactionRulesJson { get; set; }
+    public string? OrgSettingsJson { get; set; }
 
     public List<ProjectEntity> Projects { get; set; } = new();
     public List<TestRunEntity> Runs { get; set; } = new();

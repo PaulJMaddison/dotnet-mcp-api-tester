@@ -30,7 +30,8 @@ public sealed class SqlOrganisationStore : IOrganisationStore
                 o.Slug,
                 o.CreatedUtc,
                 o.RetentionDays,
-                DeserializeRedactionRules(o.RedactionRulesJson)))
+                DeserializeRedactionRules(o.RedactionRulesJson),
+                DeserializeOrgSettings(o.OrgSettingsJson)))
             .FirstOrDefaultAsync(ct);
         if (existing is not null)
             return existing;
@@ -41,7 +42,8 @@ public sealed class SqlOrganisationStore : IOrganisationStore
             Name = name,
             Slug = slug,
             CreatedUtc = DateTime.UtcNow,
-            RedactionRulesJson = SerializeRedactionRules(Array.Empty<string>())
+            RedactionRulesJson = SerializeRedactionRules(Array.Empty<string>()),
+            OrgSettingsJson = SerializeOrgSettings(OrgSettings.Default)
         };
 
         _db.Organisations.Add(entity);
@@ -52,7 +54,8 @@ public sealed class SqlOrganisationStore : IOrganisationStore
             entity.Slug,
             entity.CreatedUtc,
             entity.RetentionDays,
-            DeserializeRedactionRules(entity.RedactionRulesJson));
+            DeserializeRedactionRules(entity.RedactionRulesJson),
+            DeserializeOrgSettings(entity.OrgSettingsJson));
     }
 
     public async Task<OrganisationRecord?> GetAsync(Guid organisationId, CancellationToken ct)
@@ -65,7 +68,8 @@ public sealed class SqlOrganisationStore : IOrganisationStore
                 o.Slug,
                 o.CreatedUtc,
                 o.RetentionDays,
-                DeserializeRedactionRules(o.RedactionRulesJson)))
+                DeserializeRedactionRules(o.RedactionRulesJson),
+                DeserializeOrgSettings(o.OrgSettingsJson)))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -80,7 +84,8 @@ public sealed class SqlOrganisationStore : IOrganisationStore
                 o.Slug,
                 o.CreatedUtc,
                 o.RetentionDays,
-                DeserializeRedactionRules(o.RedactionRulesJson)))
+                DeserializeRedactionRules(o.RedactionRulesJson),
+                DeserializeOrgSettings(o.OrgSettingsJson)))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -104,7 +109,8 @@ public sealed class SqlOrganisationStore : IOrganisationStore
             entity.Slug,
             entity.CreatedUtc,
             entity.RetentionDays,
-            DeserializeRedactionRules(entity.RedactionRulesJson));
+            DeserializeRedactionRules(entity.RedactionRulesJson),
+            DeserializeOrgSettings(entity.OrgSettingsJson));
     }
 
     private static List<string> DeserializeRedactionRules(string? json)
@@ -132,4 +138,22 @@ public sealed class SqlOrganisationStore : IOrganisationStore
 
         return System.Text.Json.JsonSerializer.Serialize(normalized);
     }
+
+    private static OrgSettings DeserializeOrgSettings(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return OrgSettings.Default;
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<OrgSettings>(json) ?? OrgSettings.Default;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return OrgSettings.Default;
+        }
+    }
+
+    private static string SerializeOrgSettings(OrgSettings settings)
+        => System.Text.Json.JsonSerializer.Serialize(settings ?? OrgSettings.Default);
 }

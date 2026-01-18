@@ -83,7 +83,8 @@ public sealed class FileOrganisationStore : IOrganisationStore
                 existing.Slug,
                 existing.CreatedUtc,
                 retentionDays,
-                normalizedRules);
+                normalizedRules,
+                existing.OrgSettings);
 
             var index = list.IndexOf(existing);
             list[index] = updated;
