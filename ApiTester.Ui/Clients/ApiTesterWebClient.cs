@@ -197,8 +197,9 @@ public sealed record RunSummaryDto(
 public sealed record RunSummary(
     int TotalCases,
     int Passed,
-    int Failed,
-    int Blocked,
+    int ExpectedBlocked,
+    int Flaky,
+    int RealFail,
     long TotalDurationMs,
     ResultClassificationSummary ClassificationSummary);
 
@@ -231,6 +232,8 @@ public sealed record TestCaseResult(
     bool Pass,
     string? FailureReason,
     string? ResponseSnippet,
+    bool IsFlaky,
+    string? FlakeReasonCategory,
     ResultClassification Classification);
 
 public sealed record ResultClassificationSummary(

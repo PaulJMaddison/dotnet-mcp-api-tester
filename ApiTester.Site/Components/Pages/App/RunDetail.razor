@@ -61,9 +61,10 @@
                 <div class="app-card mt-3">
                     <h2 class="h6 text-uppercase text-secondary">Case totals</h2>
                     <div class="d-flex flex-wrap gap-2">
-                        <span class="badge text-bg-success">@_response.Data.Result.Passed passed</span>
-                        <span class="badge text-bg-danger">@_response.Data.Result.Failed failed</span>
-                        <span class="badge text-bg-warning text-dark">@_response.Data.Result.Blocked blocked</span>
+                        <span class="badge text-bg-success">@_response.Data.Result.ClassificationSummary.Pass passed</span>
+                        <span class="badge text-bg-warning text-dark">@_response.Data.Result.ClassificationSummary.BlockedExpected expected blocked</span>
+                        <span class="badge text-bg-info">@_response.Data.Result.ClassificationSummary.FlakyExternal flaky</span>
+                        <span class="badge text-bg-danger">@(_response.Data.Result.ClassificationSummary.Fail + _response.Data.Result.ClassificationSummary.BlockedUnexpected) real fail</span>
                         <span class="badge text-bg-light">@_response.Data.Result.TotalCases total</span>
                     </div>
                 </div>
@@ -144,6 +145,9 @@
 
     private static string GetStatusLabel(TestCaseResult result)
     {
+        if (result.IsFlaky || result.Classification == ResultClassification.FlakyExternal)
+            return "Flaky";
+
         if (result.Blocked)
             return "Blocked";
 
@@ -152,6 +156,9 @@
 
     private static string GetStatusBadge(TestCaseResult result)
     {
+        if (result.IsFlaky || result.Classification == ResultClassification.FlakyExternal)
+            return "text-bg-info";
+
         if (result.Blocked)
             return "text-bg-warning text-dark";
 

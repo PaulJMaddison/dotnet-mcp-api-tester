@@ -14,7 +14,9 @@ public static class ApiPolicyDefaults
             BlockPrivateNetworks = true,
             Timeout = TimeSpan.FromSeconds(10),
             MaxRequestBodyBytes = 262_144,
-            MaxResponseBodyBytes = 524_288
+            MaxResponseBodyBytes = 524_288,
+            RetryOnFlake = false,
+            MaxRetries = 0
         };
     }
 
@@ -29,6 +31,8 @@ public static class ApiPolicyDefaults
         target.Timeout = defaults.Timeout;
         target.MaxRequestBodyBytes = defaults.MaxRequestBodyBytes;
         target.MaxResponseBodyBytes = defaults.MaxResponseBodyBytes;
+        target.RetryOnFlake = defaults.RetryOnFlake;
+        target.MaxRetries = defaults.MaxRetries;
 
         target.AllowedMethods.Clear();
         foreach (var m in defaults.AllowedMethods)

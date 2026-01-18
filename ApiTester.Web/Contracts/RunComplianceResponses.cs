@@ -17,7 +17,9 @@ public sealed record ComplianceAuditMetadata(
 
 public sealed record CompliancePolicySection(
     bool DryRun,
-    IReadOnlyList<string> AllowedMethods);
+    IReadOnlyList<string> AllowedMethods,
+    bool RetryOnFlake,
+    int MaxRetries);
 
 public sealed record ComplianceSsrfSection(
     IReadOnlyList<string> AllowedBaseUrls,

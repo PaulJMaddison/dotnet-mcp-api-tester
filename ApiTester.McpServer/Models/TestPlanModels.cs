@@ -56,5 +56,8 @@ public sealed class TestCaseResult
 
     public string? ResponseSnippet { get; init; }
 
+    public bool IsFlaky { get; set; }
+    public string? FlakeReasonCategory { get; set; }
+
     public ResultClassification Classification { get; set; }
 }

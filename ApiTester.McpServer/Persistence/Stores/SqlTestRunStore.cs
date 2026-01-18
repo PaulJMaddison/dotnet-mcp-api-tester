@@ -84,6 +84,8 @@ public sealed class SqlTestRunStore : ITestRunStore
                 Pass = r.Pass,
                 FailureReason = r.FailureReason,
                 ResponseSnippet = r.ResponseSnippet,
+                IsFlaky = r.IsFlaky,
+                FlakeReasonCategory = r.FlakeReasonCategory,
                 Classification = r.Classification
             }).ToList()
         };
@@ -118,6 +120,8 @@ public sealed class SqlTestRunStore : ITestRunStore
                 Pass = r.Pass,
                 FailureReason = r.FailureReason,
                 ResponseSnippet = r.ResponseSnippet,
+                IsFlaky = r.IsFlaky,
+                FlakeReasonCategory = r.FlakeReasonCategory,
                 Classification = r.Classification ?? ResultClassification.Pass
             })
             .ToList();
@@ -233,6 +237,8 @@ public sealed class SqlTestRunStore : ITestRunStore
                     Pass = r.Pass,
                     FailureReason = r.FailureReason,
                     ResponseSnippet = r.ResponseSnippet,
+                    IsFlaky = r.IsFlaky,
+                    FlakeReasonCategory = r.FlakeReasonCategory,
                     Classification = r.Classification ?? ResultClassification.Pass
                 })
                 .ToList();

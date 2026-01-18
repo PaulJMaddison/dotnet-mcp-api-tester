@@ -23,5 +23,8 @@ public sealed class TestCaseResultEntity
     public string? FailureReason { get; set; }
     public string? ResponseSnippet { get; set; }
 
+    public bool IsFlaky { get; set; }
+    public string? FlakeReasonCategory { get; set; }
+
     public ResultClassification? Classification { get; set; }
 }

@@ -25,13 +25,31 @@ public static class ResultClassificationRules
     public static ResultClassification Classify(TestCaseResult result)
     {
         if (result.Blocked)
+        {
+            result.IsFlaky = false;
+            result.FlakeReasonCategory = null;
             return IsExpectedBlocked(result.BlockReason) ? ResultClassification.BlockedExpected : ResultClassification.BlockedUnexpected;
+        }
+
+        if (result.IsFlaky)
+        {
+            result.FlakeReasonCategory ??= GetFlakeReasonCategory(result.StatusCode, result.ResponseSnippet, result.FailureReason);
+            return ResultClassification.FlakyExternal;
+        }
+
+        var flakeCategory = GetFlakeReasonCategory(result.StatusCode, result.ResponseSnippet, result.FailureReason);
+        if (flakeCategory is not null)
+        {
+            result.IsFlaky = true;
+            result.FlakeReasonCategory ??= flakeCategory;
+            return ResultClassification.FlakyExternal;
+        }
+
+        result.IsFlaky = false;
+        result.FlakeReasonCategory = null;
 
         if (result.Pass)
             return ResultClassification.Pass;
-
-        if (IsFlakyExternal(result.StatusCode, result.ResponseSnippet, result.FailureReason))
-            return ResultClassification.FlakyExternal;
 
         return ResultClassification.Fail;
     }
@@ -78,19 +96,37 @@ public static class ResultClassificationRules
                reason.StartsWith("Missing required header", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsFlakyExternal(int? statusCode, string? responseSnippet, string? failureReason)
+    private static string? GetFlakeReasonCategory(int? statusCode, string? responseSnippet, string? failureReason)
     {
         if (statusCode == 502)
-            return true;
+            return "upstream502";
 
         if (!string.IsNullOrWhiteSpace(responseSnippet) &&
             responseSnippet.Contains("502 Bad Gateway", StringComparison.OrdinalIgnoreCase))
-            return true;
+            return "upstream502";
 
         if (!string.IsNullOrWhiteSpace(failureReason) &&
             failureReason.Contains("but got 502", StringComparison.OrdinalIgnoreCase))
-            return true;
+            return "upstream502";
 
-        return false;
+        if (!string.IsNullOrWhiteSpace(failureReason) &&
+            failureReason.Contains("timed out", StringComparison.OrdinalIgnoreCase))
+            return "timeout";
+
+        if (!string.IsNullOrWhiteSpace(failureReason) &&
+            failureReason.Contains("timeout", StringComparison.OrdinalIgnoreCase))
+            return "timeout";
+
+        if (!string.IsNullOrWhiteSpace(failureReason) &&
+            failureReason.Contains("dns", StringComparison.OrdinalIgnoreCase))
+            return "dns";
+
+        if (!string.IsNullOrWhiteSpace(failureReason) &&
+            (failureReason.Contains("no such host", StringComparison.OrdinalIgnoreCase) ||
+             failureReason.Contains("name or service not known", StringComparison.OrdinalIgnoreCase) ||
+             failureReason.Contains("temporary failure in name resolution", StringComparison.OrdinalIgnoreCase)))
+            return "dns";
+
+        return null;
     }
 }

@@ -26,7 +26,9 @@ public static class RunExportRedactor
                 run.PolicySnapshot.BlockPrivateNetworks,
                 run.PolicySnapshot.TimeoutSeconds,
                 run.PolicySnapshot.MaxRequestBodyBytes,
-                run.PolicySnapshot.MaxResponseBodyBytes);
+                run.PolicySnapshot.MaxResponseBodyBytes,
+                run.PolicySnapshot.RetryOnFlake,
+                run.PolicySnapshot.MaxRetries);
 
         return new TestRunRecord
         {

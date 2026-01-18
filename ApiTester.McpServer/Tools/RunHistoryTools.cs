@@ -58,9 +58,10 @@ public sealed class RunHistoryTools
                 summary = new
                 {
                     totalCases = r.Result.TotalCases,
-                    passed = r.Result.Passed,
-                    failed = r.Result.Failed,
-                    blocked = r.Result.Blocked,
+                    passed = r.Result.ClassificationSummary.Pass,
+                    expectedBlocked = r.Result.ClassificationSummary.BlockedExpected,
+                    flaky = r.Result.ClassificationSummary.FlakyExternal,
+                    realFail = r.Result.ClassificationSummary.Fail + r.Result.ClassificationSummary.BlockedUnexpected,
                     totalDurationMs = r.Result.TotalDurationMs,
                     classificationSummary = r.Result.ClassificationSummary
                 }

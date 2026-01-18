@@ -1019,6 +1019,22 @@ app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, HttpCo
         : Results.Ok(RunMapping.ToDetailDto(run));
 });
 
+app.MapGet("/api/runs/{runId}/summary", async (string runId, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    return run is null
+        ? Results.NotFound()
+        : Results.Ok(RunMapping.ToSummaryCounts(run));
+});
+
 app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))

@@ -7,13 +7,15 @@ public static class AiContextFactory
     public static RunExplanationContext BuildRunExplanationContext(TestRunRecord run)
     {
         var result = run.Result;
+        var classification = result.ClassificationSummary;
         var summary = new RunResultSummary(
             result.TotalCases,
-            result.Passed,
-            result.Failed,
-            result.Blocked,
+            classification.Pass,
+            classification.BlockedExpected,
+            classification.FlakyExternal,
+            classification.Fail + classification.BlockedUnexpected,
             result.TotalDurationMs,
-            result.ClassificationSummary);
+            classification);
 
         var cases = result.Results
             .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)

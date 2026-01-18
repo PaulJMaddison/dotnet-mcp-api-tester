@@ -55,6 +55,8 @@ public sealed class RedactionService
             Pass = r.Pass,
             FailureReason = r.FailureReason,
             ResponseSnippet = RedactText(r.ResponseSnippet, patterns),
+            IsFlaky = r.IsFlaky,
+            FlakeReasonCategory = r.FlakeReasonCategory,
             Classification = r.Classification
         }).ToList();
 

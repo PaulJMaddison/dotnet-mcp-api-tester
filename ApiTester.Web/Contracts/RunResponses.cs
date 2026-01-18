@@ -15,8 +15,9 @@ public sealed record RunSummaryDto(
 public sealed record RunSummary(
     int TotalCases,
     int Passed,
-    int Failed,
-    int Blocked,
+    int ExpectedBlocked,
+    int Flaky,
+    int RealFail,
     long TotalDurationMs,
     ResultClassificationSummary ClassificationSummary);
 
@@ -27,3 +28,11 @@ public sealed record RunDetailDto(
     DateTimeOffset StartedUtc,
     DateTimeOffset CompletedUtc,
     TestRunResult Result);
+
+public sealed record RunSummaryCountsResponse(
+    Guid RunId,
+    int TotalCases,
+    int Passed,
+    int ExpectedBlocked,
+    int Flaky,
+    int RealFail);

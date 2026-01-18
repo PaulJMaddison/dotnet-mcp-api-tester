@@ -52,6 +52,26 @@ public class ResultClassificationRulesTests
         var classification = ResultClassificationRules.Classify(result);
 
         Assert.Equal(ResultClassification.FlakyExternal, classification);
+        Assert.True(result.IsFlaky);
+        Assert.Equal("upstream502", result.FlakeReasonCategory);
+    }
+
+    [Fact]
+    public void Classify_ReturnsFlakyExternal_For502ResponseSnippet()
+    {
+        var result = new TestCaseResult
+        {
+            Name = "502 snippet",
+            Blocked = false,
+            Pass = false,
+            ResponseSnippet = "502 Bad Gateway"
+        };
+
+        var classification = ResultClassificationRules.Classify(result);
+
+        Assert.Equal(ResultClassification.FlakyExternal, classification);
+        Assert.True(result.IsFlaky);
+        Assert.Equal("upstream502", result.FlakeReasonCategory);
     }
 
     [Fact]

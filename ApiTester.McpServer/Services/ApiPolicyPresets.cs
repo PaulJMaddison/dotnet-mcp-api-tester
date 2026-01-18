@@ -11,7 +11,9 @@ public static class ApiPolicyPresets
         BlockPrivateNetworks = true,
         Timeout = TimeSpan.FromSeconds(10),
         MaxRequestBodyBytes = 262_144,
-        MaxResponseBodyBytes = 524_288
+        MaxResponseBodyBytes = 524_288,
+        RetryOnFlake = false,
+        MaxRetries = 0
     };
 
     public static ApiExecutionPolicy AllowPetstore() => new()
@@ -23,6 +25,8 @@ public static class ApiPolicyPresets
         BlockPrivateNetworks = true,
         Timeout = TimeSpan.FromSeconds(10),
         MaxRequestBodyBytes = 262_144,
-        MaxResponseBodyBytes = 524_288
+        MaxResponseBodyBytes = 524_288,
+        RetryOnFlake = false,
+        MaxRetries = 0
     };
 }

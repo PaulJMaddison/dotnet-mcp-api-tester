@@ -43,9 +43,10 @@ public static class RunReportGenerator
         builder.AppendLine("| Metric | Value |");
         builder.AppendLine("| --- | --- |");
         builder.AppendLine($"| Total Cases | {result.TotalCases} |");
-        builder.AppendLine($"| Passed | {result.Passed} |");
-        builder.AppendLine($"| Failed | {result.Failed} |");
-        builder.AppendLine($"| Blocked | {result.Blocked} |");
+        builder.AppendLine($"| Passed | {classificationSummary.Pass} |");
+        builder.AppendLine($"| Expected Blocked | {classificationSummary.BlockedExpected} |");
+        builder.AppendLine($"| Flaky | {classificationSummary.FlakyExternal} |");
+        builder.AppendLine($"| Real Fail | {classificationSummary.Fail + classificationSummary.BlockedUnexpected} |");
         builder.AppendLine($"| Classification Pass | {classificationSummary.Pass} |");
         builder.AppendLine($"| Classification Fail | {classificationSummary.Fail} |");
         builder.AppendLine($"| Classification Blocked Expected | {classificationSummary.BlockedExpected} |");
@@ -104,9 +105,10 @@ public static class RunReportGenerator
         builder.AppendLine("<thead><tr><th>Metric</th><th>Value</th></tr></thead>");
         builder.AppendLine("<tbody>");
         builder.AppendLine($"<tr><td>Total Cases</td><td>{result.TotalCases}</td></tr>");
-        builder.AppendLine($"<tr><td>Passed</td><td>{result.Passed}</td></tr>");
-        builder.AppendLine($"<tr><td>Failed</td><td>{result.Failed}</td></tr>");
-        builder.AppendLine($"<tr><td>Blocked</td><td>{result.Blocked}</td></tr>");
+        builder.AppendLine($"<tr><td>Passed</td><td>{classificationSummary.Pass}</td></tr>");
+        builder.AppendLine($"<tr><td>Expected Blocked</td><td>{classificationSummary.BlockedExpected}</td></tr>");
+        builder.AppendLine($"<tr><td>Flaky</td><td>{classificationSummary.FlakyExternal}</td></tr>");
+        builder.AppendLine($"<tr><td>Real Fail</td><td>{classificationSummary.Fail + classificationSummary.BlockedUnexpected}</td></tr>");
         builder.AppendLine($"<tr><td>Classification Pass</td><td>{classificationSummary.Pass}</td></tr>");
         builder.AppendLine($"<tr><td>Classification Fail</td><td>{classificationSummary.Fail}</td></tr>");
         builder.AppendLine($"<tr><td>Classification Blocked Expected</td><td>{classificationSummary.BlockedExpected}</td></tr>");
@@ -143,6 +145,10 @@ public static class RunReportGenerator
 
     private static string FormatStatus(TestCaseResult result)
     {
+        var classification = ResultClassificationRules.Classify(result);
+        if (classification == ResultClassification.FlakyExternal)
+            return "Flaky";
+
         if (result.Blocked)
             return "Blocked";
 

@@ -31,7 +31,9 @@ public sealed class PolicyTools
             maxRequestBodyBytes = _cfg.Policy.MaxRequestBodyBytes,
             maxResponseBodyBytes = _cfg.Policy.MaxResponseBodyBytes,
             blockLocalhost = _cfg.Policy.BlockLocalhost,
-            blockPrivateNetworks = _cfg.Policy.BlockPrivateNetworks
+            blockPrivateNetworks = _cfg.Policy.BlockPrivateNetworks,
+            retryOnFlake = _cfg.Policy.RetryOnFlake,
+            maxRetries = _cfg.Policy.MaxRetries
         };
     }
 
@@ -142,6 +144,17 @@ public sealed class PolicyTools
             if (root.TryGetProperty("blockPrivateNetworks", out var blockPrivate))
                 next.BlockPrivateNetworks = blockPrivate.GetBoolean();
 
+            if (root.TryGetProperty("retryOnFlake", out var retryOnFlake))
+                next.RetryOnFlake = retryOnFlake.GetBoolean();
+
+            if (root.TryGetProperty("maxRetries", out var maxRetries))
+            {
+                var retries = maxRetries.GetInt32();
+                if (retries < 0)
+                    throw new InvalidOperationException("maxRetries must be >= 0.");
+                next.MaxRetries = retries;
+            }
+
             // Final sanity: if dryRun=false and allow list empty, that’s deny-by-default, which is fine.
             // But do not allow blank methods list, default to GET if cleared accidentally.
             if (next.AllowedMethods.Count == 0)
@@ -166,6 +179,8 @@ public sealed class PolicyTools
         _cfg.Policy.Timeout = policy.Timeout;
         _cfg.Policy.MaxRequestBodyBytes = policy.MaxRequestBodyBytes;
         _cfg.Policy.MaxResponseBodyBytes = policy.MaxResponseBodyBytes;
+        _cfg.Policy.RetryOnFlake = policy.RetryOnFlake;
+        _cfg.Policy.MaxRetries = policy.MaxRetries;
 
         _cfg.Policy.AllowedMethods.Clear();
         foreach (var m in policy.AllowedMethods)
@@ -187,7 +202,9 @@ public sealed class PolicyTools
             AllowedMethods = new HashSet<string>(p.AllowedMethods, StringComparer.OrdinalIgnoreCase),
             Timeout = p.Timeout,
             MaxRequestBodyBytes = p.MaxRequestBodyBytes,
-            MaxResponseBodyBytes = p.MaxResponseBodyBytes
+            MaxResponseBodyBytes = p.MaxResponseBodyBytes,
+            RetryOnFlake = p.RetryOnFlake,
+            MaxRetries = p.MaxRetries
         };
     }
 
