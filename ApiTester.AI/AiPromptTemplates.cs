@@ -45,4 +45,23 @@ JSON:
 
         return new AiPrompt(system, user);
     }
+
+    public static AiPrompt BuildComplianceReportPrompt(string reportJson)
+    {
+        var system = $"""
+{DeterministicGuidance}
+You draft compliance report narratives for audit and security teams.
+Return a concise markdown summary that mirrors the report sections.
+""";
+
+        var user = $"""
+Summarize the following compliance report payload.
+Include: policy summary, SSRF protections, run results summary, audit trail excerpt context, and retention/redaction statement.
+
+JSON:
+{reportJson}
+""";
+
+        return new AiPrompt(system, user);
+    }
 }

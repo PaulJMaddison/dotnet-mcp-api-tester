@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Entities;
 using ApiTester.McpServer.Models;
+using ApiTester.AI;
 using ApiTester.Web;
 using ApiTester.Web.Auth;
 using ApiTester.Web.AI;
@@ -549,6 +550,31 @@ public class ApiEndpointsTests
     }
 
     [Fact]
+    public async Task AiComplianceReportEndpoint_ReturnsForbidden_ForFreeTier()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Free"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "FreeCompliance", "free-compliance");
+        var run = await SeedRunAsync(factory, project, "op-free-compliance");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsJsonAsync("/api/ai/compliance-report", new AiComplianceReportRequest(run.RunId.ToString()));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task AiSummariseRunEndpoint_ReturnsNotFound_ForMissingRun()
     {
         using var baseFactory = new ApiTesterWebFactory();
@@ -629,6 +655,41 @@ public class ApiEndpointsTests
         Assert.Single(payload!.TopFailures);
         Assert.Single(payload.TopFailures[0].EvidenceRefs);
         Assert.Equal("Failing Case", payload.TopFailures[0].EvidenceRefs[0].CaseName);
+    }
+
+    [Fact]
+    public async Task AiComplianceReportEndpoint_ReturnsReport()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IAiClient>();
+                services.AddSingleton<IAiClient>(new MockAiClient());
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "ComplianceReport", "compliance-report");
+        var run = await SeedRunAsync(factory, project, "op-compliance");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsJsonAsync("/api/ai/compliance-report", new AiComplianceReportRequest(run.RunId.ToString()));
+        var payload = await response.Content.ReadFromJsonAsync<ComplianceReportResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal(run.RunId, payload!.RunId);
+        Assert.Equal("mock", payload.Narrative);
+        Assert.Equal(1, payload.RunResults.TotalCases);
     }
 
     [Fact]
@@ -1016,6 +1077,55 @@ public class ApiEndpointsTests
         Assert.Contains("run.json", entryNames);
         Assert.Contains("policy.json", entryNames);
         Assert.Contains("audit.json", entryNames);
+        Assert.Contains("compliance-report.json", entryNames);
+        Assert.Contains("exports/junit.xml", entryNames);
+        Assert.Contains("exports/results.csv", entryNames);
+    }
+
+    [Fact]
+    public async Task EvidenceBundle_RedactsSensitiveData()
+    {
+        const string secretToken = "secret-token";
+
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        await UpdateOrgSettingsAsync(
+            factory,
+            ApiTesterWebFactory.OrganisationAlphaId,
+            new OrgSettings(OrgPlan.Pro),
+            new[] { secretToken });
+
+        var project = await SeedProjectAsync(factory, "EvidenceRedaction", "evidence-redaction");
+        var run = await SeedRunAsync(factory, project, "op-redact", responseSnippet: $"token={secretToken}");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var evidenceResponse = await client.GetAsync($"/runs/{run.RunId}/export/evidence-bundle");
+        var evidenceBytes = await evidenceResponse.Content.ReadAsByteArrayAsync();
+
+        Assert.Equal(HttpStatusCode.OK, evidenceResponse.StatusCode);
+
+        using var stream = new MemoryStream(evidenceBytes);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var runEntry = archive.GetEntry("run.json");
+        Assert.NotNull(runEntry);
+
+        using var entryStream = runEntry!.Open();
+        using var reader = new StreamReader(entryStream);
+        var runJson = await reader.ReadToEndAsync();
+
+        Assert.DoesNotContain(secretToken, runJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("[REDACTED]", runJson, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

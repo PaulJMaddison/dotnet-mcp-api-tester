@@ -1341,6 +1341,10 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
         redactedRun.RunId,
         Events = auditSubset
     }, jsonOptions);
+    var junitExport = RunExportGenerator.GenerateJunit(redactedRun);
+    var csvExport = RunExportGenerator.GenerateCsv(redactedRun);
+    var complianceReport = ComplianceReportBuilder.Build(run, org, auditSubset.Take(25).ToList(), redactionService);
+    var complianceReportJson = JsonSerializer.Serialize(complianceReport, jsonOptions);
 
     using var stream = new MemoryStream();
     using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true))
@@ -1348,6 +1352,9 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
         AddZipEntry(archive, "run.json", runJson);
         AddZipEntry(archive, "policy.json", policyJson);
         AddZipEntry(archive, "audit.json", auditJson);
+        AddZipEntry(archive, "compliance-report.json", complianceReportJson);
+        AddZipEntry(archive, "exports/junit.xml", junitExport);
+        AddZipEntry(archive, "exports/results.csv", csvExport);
     }
 
     var exportMetadata = JsonSerializer.Serialize(new
@@ -1710,6 +1717,54 @@ async Task<IResult> SummariseRunAiEndpointAsync(
     }
 }
 
+async Task<IResult> ComplianceReportAiEndpointAsync(
+    HttpContext httpContext,
+    ITestRunStore runStore,
+    IOrganisationStore orgStore,
+    IAuditEventStore auditStore,
+    RedactionService redactionService,
+    IAiClient aiClient,
+    EntitlementService entitlements,
+    CancellationToken ct)
+{
+    if (!entitlements.CanUseAi)
+        return FeatureNotAvailable("AI", entitlements);
+
+    var payload = await httpContext.Request.ReadFromJsonAsync<AiComplianceReportRequest>(cancellationToken: ct);
+    if (payload is null)
+        return InvalidRequest("Request body is required.");
+
+    if (!RequestValidation.TryParseGuid(payload.RunId, out var runId, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var run = await runStore.GetAsync(orgContext.OrganisationId, runId);
+    if (run is null)
+        return Results.NotFound();
+
+    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    if (org is null)
+        return Results.NotFound();
+
+    var auditEvents = await auditStore.ListAsync(orgContext.OrganisationId, 200, null, null, null, ct);
+    var auditSubset = auditEvents
+        .Where(evt => string.Equals(evt.TargetType, "run", StringComparison.OrdinalIgnoreCase) &&
+                      string.Equals(evt.TargetId, run.RunId.ToString(), StringComparison.OrdinalIgnoreCase))
+        .Take(25)
+        .ToList();
+
+    var report = ComplianceReportBuilder.Build(run, org, auditSubset, redactionService);
+    var reportJson = JsonSerializer.Serialize(report, jsonOptions);
+    var prompt = AiPromptTemplates.BuildComplianceReportPrompt(reportJson);
+    var aiResponse = await aiClient.GetResponseAsync(prompt, ct);
+
+    return Results.Ok(report with { Narrative = aiResponse.Content });
+}
+
 async Task<IResult> GenerateDocsAiEndpointAsync(
     HttpContext httpContext,
     IProjectStore projectStore,
@@ -1931,6 +1986,8 @@ app.MapPost("/api/ai/suggest-tests", SuggestAiTestsEndpointAsync);
 app.MapPost("/ai/suggest-tests", SuggestAiTestsEndpointAsync);
 app.MapPost("/api/ai/summarise-run", SummariseRunAiEndpointAsync);
 app.MapPost("/ai/summarise-run", SummariseRunAiEndpointAsync);
+app.MapPost("/api/ai/compliance-report", ComplianceReportAiEndpointAsync);
+app.MapPost("/ai/compliance-report", ComplianceReportAiEndpointAsync);
 app.MapPost("/api/ai/generate-docs", GenerateDocsAiEndpointAsync);
 app.MapPost("/ai/generate-docs", GenerateDocsAiEndpointAsync);
 app.MapGet("/api/projects/{projectId}/docs/generated", GetGeneratedDocsAsync);
