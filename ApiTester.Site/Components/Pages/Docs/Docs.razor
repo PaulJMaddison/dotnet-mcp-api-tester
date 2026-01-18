@@ -3,8 +3,8 @@
 
 @code {
     private DeveloperDocsContent Marketing => MarketingContent.Current.DeveloperDocs;
-    private PageMetadata Metadata => Marketing.Metadata;
-    private DocsLibrary Docs => DocsContent.Current;
+    private ApiTester.Site.Content.PageMetadata Metadata => Marketing.Metadata;
+    private DocsLibrary DocsLibrary => DocsContent.Current;
 }
 
 <PageTitle>@Metadata.Title</PageTitle>
@@ -24,18 +24,18 @@
     <link rel="canonical" href="@Metadata.CanonicalUrl" />
 </HeadContent>
 
-<DocsShell Title="@Docs.Landing.HeroTitle" Subtitle="@Docs.Landing.HeroSubtitle" ActiveUrl="/docs">
+<DocsShell Title="@DocsLibrary.Landing.HeroTitle" Subtitle="@DocsLibrary.Landing.HeroSubtitle" ActiveUrl="/docs">
     <section class="doc-section mb-4">
         <h2 class="h5 fw-bold">Why ApiTester docs?</h2>
         <ul class="doc-list">
-            @foreach (var highlight in Docs.Landing.Highlights)
+            @foreach (var highlight in DocsLibrary.Landing.Highlights)
             {
                 <li class="mb-2">@highlight</li>
             }
         </ul>
     </section>
 
-    @foreach (var group in Docs.Landing.NavGroups)
+    @foreach (var group in DocsLibrary.Landing.NavGroups)
     {
         <section class="doc-section mb-4">
             <h2 class="h5 fw-bold">@group.Title</h2>
@@ -55,8 +55,8 @@
     }
 
     <section class="doc-section">
-        <h2 class="h5 fw-bold">@Docs.Landing.SupportTitle</h2>
-        <p class="mb-3">@Docs.Landing.SupportSubtitle</p>
+        <h2 class="h5 fw-bold">@DocsLibrary.Landing.SupportTitle</h2>
+        <p class="mb-3">@DocsLibrary.Landing.SupportSubtitle</p>
         <a class="btn btn-primary" href="/contact">Talk to the team</a>
     </section>
 </DocsShell>

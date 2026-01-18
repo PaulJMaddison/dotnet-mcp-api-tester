@@ -2,7 +2,7 @@
 
 @code {
     private UseCasesContent Content { get; } = MarketingContent.Current.UseCases;
-    private PageMetadata Metadata => Content.Metadata;
+    private ApiTester.Site.Content.PageMetadata Metadata => Content.Metadata;
 }
 
 <PageTitle>@Metadata.Title</PageTitle>

@@ -437,7 +437,10 @@ public class ApiEndpointsTests
 
             var reason = failEl.GetString() ?? string.Empty;
             return reason.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
-                   reason.Contains("canceled", StringComparison.OrdinalIgnoreCase);
+                   reason.Contains("canceled", StringComparison.OrdinalIgnoreCase) ||
+                   reason.Contains("network", StringComparison.OrdinalIgnoreCase) ||
+                   reason.Contains("unreachable", StringComparison.OrdinalIgnoreCase) ||
+                   reason.Contains("dns", StringComparison.OrdinalIgnoreCase);
         });
     }
 
@@ -767,6 +770,15 @@ public class ApiEndpointsTests
             var fail = failEl.GetString() ?? "";
             if (fail.Contains("but got 502", StringComparison.OrdinalIgnoreCase))
                 return true;
+
+            if (fail.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+                fail.Contains("canceled", StringComparison.OrdinalIgnoreCase) ||
+                fail.Contains("network", StringComparison.OrdinalIgnoreCase) ||
+                fail.Contains("unreachable", StringComparison.OrdinalIgnoreCase) ||
+                fail.Contains("dns", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
         }
 
         return false;

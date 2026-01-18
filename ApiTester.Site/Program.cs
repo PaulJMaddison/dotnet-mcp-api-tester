@@ -10,7 +10,7 @@ builder.Services.AddSession(options =>
 {
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
-    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Strict;
 });
 builder.Services.Configure<ApiTester.Site.Services.ApiTesterWebOptions>(
     builder.Configuration.GetSection(ApiTester.Site.Services.ApiTesterWebOptions.SectionName));

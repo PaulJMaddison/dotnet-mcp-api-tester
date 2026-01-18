@@ -49,6 +49,7 @@ public sealed class RunAuditImmutabilityTests
             Assert.Equal(run.PolicySnapshot.TimeoutSeconds, reloaded.PolicySnapshot.TimeoutSeconds);
             Assert.Equal(run.PolicySnapshot.MaxRequestBodyBytes, reloaded.PolicySnapshot.MaxRequestBodyBytes);
             Assert.Equal(run.PolicySnapshot.MaxResponseBodyBytes, reloaded.PolicySnapshot.MaxResponseBodyBytes);
+            Assert.Equal(run.PolicySnapshot.ValidateSchema, reloaded.PolicySnapshot.ValidateSchema);
             Assert.Equal(run.PolicySnapshot.RetryOnFlake, reloaded.PolicySnapshot.RetryOnFlake);
             Assert.Equal(run.PolicySnapshot.MaxRetries, reloaded.PolicySnapshot.MaxRetries);
         }
@@ -75,6 +76,7 @@ public sealed class RunAuditImmutabilityTests
                 TimeoutSeconds: 30,
                 MaxRequestBodyBytes: 1024,
                 MaxResponseBodyBytes: 2048,
+                ValidateSchema: true,
                 RetryOnFlake: true,
                 MaxRetries: 2),
             OwnerKey = "owner",

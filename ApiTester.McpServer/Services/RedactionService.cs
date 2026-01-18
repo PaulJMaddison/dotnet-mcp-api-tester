@@ -115,6 +115,11 @@ public sealed class RedactionService
             try
             {
                 list.Add(new Regex(pattern, RegexOptions.Compiled | RegexOptions.IgnoreCase));
+                var quotedKeyPattern = pattern.Replace("\\s*[:=]", "\\\"?\\s*[:=]");
+                if (!string.Equals(pattern, quotedKeyPattern, StringComparison.Ordinal))
+                {
+                    list.Add(new Regex(quotedKeyPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase));
+                }
             }
             catch (ArgumentException)
             {

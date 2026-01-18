@@ -1,23 +1,23 @@
 @using ApiTester.Site.Content
 
-@foreach (var section in Page.Sections)
+@foreach (var docSection in Page.Sections)
 {
-    <section id="@section.Id" class="doc-section mb-4">
-        <h2 class="h5 fw-bold">@section.Heading</h2>
-        <p>@section.Body</p>
-        @if (section.Bullets.Any())
+    <section id="@docSection.Id" class="doc-section mb-4">
+        <h2 class="h5 fw-bold">@docSection.Heading</h2>
+        <p>@docSection.Body</p>
+        @if (docSection.Bullets.Any())
         {
             <ul class="doc-list">
-                @foreach (var bullet in section.Bullets)
+                @foreach (var bullet in docSection.Bullets)
                 {
                     <li class="mb-2">@bullet</li>
                 }
             </ul>
         }
-        @if (section.Callouts.Any())
+        @if (docSection.Callouts.Any())
         {
             <div class="row g-3 mt-3">
-                @foreach (var callout in section.Callouts)
+                @foreach (var callout in docSection.Callouts)
                 {
                     <div class="col-md-6">
                         <div class="p-3 bg-light border rounded-3 h-100">
@@ -28,13 +28,13 @@
                 }
             </div>
         }
-        @if (section.CodeSnippet is not null)
+        @if (docSection.CodeSnippet is not null)
         {
             <div class="mt-3">
-                <CodeBlock Title="@section.CodeSnippet.Title"
-                           Description="@section.CodeSnippet.Description"
-                           Language="@section.CodeSnippet.Language"
-                           Code="@section.CodeSnippet.Code" />
+                <CodeBlock Title="@docSection.CodeSnippet.Title"
+                           Description="@docSection.CodeSnippet.Description"
+                           Language="@docSection.CodeSnippet.Language"
+                           Code="@docSection.CodeSnippet.Code" />
             </div>
         }
     </section>

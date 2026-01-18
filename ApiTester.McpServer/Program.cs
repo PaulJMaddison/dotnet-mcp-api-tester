@@ -9,6 +9,7 @@ using ApiTester.McpServer.Services;
 using ApiTester.Rag.Answering;
 using ApiTester.Rag.Embeddings;
 using ApiTester.Rag.VectorStore;
+using System.Net.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -59,6 +60,11 @@ builder.Services.AddSingleton<RagRuntime>();
 // IMPORTANT: scoped because it uses ITestRunStore which may be SQL (DbContext scoped)
 builder.Services.AddScoped<TestPlanRunner>();
 
+builder.Services.AddHttpClient(TestPlanRunner.HttpClientName)
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        UseProxy = false
+    });
 builder.Services.AddHttpClient();
 
 builder.Services.AddApiTesterPersistence(builder.Configuration);

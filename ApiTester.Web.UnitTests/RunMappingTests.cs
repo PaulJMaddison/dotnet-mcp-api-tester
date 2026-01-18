@@ -99,6 +99,7 @@ public class RunMappingTests
                 1024,
                 2048,
                 true,
+                true,
                 2),
             ProjectKey = "sample-project",
             OperationId = "op-1",
