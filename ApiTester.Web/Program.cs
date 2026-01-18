@@ -101,6 +101,7 @@ builder.Services.AddSingleton<AiRateLimiter>();
 builder.Services.AddSingleton<IAiProvider, StubAiProvider>();
 builder.Services.AddScoped<AiAnalysisService>();
 builder.Services.AddScoped<AiExplainService>();
+builder.Services.AddScoped<AiRunSummaryService>();
 builder.Services.AddScoped<AiSuggestTestsService>();
 builder.Services.Configure<EntitlementOptions>(builder.Configuration.GetSection("Entitlements"));
 builder.Services.AddSingleton<EntitlementService>();
@@ -1637,6 +1638,76 @@ async Task<IResult> SuggestAiTestsEndpointAsync(
     }
 }
 
+async Task<IResult> SummariseRunAiEndpointAsync(
+    HttpContext httpContext,
+    ITestRunStore runStore,
+    IProjectStore projectStore,
+    IOrganisationStore orgStore,
+    AiRunSummaryService summaryService,
+    EntitlementService entitlements,
+    CancellationToken ct)
+{
+    if (!entitlements.CanUseAi)
+        return FeatureNotAvailable("AI", entitlements);
+
+    var payload = await httpContext.Request.ReadFromJsonAsync<AiSummariseRunRequest>(cancellationToken: ct);
+    if (payload is null)
+        return InvalidRequest("Request body is required.");
+
+    if (!RequestValidation.TryParseGuid(payload.RunId, out var runId, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var run = await runStore.GetAsync(orgContext.OrganisationId, runId);
+    if (run is null)
+        return Results.NotFound();
+
+    var project = await projectStore.GetByKeyAsync(orgContext.OrganisationId, run.ProjectKey, ct);
+    if (project is null)
+        return Results.NotFound();
+
+    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    if (org is null)
+        return Results.NotFound();
+
+    try
+    {
+        var input = new AiRunSummaryInput(org, project.ProjectId, run);
+        var result = await summaryService.SummariseAsync(input, ct);
+        var response = new AiRunSummaryResponse(
+            run.RunId,
+            result.Payload.OverallSummary,
+            result.Payload.TopFailures.Select(failure => new AiRunSummaryFailureDto(
+                failure.Title,
+                failure.EvidenceRefs.Select(evidence => new AiRunSummaryEvidenceRefDto(
+                    evidence.CaseName,
+                    evidence.FailureReason)).ToList())).ToList(),
+            result.Payload.FlakeAssessment,
+            new AiRunSummaryRegressionLikelihoodDto(
+                result.Payload.RegressionLikelihood.Level,
+                result.Payload.RegressionLikelihood.Rationale),
+            result.Payload.RecommendedNextActions.ToList());
+
+        return Results.Ok(response);
+    }
+    catch (AiSchemaValidationException ex)
+    {
+        return Results.Problem(title: "AI response invalid", detail: ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+    catch (AiFeatureDisabledException ex)
+    {
+        return Results.Problem(title: "Feature not available", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden);
+    }
+    catch (AiRateLimitExceededException ex)
+    {
+        return Results.Problem(title: "AI rate limit exceeded", detail: ex.Message, statusCode: StatusCodes.Status429TooManyRequests);
+    }
+}
+
 async Task<IResult> RunDraftPlanFromAiAsync(
     string draftId,
     string? environment,
@@ -1732,6 +1803,8 @@ app.MapPost("/api/ai/explain", ExplainAiEndpointAsync);
 app.MapPost("/ai/explain", ExplainAiEndpointAsync);
 app.MapPost("/api/ai/suggest-tests", SuggestAiTestsEndpointAsync);
 app.MapPost("/ai/suggest-tests", SuggestAiTestsEndpointAsync);
+app.MapPost("/api/ai/summarise-run", SummariseRunAiEndpointAsync);
+app.MapPost("/ai/summarise-run", SummariseRunAiEndpointAsync);
 
 app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, IAiClient aiClient, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
 {
