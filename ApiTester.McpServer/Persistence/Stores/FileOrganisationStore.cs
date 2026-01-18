@@ -57,6 +57,46 @@ public sealed class FileOrganisationStore : IOrganisationStore
         return list.FirstOrDefault(o => o.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
     }
 
+    public async Task<OrganisationRecord?> UpdateSettingsAsync(
+        Guid organisationId,
+        int? retentionDays,
+        IReadOnlyList<string> redactionRules,
+        CancellationToken ct)
+    {
+        await _mutex.WaitAsync(ct);
+        try
+        {
+            var list = await LoadAsync(ct);
+            var existing = list.FirstOrDefault(o => o.OrganisationId == organisationId);
+            if (existing is null)
+                return null;
+
+            var normalizedRules = redactionRules?
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Select(r => r.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList() ?? new List<string>();
+
+            var updated = new OrganisationRecord(
+                existing.OrganisationId,
+                existing.Name,
+                existing.Slug,
+                existing.CreatedUtc,
+                retentionDays,
+                normalizedRules);
+
+            var index = list.IndexOf(existing);
+            list[index] = updated;
+
+            await SaveAsync(list, ct);
+            return updated;
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
     private async Task<List<OrganisationRecord>> LoadAsync(CancellationToken ct)
     {
         if (!File.Exists(FilePath))

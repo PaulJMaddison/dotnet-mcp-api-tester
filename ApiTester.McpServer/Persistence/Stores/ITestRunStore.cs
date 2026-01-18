@@ -17,4 +17,6 @@ public interface ITestRunStore
         SortField sortField,
         SortDirection direction,
         string? operationId = null);
+
+    Task<int> PruneAsync(Guid organisationId, DateTimeOffset cutoffUtc, CancellationToken ct);
 }

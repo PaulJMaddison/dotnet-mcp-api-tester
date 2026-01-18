@@ -1,5 +1,6 @@
 ﻿using ApiTester.McpServer.Options;
 using ApiTester.McpServer.Persistence.Stores;
+using ApiTester.McpServer.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,6 +15,7 @@ public static class PersistenceServiceCollectionExtensions
         var selection = PersistenceProviderSelector.Select(options);
 
         services.Configure<PersistenceOptions>(configuration.GetSection("Persistence"));
+        services.AddSingleton<RedactionService>();
 
         services.AddSingleton<FileTestRunStore>();
         services.AddSingleton<FileProjectStore>();

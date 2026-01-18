@@ -2,6 +2,7 @@
 using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Entities;
 using ApiTester.McpServer.Serialization;
+using ApiTester.McpServer.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -12,11 +13,19 @@ public sealed class SqlTestRunStore : ITestRunStore
 {
     private readonly ApiTesterDbContext _db;
     private readonly ILogger<SqlTestRunStore> _logger;
+    private readonly IOrganisationStore _organisationStore;
+    private readonly RedactionService _redactionService;
 
-    public SqlTestRunStore(ApiTesterDbContext db, ILogger<SqlTestRunStore> logger)
+    public SqlTestRunStore(
+        ApiTesterDbContext db,
+        ILogger<SqlTestRunStore> logger,
+        IOrganisationStore organisationStore,
+        RedactionService redactionService)
     {
         _db = db;
         _logger = logger;
+        _organisationStore = organisationStore;
+        _redactionService = redactionService;
     }
 
     public async Task SaveAsync(TestRunRecord record)
@@ -27,7 +36,9 @@ public sealed class SqlTestRunStore : ITestRunStore
         var projectKey = string.IsNullOrWhiteSpace(record.ProjectKey) ? "default" : record.ProjectKey.Trim();
         var ownerKey = string.IsNullOrWhiteSpace(record.OwnerKey) ? OwnerKeyDefaults.Default : record.OwnerKey.Trim();
 
-        record.Result.ClassificationSummary = ResultClassificationRules.Summarize(record.Result.Results);
+        var org = await _organisationStore.GetAsync(organisationId, CancellationToken.None);
+        var redactedResult = _redactionService.RedactResult(record.Result, org?.RedactionRules);
+        redactedResult.ClassificationSummary = ResultClassificationRules.Summarize(redactedResult.Results);
 
         var project = await EnsureProjectAsync(organisationId, projectKey, ownerKey);
         _logger.LogInformation(
@@ -55,13 +66,13 @@ public sealed class SqlTestRunStore : ITestRunStore
             StartedUtc = record.StartedUtc.UtcDateTime,
             CompletedUtc = record.CompletedUtc.UtcDateTime,
 
-            TotalCases = record.Result.TotalCases,
-            Passed = record.Result.Passed,
-            Failed = record.Result.Failed,
-            Blocked = record.Result.Blocked,
-            TotalDurationMs = record.Result.TotalDurationMs,
+            TotalCases = redactedResult.TotalCases,
+            Passed = redactedResult.Passed,
+            Failed = redactedResult.Failed,
+            Blocked = redactedResult.Blocked,
+            TotalDurationMs = redactedResult.TotalDurationMs,
 
-            Results = record.Result.Results.Select(r => new TestCaseResultEntity
+            Results = redactedResult.Results.Select(r => new TestCaseResultEntity
             {
                 Name = r.Name ?? "",
                 Blocked = r.Blocked,
@@ -266,6 +277,25 @@ public sealed class SqlTestRunStore : ITestRunStore
             : null;
 
         return new PagedResult<TestRunRecord>(items, total, nextOffset);
+    }
+
+    public async Task<int> PruneAsync(Guid organisationId, DateTimeOffset cutoffUtc, CancellationToken ct)
+    {
+        organisationId = NormalizeOrganisationId(organisationId);
+        var cutoff = cutoffUtc.UtcDateTime;
+
+        var runs = await _db.TestRuns
+            .Include(x => x.Project)
+            .Where(x => x.Project != null && x.Project.OrganisationId == organisationId)
+            .Where(x => x.CompletedUtc < cutoff)
+            .ToListAsync(ct);
+
+        if (runs.Count == 0)
+            return 0;
+
+        _db.TestRuns.RemoveRange(runs);
+        await _db.SaveChangesAsync(ct);
+        return runs.Count;
     }
 
     private async Task<ProjectEntity> EnsureProjectAsync(Guid organisationId, string projectKey, string ownerKey)
