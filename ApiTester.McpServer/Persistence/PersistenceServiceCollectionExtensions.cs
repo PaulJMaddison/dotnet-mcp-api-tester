@@ -21,8 +21,14 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<FileTestPlanStore>();
         services.AddSingleton<FileEnvironmentStore>();
         services.AddSingleton<FileRunAnnotationStore>();
+        services.AddSingleton<FileOrganisationStore>();
+        services.AddSingleton<FileUserStore>();
+        services.AddSingleton<FileMembershipStore>();
         services.AddScoped<SqlTestRunStore>();
         services.AddScoped<SqlProjectStore>();
+        services.AddScoped<SqlOrganisationStore>();
+        services.AddScoped<SqlUserStore>();
+        services.AddScoped<SqlMembershipStore>();
 
         if (selection.UseSqlProvider)
         {
@@ -36,10 +42,16 @@ public static class PersistenceServiceCollectionExtensions
             services.AddScoped<SqlTestPlanStore>();
             services.AddScoped<SqlEnvironmentStore>();
             services.AddScoped<SqlRunAnnotationStore>();
+            services.AddScoped<SqlOrganisationStore>();
+            services.AddScoped<SqlUserStore>();
+            services.AddScoped<SqlMembershipStore>();
             services.AddScoped<IOpenApiSpecStore>(sp => sp.GetRequiredService<SqlOpenApiSpecStore>());
             services.AddScoped<ITestPlanStore>(sp => sp.GetRequiredService<SqlTestPlanStore>());
             services.AddScoped<IEnvironmentStore>(sp => sp.GetRequiredService<SqlEnvironmentStore>());
             services.AddScoped<IRunAnnotationStore>(sp => sp.GetRequiredService<SqlRunAnnotationStore>());
+            services.AddScoped<IOrganisationStore>(sp => sp.GetRequiredService<SqlOrganisationStore>());
+            services.AddScoped<IUserStore>(sp => sp.GetRequiredService<SqlUserStore>());
+            services.AddScoped<IMembershipStore>(sp => sp.GetRequiredService<SqlMembershipStore>());
         }
         else
         {
@@ -47,6 +59,9 @@ public static class PersistenceServiceCollectionExtensions
             services.AddSingleton<ITestPlanStore>(sp => sp.GetRequiredService<FileTestPlanStore>());
             services.AddSingleton<IEnvironmentStore>(sp => sp.GetRequiredService<FileEnvironmentStore>());
             services.AddSingleton<IRunAnnotationStore>(sp => sp.GetRequiredService<FileRunAnnotationStore>());
+            services.AddSingleton<IOrganisationStore>(sp => sp.GetRequiredService<FileOrganisationStore>());
+            services.AddSingleton<IUserStore>(sp => sp.GetRequiredService<FileUserStore>());
+            services.AddSingleton<IMembershipStore>(sp => sp.GetRequiredService<FileMembershipStore>());
         }
 
         services.AddScoped<ITestRunStore>(sp => UseSqlServer(sp)

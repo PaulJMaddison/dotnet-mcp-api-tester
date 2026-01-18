@@ -13,18 +13,19 @@ public sealed class SqlProjectStore : IProjectStore
         _db = db;
     }
 
-    public async Task<ProjectRecord> CreateAsync(string ownerKey, string name, CancellationToken ct)
+    public async Task<ProjectRecord> CreateAsync(Guid organisationId, string ownerKey, string name, CancellationToken ct)
     {
         name = (name ?? "").Trim();
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Project name is required.", nameof(name));
 
+        organisationId = NormalizeOrganisationId(organisationId);
         ownerKey = NormalizeOwnerKey(ownerKey);
         var key = ProjectKeyGenerator.FromName(name);
 
         var existing = await _db.Projects.AsNoTracking()
-            .Where(x => x.OwnerKey == ownerKey && x.ProjectKey == key)
-            .Select(x => new ProjectRecord(x.ProjectId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
+            .Where(x => x.OrganisationId == organisationId && x.ProjectKey == key)
+            .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
             .FirstOrDefaultAsync(ct);
         if (existing is not null)
             return existing;
@@ -32,6 +33,7 @@ public sealed class SqlProjectStore : IProjectStore
         var entity = new ProjectEntity
         {
             ProjectId = Guid.NewGuid(),
+            OrganisationId = organisationId,
             OwnerKey = ownerKey,
             ProjectKey = key,
             Name = name,
@@ -42,13 +44,13 @@ public sealed class SqlProjectStore : IProjectStore
         try
         {
             await _db.SaveChangesAsync(ct);
-            return new ProjectRecord(entity.ProjectId, entity.OwnerKey, entity.Name, entity.ProjectKey, entity.CreatedUtc);
+            return new ProjectRecord(entity.ProjectId, entity.OrganisationId, entity.OwnerKey, entity.Name, entity.ProjectKey, entity.CreatedUtc);
         }
         catch (DbUpdateException)
         {
             var fallback = await _db.Projects.AsNoTracking()
-                .Where(x => x.OwnerKey == ownerKey && x.ProjectKey == key)
-                .Select(x => new ProjectRecord(x.ProjectId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
+                .Where(x => x.OrganisationId == organisationId && x.ProjectKey == key)
+                .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
                 .FirstOrDefaultAsync(ct);
             if (fallback is not null)
                 return fallback;
@@ -57,10 +59,10 @@ public sealed class SqlProjectStore : IProjectStore
         }
     }
 
-    public async Task<PagedResult<ProjectRecord>> ListAsync(string ownerKey, PageRequest request, SortField sortField, SortDirection direction, CancellationToken ct)
+    public async Task<PagedResult<ProjectRecord>> ListAsync(Guid organisationId, PageRequest request, SortField sortField, SortDirection direction, CancellationToken ct)
     {
-        ownerKey = NormalizeOwnerKey(ownerKey);
-        var baseQuery = _db.Projects.AsNoTracking().Where(x => x.OwnerKey == ownerKey);
+        organisationId = NormalizeOrganisationId(organisationId);
+        var baseQuery = _db.Projects.AsNoTracking().Where(x => x.OrganisationId == organisationId);
         var total = await baseQuery.CountAsync(ct);
 
         var ordered = sortField switch
@@ -76,7 +78,7 @@ public sealed class SqlProjectStore : IProjectStore
         var projects = await ordered
             .Skip(request.Offset)
             .Take(request.PageSize)
-            .Select(x => new ProjectRecord(x.ProjectId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
+            .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
             .ToListAsync(ct);
 
         int? nextOffset = request.Offset + projects.Count < total
@@ -86,25 +88,25 @@ public sealed class SqlProjectStore : IProjectStore
         return new PagedResult<ProjectRecord>(projects, total, nextOffset);
     }
 
-    public async Task<ProjectRecord?> GetAsync(string ownerKey, Guid projectId, CancellationToken ct)
+    public async Task<ProjectRecord?> GetAsync(Guid organisationId, Guid projectId, CancellationToken ct)
     {
-        ownerKey = NormalizeOwnerKey(ownerKey);
+        organisationId = NormalizeOrganisationId(organisationId);
         return await _db.Projects
             .AsNoTracking()
-            .Where(x => x.ProjectId == projectId && x.OwnerKey == ownerKey)
-            .Select(x => new ProjectRecord(x.ProjectId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
+            .Where(x => x.ProjectId == projectId && x.OrganisationId == organisationId)
+            .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<ProjectRecord?> GetByKeyAsync(string ownerKey, string projectKey, CancellationToken ct)
+    public async Task<ProjectRecord?> GetByKeyAsync(Guid organisationId, string projectKey, CancellationToken ct)
     {
-        ownerKey = NormalizeOwnerKey(ownerKey);
+        organisationId = NormalizeOrganisationId(organisationId);
         projectKey = NormalizeProjectKey(projectKey);
 
         return await _db.Projects
             .AsNoTracking()
-            .Where(x => x.OwnerKey == ownerKey && x.ProjectKey == projectKey)
-            .Select(x => new ProjectRecord(x.ProjectId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
+            .Where(x => x.OrganisationId == organisationId && x.ProjectKey == projectKey)
+            .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
             .FirstOrDefaultAsync(ct);
     }
 
@@ -122,4 +124,7 @@ public sealed class SqlProjectStore : IProjectStore
         projectKey = (projectKey ?? "").Trim();
         return string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey;
     }
+
+    private static Guid NormalizeOrganisationId(Guid organisationId)
+        => organisationId == Guid.Empty ? OrgDefaults.DefaultOrganisationId : organisationId;
 }

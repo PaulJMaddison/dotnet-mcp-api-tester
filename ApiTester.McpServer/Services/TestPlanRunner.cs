@@ -58,7 +58,18 @@ public sealed class TestPlanRunner
     }
 
     public async Task<TestRunRecord> RunPlanAsync(TestPlan plan, string projectKey, CancellationToken ct = default)
-        => await RunPlanAsync(plan, projectKey, OwnerKeyDefaults.Default, null, null, null, ct);
+        => await RunPlanAsync(plan, projectKey, OrgDefaults.DefaultOrganisationId, OwnerKeyDefaults.Default, null, null, null, ct);
+
+    public async Task<TestRunRecord> RunPlanAsync(
+        TestPlan plan,
+        string projectKey,
+        Guid organisationId,
+        string ownerKey,
+        Guid? specId,
+        string? actor,
+        string? environmentName,
+        CancellationToken ct = default)
+        => await RunPlanInternalAsync(plan, projectKey, organisationId, ownerKey, specId, actor, environmentName, ct);
 
     public async Task<TestRunRecord> RunPlanAsync(
         TestPlan plan,
@@ -68,6 +79,17 @@ public sealed class TestPlanRunner
         string? actor,
         string? environmentName,
         CancellationToken ct = default)
+        => await RunPlanInternalAsync(plan, projectKey, OrgDefaults.DefaultOrganisationId, ownerKey, specId, actor, environmentName, ct);
+
+    private async Task<TestRunRecord> RunPlanInternalAsync(
+        TestPlan plan,
+        string projectKey,
+        Guid organisationId,
+        string ownerKey,
+        Guid? specId,
+        string? actor,
+        string? environmentName,
+        CancellationToken ct)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
@@ -75,6 +97,7 @@ public sealed class TestPlanRunner
         if (string.IsNullOrWhiteSpace(plan.OperationId))
             throw new InvalidOperationException("Test plan missing operationId.");
 
+        organisationId = organisationId == Guid.Empty ? OrgDefaults.DefaultOrganisationId : organisationId;
         ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
 
@@ -85,8 +108,9 @@ public sealed class TestPlanRunner
         var policySnapshot = ApiExecutionPolicySnapshot.FromPolicy(_cfg.Policy);
 
         _logger.LogInformation(
-            "Executing test plan {OperationId} for owner {OwnerKey} project {ProjectKey} with {CaseCount} cases",
+            "Executing test plan {OperationId} for org {OrganisationId} owner {OwnerKey} project {ProjectKey} with {CaseCount} cases",
             plan.OperationId,
+            organisationId,
             ownerKey,
             projectKey,
             plan.Cases.Count);
@@ -124,6 +148,7 @@ public sealed class TestPlanRunner
         var record = new TestRunRecord
         {
             RunId = Guid.NewGuid(),
+            OrganisationId = organisationId,
             Actor = auditActor,
             Environment = environmentSnapshot,
             PolicySnapshot = policySnapshot,

@@ -25,10 +25,10 @@ public sealed class RunAuditImmutabilityTests
             await store.SaveAsync(baseline);
             await store.SaveAsync(run);
 
-            var updated = await store.SetBaselineAsync(run.OwnerKey, run.RunId, baseline.RunId);
+            var updated = await store.SetBaselineAsync(run.OrganisationId, run.RunId, baseline.RunId);
             Assert.True(updated);
 
-            var reloaded = await store.GetAsync(run.OwnerKey, run.RunId);
+            var reloaded = await store.GetAsync(run.OrganisationId, run.RunId);
 
             Assert.NotNull(reloaded);
             Assert.Equal(run.Actor, reloaded!.Actor);
@@ -55,6 +55,7 @@ public sealed class RunAuditImmutabilityTests
         => new()
         {
             RunId = Guid.NewGuid(),
+            OrganisationId = OrgDefaults.DefaultOrganisationId,
             Actor = actor,
             Environment = new TestRunEnvironmentSnapshot(environmentName, "https://example.com"),
             PolicySnapshot = new ApiExecutionPolicySnapshot(

@@ -18,28 +18,30 @@ public sealed class FileTestRunStore : ITestRunStore
 
     private string RootPath => Path.Combine(_cfg.WorkingDirectory, "run-history");
 
-    private string OwnerPath(string ownerKey)
-        => Path.Combine(RootPath, Sanitize(ownerKey));
+    private string OrgPath(Guid organisationId)
+        => Path.Combine(RootPath, Sanitize(NormalizeOrganisationId(organisationId).ToString("N")));
 
-    private string ProjectPath(string ownerKey, string projectKey)
-        => Path.Combine(OwnerPath(ownerKey), Sanitize(projectKey));
+    private string ProjectPath(Guid organisationId, string projectKey)
+        => Path.Combine(OrgPath(organisationId), Sanitize(projectKey));
 
-    private string RunFilePath(string ownerKey, string projectKey, Guid runId)
-        => Path.Combine(ProjectPath(ownerKey, projectKey), $"{runId:D}.json");
+    private string RunFilePath(Guid organisationId, string projectKey, Guid runId)
+        => Path.Combine(ProjectPath(organisationId, projectKey), $"{runId:D}.json");
 
     public async Task SaveAsync(TestRunRecord record)
     {
         if (record is null) throw new ArgumentNullException(nameof(record));
         if (record.Result is null) throw new ArgumentNullException(nameof(record.Result));
+        var organisationId = NormalizeOrganisationId(record.OrganisationId);
         var ownerKey = string.IsNullOrWhiteSpace(record.OwnerKey) ? OwnerKeyDefaults.Default : record.OwnerKey.Trim();
         var projectKey = string.IsNullOrWhiteSpace(record.ProjectKey) ? "default" : record.ProjectKey.Trim();
 
-        Directory.CreateDirectory(ProjectPath(ownerKey, projectKey));
+        Directory.CreateDirectory(ProjectPath(organisationId, projectKey));
 
-        var path = RunFilePath(ownerKey, projectKey, record.RunId);
+        var path = RunFilePath(organisationId, projectKey, record.RunId);
         _logger.LogInformation(
-            "Saving run {RunId} for owner {OwnerKey} project {ProjectKey} to {Path}",
+            "Saving run {RunId} for org {OrganisationId} owner {OwnerKey} project {ProjectKey} to {Path}",
             record.RunId,
+            organisationId,
             ownerKey,
             projectKey,
             path);
@@ -48,6 +50,7 @@ public sealed class FileTestRunStore : ITestRunStore
         var recordToSave = new TestRunRecord
         {
             RunId = record.RunId,
+            OrganisationId = organisationId,
             Actor = record.Actor,
             Environment = record.Environment,
             PolicySnapshot = record.PolicySnapshot,
@@ -66,19 +69,19 @@ public sealed class FileTestRunStore : ITestRunStore
         await File.WriteAllTextAsync(path, json);
     }
 
-    public async Task<TestRunRecord?> GetAsync(string ownerKey, Guid runId)
+    public async Task<TestRunRecord?> GetAsync(Guid organisationId, Guid runId)
     {
-        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
+        organisationId = NormalizeOrganisationId(organisationId);
 
         if (!Directory.Exists(RootPath))
             return null;
 
-        var ownerDir = OwnerPath(ownerKey);
-        if (!Directory.Exists(ownerDir))
+        var orgDir = OrgPath(organisationId);
+        if (!Directory.Exists(orgDir))
             return null;
 
         // Search all projects for the runId file
-        foreach (var projectDir in Directory.EnumerateDirectories(ownerDir))
+        foreach (var projectDir in Directory.EnumerateDirectories(orgDir))
         {
             var candidate = Path.Combine(projectDir, $"{runId:D}.json");
             if (!File.Exists(candidate))
@@ -88,7 +91,7 @@ public sealed class FileTestRunStore : ITestRunStore
             var record = JsonSerializer.Deserialize<TestRunRecord>(json, JsonDefaults.Default);
             if (record is not null)
             {
-                record = NormalizeRecord(record, ownerKey, Path.GetFileName(projectDir) ?? "default");
+                record = NormalizeRecord(record, organisationId, Path.GetFileName(projectDir) ?? "default");
                 record.Result.ClassificationSummary = ResultClassificationRules.Summarize(record.Result.Results);
             }
             return record;
@@ -97,22 +100,22 @@ public sealed class FileTestRunStore : ITestRunStore
         return null;
     }
 
-    public async Task<bool> SetBaselineAsync(string ownerKey, Guid runId, Guid baselineRunId)
+    public async Task<bool> SetBaselineAsync(Guid organisationId, Guid runId, Guid baselineRunId)
     {
-        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
+        organisationId = NormalizeOrganisationId(organisationId);
 
         if (!Directory.Exists(RootPath))
             return false;
 
-        var ownerDir = OwnerPath(ownerKey);
-        if (!Directory.Exists(ownerDir))
+        var orgDir = OrgPath(organisationId);
+        if (!Directory.Exists(orgDir))
             return false;
 
-        var baseline = await GetAsync(ownerKey, baselineRunId);
+        var baseline = await GetAsync(organisationId, baselineRunId);
         if (baseline is null)
             return false;
 
-        foreach (var projectDir in Directory.EnumerateDirectories(ownerDir))
+        foreach (var projectDir in Directory.EnumerateDirectories(orgDir))
         {
             var candidate = Path.Combine(projectDir, $"{runId:D}.json");
             if (!File.Exists(candidate))
@@ -133,18 +136,18 @@ public sealed class FileTestRunStore : ITestRunStore
     }
 
     public async Task<PagedResult<TestRunRecord>> ListAsync(
-        string ownerKey,
+        Guid organisationId,
         string projectKey,
         PageRequest request,
         SortField sortField,
         SortDirection direction,
         string? operationId = null)
     {
-        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
+        organisationId = NormalizeOrganisationId(organisationId);
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
         operationId = string.IsNullOrWhiteSpace(operationId) ? null : operationId.Trim();
 
-        var dir = ProjectPath(ownerKey, projectKey);
+        var dir = ProjectPath(organisationId, projectKey);
         if (!Directory.Exists(dir))
             return new PagedResult<TestRunRecord>(Array.Empty<TestRunRecord>(), 0, null);
 
@@ -161,15 +164,16 @@ public sealed class FileTestRunStore : ITestRunStore
             if (record is null)
                 continue;
 
-            if (string.IsNullOrWhiteSpace(record.OwnerKey))
+            if (record.OrganisationId == Guid.Empty || string.IsNullOrWhiteSpace(record.OwnerKey))
             {
                 record = new TestRunRecord
                 {
                     RunId = record.RunId,
+                    OrganisationId = organisationId,
                     Actor = record.Actor,
                     Environment = record.Environment,
                     PolicySnapshot = record.PolicySnapshot,
-                    OwnerKey = ownerKey,
+                    OwnerKey = OwnerKeyDefaults.Default,
                     ProjectKey = record.ProjectKey,
                     OperationId = record.OperationId,
                     BaselineRunId = record.BaselineRunId,
@@ -189,10 +193,11 @@ public sealed class FileTestRunStore : ITestRunStore
                 record = new TestRunRecord
                 {
                     RunId = record.RunId,
+                    OrganisationId = organisationId,
                     Actor = record.Actor,
                     Environment = record.Environment,
                     PolicySnapshot = record.PolicySnapshot,
-                    OwnerKey = ownerKey,
+                    OwnerKey = record.OwnerKey,
                     ProjectKey = projectKey,
                     OperationId = record.OperationId,
                     BaselineRunId = record.BaselineRunId,
@@ -238,20 +243,27 @@ public sealed class FileTestRunStore : ITestRunStore
         return string.IsNullOrWhiteSpace(cleaned) ? "default" : cleaned;
     }
 
-    private static TestRunRecord NormalizeRecord(TestRunRecord record, string ownerKey, string projectKey)
+    private static TestRunRecord NormalizeRecord(TestRunRecord record, Guid organisationId, string projectKey)
     {
-        var normalizedOwnerKey = string.IsNullOrWhiteSpace(record.OwnerKey) ? ownerKey : record.OwnerKey.Trim();
+        var normalizedOrganisationId = record.OrganisationId == Guid.Empty
+            ? organisationId
+            : record.OrganisationId;
+        var normalizedOwnerKey = string.IsNullOrWhiteSpace(record.OwnerKey)
+            ? OwnerKeyDefaults.Default
+            : record.OwnerKey.Trim();
         var normalizedProjectKey = string.IsNullOrWhiteSpace(record.ProjectKey) ? projectKey : record.ProjectKey.Trim();
-        if (!string.Equals(normalizedOwnerKey, record.OwnerKey, StringComparison.Ordinal) ||
+        if (normalizedOrganisationId != record.OrganisationId ||
+            !string.Equals(normalizedOwnerKey, record.OwnerKey, StringComparison.Ordinal) ||
             !string.Equals(normalizedProjectKey, record.ProjectKey, StringComparison.Ordinal))
         {
             return new TestRunRecord
             {
                 RunId = record.RunId,
+                OrganisationId = normalizedOrganisationId,
                 Actor = record.Actor,
                 Environment = record.Environment,
                 PolicySnapshot = record.PolicySnapshot,
-                OwnerKey = string.IsNullOrWhiteSpace(normalizedOwnerKey) ? OwnerKeyDefaults.Default : normalizedOwnerKey,
+                OwnerKey = normalizedOwnerKey,
                 ProjectKey = string.IsNullOrWhiteSpace(normalizedProjectKey) ? "default" : normalizedProjectKey,
                 OperationId = record.OperationId,
                 SpecId = record.SpecId,
@@ -264,4 +276,7 @@ public sealed class FileTestRunStore : ITestRunStore
 
         return record;
     }
+
+    private static Guid NormalizeOrganisationId(Guid organisationId)
+        => organisationId == Guid.Empty ? OrgDefaults.DefaultOrganisationId : organisationId;
 }

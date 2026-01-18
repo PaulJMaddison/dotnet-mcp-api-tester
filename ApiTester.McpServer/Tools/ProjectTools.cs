@@ -27,7 +27,7 @@ public sealed class ProjectTools
         if (string.IsNullOrWhiteSpace(name))
             return new { isError = true, error = "Project name is required." };
 
-        var project = await _projects.CreateAsync(OwnerKeyDefaults.Default, name, ct);
+        var project = await _projects.CreateAsync(OrgDefaults.DefaultOrganisationId, OwnerKeyDefaults.Default, name, ct);
         _ctx.SetCurrentProject(project.ProjectId);
         _logger.LogInformation("Created project {ProjectId} with name {ProjectName}", project.ProjectId, project.Name);
         return new { projectId = project.ProjectId, currentProjectId = project.ProjectId };
@@ -37,7 +37,7 @@ public sealed class ProjectTools
     public async Task<object> ApiListProjects(int take = 50, CancellationToken ct = default)
     {
         var normalizedTake = Math.Clamp(take, 1, 200);
-        var result = await _projects.ListAsync(OwnerKeyDefaults.Default, new PageRequest(normalizedTake, 0), SortField.CreatedUtc, SortDirection.Desc, ct);
+        var result = await _projects.ListAsync(OrgDefaults.DefaultOrganisationId, new PageRequest(normalizedTake, 0), SortField.CreatedUtc, SortDirection.Desc, ct);
         return new
         {
             pageSize = normalizedTake,
@@ -53,7 +53,7 @@ public sealed class ProjectTools
         if (!Guid.TryParse(projectId, out var id))
             return new { ok = false, reason = "Invalid projectId GUID." };
 
-        if (await _projects.GetAsync(OwnerKeyDefaults.Default, id, ct) is null)
+        if (await _projects.GetAsync(OrgDefaults.DefaultOrganisationId, id, ct) is null)
             return new { ok = false, reason = "Project not found." };
 
         _ctx.SetCurrentProject(id);

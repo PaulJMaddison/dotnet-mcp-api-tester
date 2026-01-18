@@ -35,7 +35,7 @@ public sealed class RunHistoryTools
 
         // Day 14: store supports filtering (file store folder today, SQL WHERE later)
         var result = await _store.ListAsync(
-            OwnerKeyDefaults.Default,
+            OrgDefaults.DefaultOrganisationId,
             projectKey,
             new PageRequest(normalizedTake, 0),
             SortField.StartedUtc,
@@ -74,7 +74,7 @@ public sealed class RunHistoryTools
         if (!Guid.TryParse(runId, out var id))
             return new { isError = true, error = "Invalid runId, expected a GUID." };
 
-        var run = await _store.GetAsync(OwnerKeyDefaults.Default, id);
+        var run = await _store.GetAsync(OrgDefaults.DefaultOrganisationId, id);
         if (run is null)
             return new { run = (object?)null };
 
@@ -115,7 +115,7 @@ public sealed class RunHistoryTools
             take);
 
         var result = await _store.ListAsync(
-            OwnerKeyDefaults.Default,
+            OrgDefaults.DefaultOrganisationId,
             projectKey,
             new PageRequest(Math.Max(1, take), 0),
             SortField.StartedUtc,
@@ -177,11 +177,11 @@ public sealed class RunHistoryTools
         List<TestRunRecord> runs)
     {
         if (baselineId.HasValue)
-            return await _store.GetAsync(OwnerKeyDefaults.Default, baselineId.Value);
+            return await _store.GetAsync(OrgDefaults.DefaultOrganisationId, baselineId.Value);
 
         var lastRun = runs.LastOrDefault();
         if (lastRun?.BaselineRunId is Guid storedBaselineId)
-            return await _store.GetAsync(OwnerKeyDefaults.Default, storedBaselineId);
+            return await _store.GetAsync(OrgDefaults.DefaultOrganisationId, storedBaselineId);
 
         return runs.Count > 1 ? runs[^2] : null;
     }
