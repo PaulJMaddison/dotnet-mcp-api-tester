@@ -31,6 +31,7 @@ public sealed class PersistenceRegistrationTests
         var environmentStore = scope.ServiceProvider.GetRequiredService<IEnvironmentStore>();
         var apiKeyStore = scope.ServiceProvider.GetRequiredService<IApiKeyStore>();
         var aiInsightStore = scope.ServiceProvider.GetRequiredService<IAiInsightStore>();
+        var draftStore = scope.ServiceProvider.GetRequiredService<ITestPlanDraftStore>();
 
         Assert.IsType<FileProjectStore>(store);
         Assert.IsType<FileTestRunStore>(runStore);
@@ -38,6 +39,7 @@ public sealed class PersistenceRegistrationTests
         Assert.IsType<FileEnvironmentStore>(environmentStore);
         Assert.IsType<FileApiKeyStore>(apiKeyStore);
         Assert.IsType<FileAiInsightStore>(aiInsightStore);
+        Assert.IsType<FileTestPlanDraftStore>(draftStore);
         Assert.Null(scope.ServiceProvider.GetService<ApiTesterDbContext>());
     }
 
@@ -65,6 +67,7 @@ public sealed class PersistenceRegistrationTests
         var environmentStore = scope.ServiceProvider.GetRequiredService<IEnvironmentStore>();
         var apiKeyStore = scope.ServiceProvider.GetRequiredService<IApiKeyStore>();
         var aiInsightStore = scope.ServiceProvider.GetRequiredService<IAiInsightStore>();
+        var draftStore = scope.ServiceProvider.GetRequiredService<ITestPlanDraftStore>();
 
         Assert.IsType<SqlProjectStore>(store);
         Assert.IsType<SqlTestRunStore>(runStore);
@@ -72,6 +75,7 @@ public sealed class PersistenceRegistrationTests
         Assert.IsType<SqlEnvironmentStore>(environmentStore);
         Assert.IsType<SqlApiKeyStore>(apiKeyStore);
         Assert.IsType<SqlAiInsightStore>(aiInsightStore);
+        Assert.IsType<SqlTestPlanDraftStore>(draftStore);
         Assert.NotNull(scope.ServiceProvider.GetService<ApiTesterDbContext>());
     }
 }

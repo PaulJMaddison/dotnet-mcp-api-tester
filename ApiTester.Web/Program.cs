@@ -101,6 +101,7 @@ builder.Services.AddSingleton<AiRateLimiter>();
 builder.Services.AddSingleton<IAiProvider, StubAiProvider>();
 builder.Services.AddScoped<AiAnalysisService>();
 builder.Services.AddScoped<AiExplainService>();
+builder.Services.AddScoped<AiSuggestTestsService>();
 builder.Services.Configure<EntitlementOptions>(builder.Configuration.GetSection("Entitlements"));
 builder.Services.AddSingleton<EntitlementService>();
 builder.Services.AddScoped<OrgContextResolver>();
@@ -905,6 +906,9 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     return Results.Ok(RunMapping.ToDetailDto(run));
 });
 
+app.MapPost("/test-plans/from-ai-draft/{draftId}/run", RunDraftPlanFromAiAsync);
+app.MapPost("/api/test-plans/from-ai-draft/{draftId}/run", RunDraftPlanFromAiAsync);
+
 app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, IProjectStore projectStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredKey(projectKey, "projectKey", out var keyError))
@@ -1558,8 +1562,176 @@ async Task<IResult> ExplainAiEndpointAsync(
     }
 }
 
+async Task<IResult> SuggestAiTestsEndpointAsync(
+    HttpContext httpContext,
+    IProjectStore projectStore,
+    IOpenApiSpecStore specStore,
+    IOrganisationStore orgStore,
+    AiSuggestTestsService aiSuggestTestsService,
+    EntitlementService entitlements,
+    CancellationToken ct)
+{
+    if (!entitlements.CanUseAi)
+        return FeatureNotAvailable("AI", entitlements);
+
+    var payload = await httpContext.Request.ReadFromJsonAsync<AiSuggestTestsRequest>(cancellationToken: ct);
+    if (payload is null)
+        return InvalidRequest("Request body is required.");
+
+    if (!RequestValidation.TryParseGuid(payload.ProjectId, out var projectId, out var error))
+        return InvalidRequest(error);
+
+    if (string.IsNullOrWhiteSpace(payload.OperationId))
+        return InvalidRequest("operationId is required.");
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, projectId, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, projectId, ct);
+
+    var spec = await specStore.GetAsync(projectId, ct);
+    if (spec is null)
+        return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before requesting AI suggestions.", statusCode: StatusCodes.Status409Conflict);
+
+    var reader = new OpenApiStringReader();
+    var doc = reader.Read(spec.SpecJson, out _);
+    if (doc is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Stored OpenAPI spec could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var trimmedOperationId = payload.OperationId.Trim();
+    var match = FindOperation(doc, trimmedOperationId);
+    if (match is null)
+        return Results.NotFound();
+
+    var (path, method, op) = match.Value;
+    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    if (org is null)
+        return Results.NotFound();
+
+    try
+    {
+        var input = new AiSuggestTestsInput(org, projectId, trimmedOperationId, method.ToString(), path, op);
+        var result = await aiSuggestTestsService.SuggestAsync(input, ct);
+        return Results.Ok(new AiSuggestTestsResponse(
+            result.Draft.DraftId,
+            result.Draft.ProjectId,
+            result.Draft.OperationId,
+            result.Draft.PlanJson,
+            result.Draft.CreatedUtc));
+    }
+    catch (AiSchemaValidationException ex)
+    {
+        return Results.Problem(title: "AI response invalid", detail: ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+    catch (AiFeatureDisabledException ex)
+    {
+        return Results.Problem(title: "Feature not available", detail: ex.Message, statusCode: StatusCodes.Status403Forbidden);
+    }
+    catch (AiRateLimitExceededException ex)
+    {
+        return Results.Problem(title: "AI rate limit exceeded", detail: ex.Message, statusCode: StatusCodes.Status429TooManyRequests);
+    }
+}
+
+async Task<IResult> RunDraftPlanFromAiAsync(
+    string draftId,
+    string? environment,
+    ITestPlanDraftStore draftStore,
+    IProjectStore projectStore,
+    IOpenApiSpecStore specStore,
+    IEnvironmentStore environmentStore,
+    TestPlanRunner runner,
+    ApiRuntimeConfig runtime,
+    IAuditEventStore auditStore,
+    HttpContext httpContext,
+    ILogger<Program> logger,
+    CancellationToken ct)
+{
+    if (!RequestValidation.TryParseGuid(draftId, out var draftGuid, out var draftError))
+        return InvalidRequest(draftError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var draft = await draftStore.GetAsync(draftGuid, ct);
+    if (draft is null)
+        return Results.NotFound();
+
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, draft.ProjectId, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, draft.ProjectId, ct);
+
+    var spec = await specStore.GetAsync(draft.ProjectId, ct);
+    if (spec is null)
+        return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before executing runs.", statusCode: StatusCodes.Status409Conflict);
+
+    var reader = new OpenApiStringReader();
+    var doc = reader.Read(spec.SpecJson, out _);
+    if (doc is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Stored OpenAPI spec could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    if (!RequestValidation.TryNormalizeOptionalValue(environment, out var environmentName, out var environmentError))
+        return InvalidRequest(environmentError);
+
+    string? environmentBaseUrl = null;
+    if (!string.IsNullOrWhiteSpace(environmentName))
+    {
+        var environmentRecord = await environmentStore.GetByNameAsync(orgContext.OwnerKey, draft.ProjectId, environmentName, ct);
+        if (environmentRecord is null)
+            return Results.NotFound();
+
+        environmentBaseUrl = environmentRecord.BaseUrl;
+    }
+
+    if (!EnvironmentSelector.TryApplyBaseUrl(runtime, doc, environmentBaseUrl, out _, out var selectionError))
+        return Results.Problem(title: "Base URL missing", detail: selectionError, statusCode: StatusCodes.Status409Conflict);
+
+    TestPlan plan;
+    try
+    {
+        plan = JsonSerializer.Deserialize<TestPlan>(draft.PlanJson, jsonOptions)
+            ?? throw new JsonException("Stored draft plan was empty.");
+    }
+    catch (JsonException)
+    {
+        return Results.Problem(title: "Stored draft plan invalid", detail: "Stored draft plan could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+
+    logger.LogInformation("Executing draft run {DraftId} for project {ProjectId} operation {OperationId}", draft.DraftId, project.ProjectId, draft.OperationId);
+    var run = await runner.RunPlanAsync(plan, project.ProjectKey, orgContext.OrganisationId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
+    logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, draft.OperationId);
+
+    var runMetadata = JsonSerializer.Serialize(new
+    {
+        project.ProjectId,
+        project.ProjectKey,
+        run.OperationId,
+        Environment = environmentName
+    }, jsonOptions);
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.RunExecuted,
+        "run",
+        run.RunId.ToString(),
+        DateTime.UtcNow,
+        runMetadata), ct);
+
+    return Results.Ok(RunMapping.ToDetailDto(run));
+}
+
 app.MapPost("/api/ai/explain", ExplainAiEndpointAsync);
 app.MapPost("/ai/explain", ExplainAiEndpointAsync);
+app.MapPost("/api/ai/suggest-tests", SuggestAiTestsEndpointAsync);
+app.MapPost("/ai/suggest-tests", SuggestAiTestsEndpointAsync);
 
 app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, IAiClient aiClient, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
 {

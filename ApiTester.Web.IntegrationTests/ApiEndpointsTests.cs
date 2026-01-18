@@ -542,6 +542,31 @@ public class ApiEndpointsTests
     }
 
     [Fact]
+    public async Task AiSuggestTestsEndpoint_ReturnsForbidden_ForFreeTier()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Free"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "FreeSuggest", "free-suggest");
+        await SeedSpecAsync(factory, project, BuildExplainSpecJson());
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsJsonAsync("/api/ai/suggest-tests", new AiSuggestTestsRequest(project.ProjectId.ToString(), "listPets"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task AiExplainEndpoint_ReturnsBadRequest_ForMissingOperationId()
     {
         using var baseFactory = new ApiTesterWebFactory();

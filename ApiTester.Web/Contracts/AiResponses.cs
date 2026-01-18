@@ -16,3 +16,10 @@ public sealed record AiExplainResponse(
     IReadOnlyList<string> Gotchas,
     IReadOnlyList<AiExplainExampleDto> Examples,
     string Markdown);
+
+public sealed record AiSuggestTestsResponse(
+    Guid DraftId,
+    Guid ProjectId,
+    string OperationId,
+    string PlanJson,
+    DateTime CreatedUtc);
