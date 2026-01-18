@@ -47,6 +47,24 @@ dotnet build -c Release
 dotnet test -c Release
 ```
 
+## Testing
+
+Run all unit/integration tests:
+
+```bash
+dotnet test
+```
+
+Run the Playwright E2E suite (UI):
+
+```bash
+dotnet build ApiTester.Ui.E2E
+pwsh ./ApiTester.Ui.E2E/bin/Debug/net8.0/playwright.ps1 install
+dotnet test ApiTester.Ui.E2E/ApiTester.Ui.E2E.csproj
+```
+
+In CI, ensure the Playwright browsers are installed before executing the E2E project (the `playwright.ps1 install` step above).
+
 ## Local run
 
 One command to start the Web API + UI:
