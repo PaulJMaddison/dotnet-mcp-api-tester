@@ -19,6 +19,7 @@ public sealed class ApiTesterDbContext : DbContext
     public DbSet<MembershipEntity> Memberships => Set<MembershipEntity>();
     public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
     public DbSet<AuditEventEntity> AuditEvents => Set<AuditEventEntity>();
+    public DbSet<BaselineRunEntity> BaselineRuns => Set<BaselineRunEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +67,23 @@ public sealed class ApiTesterDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.BaselineRunId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<BaselineRunEntity>(b =>
+        {
+            b.HasKey(x => new { x.ProjectId, x.OperationId });
+            b.Property(x => x.OperationId).HasMaxLength(200).IsRequired();
+            b.HasIndex(x => x.RunId);
+
+            b.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(x => x.Run)
+                .WithMany()
+                .HasForeignKey(x => x.RunId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ProjectEntity>(b =>

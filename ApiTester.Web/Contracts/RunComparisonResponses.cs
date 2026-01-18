@@ -34,6 +34,22 @@ public sealed record TestCaseRenameDto(
     string? Method,
     string? Url);
 
+public sealed record TestCaseStatusChangeDto(
+    string Name,
+    string? Method,
+    string? Url,
+    int? BaselineStatusCode,
+    int? RunStatusCode);
+
+public sealed record TestCaseResponseSnippetChangeDto(
+    string Name,
+    string? Method,
+    string? Url,
+    string? BaselineSnippetHash,
+    string? BaselineSnippetPreview,
+    string? RunSnippetHash,
+    string? RunSnippetPreview);
+
 public sealed record RunComparisonResponse(
     Guid RunId,
     Guid BaselineRunId,
@@ -42,6 +58,8 @@ public sealed record RunComparisonResponse(
     IReadOnlyList<TestCaseComparisonDto> PassToFail,
     IReadOnlyList<TestCaseComparisonDto> FailToPass,
     IReadOnlyList<TestCaseComparisonDto> BlockedChanges,
+    IReadOnlyList<TestCaseStatusChangeDto> StatusChanges,
+    IReadOnlyList<TestCaseResponseSnippetChangeDto> ResponseSnippetChanges,
     IReadOnlyList<TestCaseDurationDeltaDto> DurationDeltas,
     IReadOnlyList<TestCaseResult> MissingInBaseline,
     IReadOnlyList<TestCaseResult> MissingInRun,

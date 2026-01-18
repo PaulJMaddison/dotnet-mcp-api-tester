@@ -89,6 +89,38 @@ public class RunComparisonServiceTests
         Assert.Equal(TestCaseOutcome.Failed, result.BlockedChanges[0].RunOutcome);
     }
 
+    [Fact]
+    public void Compare_StatusCodeChange_IsReported()
+    {
+        var baseline = BuildRun(
+            CreateCase("case-a", pass: true, statusCode: 200));
+
+        var run = BuildRun(
+            CreateCase("case-a", pass: true, statusCode: 500));
+
+        var result = _service.Compare(run, baseline);
+
+        Assert.Single(result.StatusChanges);
+        Assert.Equal(200, result.StatusChanges[0].BaselineStatusCode);
+        Assert.Equal(500, result.StatusChanges[0].RunStatusCode);
+    }
+
+    [Fact]
+    public void Compare_ResponseSnippetChange_IsReported()
+    {
+        var baseline = BuildRun(
+            CreateCase("case-a", pass: true, responseSnippet: "{\"ok\":true}"));
+
+        var run = BuildRun(
+            CreateCase("case-a", pass: true, responseSnippet: "{\"ok\":false}"));
+
+        var result = _service.Compare(run, baseline);
+
+        Assert.Single(result.ResponseSnippetChanges);
+        Assert.NotNull(result.ResponseSnippetChanges[0].BaselineSnippetHash);
+        Assert.NotNull(result.ResponseSnippetChanges[0].RunSnippetHash);
+    }
+
     private static TestRunRecord BuildRun(params TestCaseResult[] results)
     {
         var total = results.Length;
@@ -124,7 +156,8 @@ public class RunComparisonServiceTests
         int? statusCode = 200,
         long durationMs = 100,
         string? method = "GET",
-        string? url = "https://example.test")
+        string? url = "https://example.test",
+        string? responseSnippet = null)
     {
         return new TestCaseResult
         {
@@ -134,7 +167,8 @@ public class RunComparisonServiceTests
             StatusCode = statusCode,
             DurationMs = durationMs,
             Pass = pass,
-            Blocked = blocked
+            Blocked = blocked,
+            ResponseSnippet = responseSnippet
         };
     }
 }

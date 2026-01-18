@@ -1,4 +1,6 @@
-﻿using ApiTester.McpServer.Models;
+﻿using System.Security.Cryptography;
+using System.Text;
+using ApiTester.McpServer.Models;
 using ApiTester.Web.Contracts;
 
 namespace ApiTester.Web.Comparison;
@@ -82,6 +84,8 @@ public sealed class RunComparisonService
         var passToFail = new List<TestCaseComparisonDto>();
         var failToPass = new List<TestCaseComparisonDto>();
         var blockedChanges = new List<TestCaseComparisonDto>();
+        var statusChanges = new List<TestCaseStatusChangeDto>();
+        var responseSnippetChanges = new List<TestCaseResponseSnippetChangeDto>();
         var durationDeltas = new List<TestCaseDurationDeltaDto>();
 
         foreach (var match in matches)
@@ -118,6 +122,28 @@ public sealed class RunComparisonService
                 blockedChanges.Add(delta);
             }
 
+            if (match.Baseline.StatusCode != match.Run.StatusCode)
+            {
+                statusChanges.Add(new TestCaseStatusChangeDto(
+                    match.Run.Name,
+                    match.Run.Method,
+                    match.Run.Url,
+                    match.Baseline.StatusCode,
+                    match.Run.StatusCode));
+            }
+
+            if (HasSnippetChanged(match.Baseline.ResponseSnippet, match.Run.ResponseSnippet))
+            {
+                responseSnippetChanges.Add(new TestCaseResponseSnippetChangeDto(
+                    match.Run.Name,
+                    match.Run.Method,
+                    match.Run.Url,
+                    HashSnippet(match.Baseline.ResponseSnippet),
+                    BuildSnippetPreview(match.Baseline.ResponseSnippet),
+                    HashSnippet(match.Run.ResponseSnippet),
+                    BuildSnippetPreview(match.Run.ResponseSnippet)));
+            }
+
             durationDeltas.Add(new TestCaseDurationDeltaDto(
                 match.Run.Name,
                 match.Run.Method,
@@ -135,6 +161,8 @@ public sealed class RunComparisonService
             passToFail,
             failToPass,
             blockedChanges,
+            statusChanges,
+            responseSnippetChanges,
             durationDeltas,
             runRemaining,
             baselineRemaining,
@@ -150,6 +178,45 @@ public sealed class RunComparisonService
             return TestCaseOutcome.Blocked;
 
         return result.Pass ? TestCaseOutcome.Passed : TestCaseOutcome.Failed;
+    }
+
+    private static bool HasSnippetChanged(string? baselineSnippet, string? runSnippet)
+    {
+        var baseline = NormalizeSnippet(baselineSnippet);
+        var run = NormalizeSnippet(runSnippet);
+        return !string.Equals(baseline, run, StringComparison.Ordinal);
+    }
+
+    private static string? NormalizeSnippet(string? snippet)
+    {
+        if (string.IsNullOrWhiteSpace(snippet))
+            return null;
+
+        return snippet.Trim();
+    }
+
+    private static string? BuildSnippetPreview(string? snippet)
+    {
+        var normalized = NormalizeSnippet(snippet);
+        if (normalized is null)
+            return null;
+
+        const int maxLength = 160;
+        if (normalized.Length <= maxLength)
+            return normalized;
+
+        return $"{normalized[..maxLength]}…";
+    }
+
+    private static string? HashSnippet(string? snippet)
+    {
+        var normalized = NormalizeSnippet(snippet);
+        if (normalized is null)
+            return null;
+
+        var bytes = Encoding.UTF8.GetBytes(normalized);
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private sealed record CaseMatch(TestCaseResult Baseline, TestCaseResult Run);

@@ -88,6 +88,7 @@ builder.Services.AddScoped<ApiRuntimeConfig>(sp =>
 builder.Services.AddScoped<TestPlanRunner>();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<RunComparisonService>();
+builder.Services.AddScoped<BaselineComparisonService>();
 builder.Services.AddSingleton<IAiClient, NullAiClient>();
 builder.Services.Configure<EntitlementOptions>(builder.Configuration.GetSection("Entitlements"));
 builder.Services.AddSingleton<EntitlementService>();
@@ -1414,6 +1415,45 @@ app.MapPost("/api/runs/{runId}/baseline/{baselineRunId}", async (string runId, s
     return updated ? Results.NoContent() : Results.NotFound();
 });
 
+app.MapPost("/api/baselines", async (BaselineCreateRequest request, ITestRunStore store, IBaselineStore baselineStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (request is null || request.RunId == Guid.Empty)
+        return InvalidRequest("runId is required.");
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, request.RunId);
+    if (run is null)
+        return Results.NotFound();
+
+    var baseline = await baselineStore.SetAsync(orgContext.OrganisationId, run.ProjectKey, run.OperationId, run.RunId, ct);
+    if (baseline is null)
+        return Results.NotFound();
+
+    return Results.Ok(new BaselineDto(baseline.RunId, baseline.ProjectKey, baseline.OperationId, baseline.SetUtc));
+});
+
+app.MapGet("/api/baselines", async (string? projectKey, string? operationId, int? take, IBaselineStore baselineStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    if (take.HasValue && (take.Value <= 0 || take.Value > 500))
+        return InvalidRequest("take must be between 1 and 500.");
+
+    var orgContext = httpContext.GetOrgContext();
+    var baselines = await baselineStore.ListAsync(orgContext.OrganisationId, projectKey, operationId, take ?? 50, ct);
+    var response = baselines
+        .Select(baseline => new BaselineDto(baseline.RunId, baseline.ProjectKey, baseline.OperationId, baseline.SetUtc))
+        .ToList();
+
+    return Results.Ok(new BaselineListResponse(response));
+});
+
 app.MapGet("/api/runs/{runId}/compare/{baselineRunId}", async (string runId, string baselineRunId, ITestRunStore store, RunComparisonService comparison, HttpContext httpContext) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
@@ -1437,6 +1477,26 @@ app.MapGet("/api/runs/{runId}/compare/{baselineRunId}", async (string runId, str
 
     var response = comparison.Compare(run, baseline);
     return Results.Ok(response);
+});
+
+app.MapGet("/api/runs/{runId}/compare-to-baseline", async (string runId, BaselineComparisonService comparison, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
+        return InvalidRequest(runError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var result = await comparison.CompareAsync(orgContext.OrganisationId, id, ct);
+
+    return result.Status switch
+    {
+        BaselineComparisonStatus.Ok => Results.Ok(result.Response),
+        BaselineComparisonStatus.RunNotFound => Results.NotFound(),
+        _ => Results.NotFound()
+    };
 });
 
 app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunStore store, IAiClient aiClient, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
