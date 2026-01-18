@@ -50,6 +50,8 @@ public sealed class SqlRunStore : IRunStore
                 Pass = r.Pass,
                 FailureReason = r.FailureReason,
                 ResponseSnippet = r.ResponseSnippet,
+                IsFlaky = r.IsFlaky,
+                FlakeReasonCategory = r.FlakeReasonCategory,
                 Classification = r.Classification
             }).ToList()
         };
@@ -80,7 +82,9 @@ public sealed class SqlRunStore : IRunStore
                 DurationMs = r.DurationMs,
                 Pass = r.Pass,
                 FailureReason = r.FailureReason,
-                ResponseSnippet = r.ResponseSnippet
+                ResponseSnippet = r.ResponseSnippet,
+                IsFlaky = r.IsFlaky,
+                FlakeReasonCategory = r.FlakeReasonCategory
             })
             .ToList();
 
@@ -114,6 +118,8 @@ public sealed class SqlRunStore : IRunStore
                     pass = r.Pass,
                     failureReason = r.FailureReason,
                     responseSnippet = r.ResponseSnippet,
+                    isFlaky = r.IsFlaky,
+                    flakeReasonCategory = r.FlakeReasonCategory,
                     classification = r.Classification
                 })
             }

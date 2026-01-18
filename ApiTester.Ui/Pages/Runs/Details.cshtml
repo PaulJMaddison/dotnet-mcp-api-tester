@@ -32,6 +32,9 @@ else if (Model.NotFound)
 }
 else if (Model.Run is not null)
 {
+    var classification = Model.Run.Result.ClassificationSummary;
+    var realFail = classification.Fail + classification.BlockedUnexpected;
+
     <h2>Run Summary</h2>
     <div class="summary-grid">
         <div class="summary-card">
@@ -40,15 +43,19 @@ else if (Model.Run is not null)
         </div>
         <div class="summary-card">
             <span>Passed</span>
-            <strong>@Model.Run.Result.Passed</strong>
+            <strong>@classification.Pass</strong>
         </div>
         <div class="summary-card">
-            <span>Failed</span>
-            <strong>@Model.Run.Result.Failed</strong>
+            <span>Expected Blocked</span>
+            <strong>@classification.BlockedExpected</strong>
         </div>
         <div class="summary-card">
-            <span>Blocked</span>
-            <strong>@Model.Run.Result.Blocked</strong>
+            <span>Flaky</span>
+            <strong>@classification.FlakyExternal</strong>
+        </div>
+        <div class="summary-card">
+            <span>Real Fail</span>
+            <strong>@realFail</strong>
         </div>
         <div class="summary-card">
             <span>Total Duration (ms)</span>
@@ -84,8 +91,7 @@ else if (Model.Run is not null)
                 <thead>
                     <tr>
                         <th>Name</th>
-                        <th>Passed</th>
-                        <th>Blocked</th>
+                        <th>Status</th>
                         <th>Status Code</th>
                         <th>Duration (ms)</th>
                         <th>Method</th>
@@ -97,8 +103,15 @@ else if (Model.Run is not null)
                     {
                         <tr>
                             <td>@result.Name</td>
-                            <td>@(result.Pass ? "Yes" : "No")</td>
-                            <td>@(result.Blocked ? "Yes" : "No")</td>
+                            <td>
+                                @(result.Blocked
+                                    ? "Blocked"
+                                    : result.IsFlaky
+                                        ? "Flaky"
+                                        : result.Pass
+                                            ? "Passed"
+                                            : "Failed")
+                            </td>
                             <td>@(result.StatusCode?.ToString() ?? "—")</td>
                             <td class="table-number">@DisplayFormatters.FormatDurationMs(result.DurationMs)</td>
                             <td>@(string.IsNullOrWhiteSpace(result.Method) ? "—" : result.Method)</td>

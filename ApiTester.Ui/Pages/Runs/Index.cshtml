@@ -62,8 +62,9 @@ else
                     <th scope="col">Started UTC</th>
                     <th scope="col">Completed UTC</th>
                     <th scope="col" class="table-number">Passed</th>
-                    <th scope="col" class="table-number">Failed</th>
-                    <th scope="col" class="table-number">Blocked</th>
+                    <th scope="col" class="table-number">Expected Blocked</th>
+                    <th scope="col" class="table-number">Flaky</th>
+                    <th scope="col" class="table-number">Real Fail</th>
                 </tr>
             </thead>
             <tbody>
@@ -75,8 +76,9 @@ else
                         <td>@DisplayFormatters.FormatUtc(run.StartedUtc)</td>
                         <td>@DisplayFormatters.FormatUtc(run.CompletedUtc)</td>
                         <td class="table-number">@run.Snapshot.Passed</td>
-                        <td class="table-number">@run.Snapshot.Failed</td>
-                        <td class="table-number">@run.Snapshot.Blocked</td>
+                        <td class="table-number">@run.Snapshot.ExpectedBlocked</td>
+                        <td class="table-number">@run.Snapshot.Flaky</td>
+                        <td class="table-number">@run.Snapshot.RealFail</td>
                     </tr>
                 }
             </tbody>

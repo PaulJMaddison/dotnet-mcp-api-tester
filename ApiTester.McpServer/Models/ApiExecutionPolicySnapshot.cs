@@ -10,7 +10,9 @@ public sealed record ApiExecutionPolicySnapshot(
     bool BlockPrivateNetworks,
     int TimeoutSeconds,
     int MaxRequestBodyBytes,
-    int MaxResponseBodyBytes)
+    int MaxResponseBodyBytes,
+    bool RetryOnFlake,
+    int MaxRetries)
 {
     public static ApiExecutionPolicySnapshot FromPolicy(ApiExecutionPolicy policy)
     {
@@ -38,6 +40,8 @@ public sealed record ApiExecutionPolicySnapshot(
             policy.BlockPrivateNetworks,
             (int)policy.Timeout.TotalSeconds,
             policy.MaxRequestBodyBytes,
-            policy.MaxResponseBodyBytes);
+            policy.MaxResponseBodyBytes,
+            policy.RetryOnFlake,
+            policy.MaxRetries);
     }
 }

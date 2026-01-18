@@ -19,8 +19,9 @@ public sealed record RunSummaryDto(
 public sealed record RunSummary(
     int TotalCases,
     int Passed,
-    int Failed,
-    int Blocked,
+    int ExpectedBlocked,
+    int Flaky,
+    int RealFail,
     long TotalDurationMs,
     ResultClassificationSummary ClassificationSummary);
 
@@ -63,6 +64,9 @@ public sealed class TestCaseResult
     public string? FailureReason { get; init; }
 
     public string? ResponseSnippet { get; init; }
+
+    public bool IsFlaky { get; init; }
+    public string? FlakeReasonCategory { get; init; }
 
     public ResultClassification Classification { get; set; }
 }

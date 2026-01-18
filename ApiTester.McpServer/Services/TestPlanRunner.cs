@@ -177,6 +177,44 @@ public sealed class TestPlanRunner
     }
 
     private async Task<TestCaseResult> RunCaseAsync(TestPlan plan, TestCase tc, CancellationToken ct)
+        => await RunCaseWithRetriesAsync(plan, tc, ct);
+
+    private async Task<TestCaseResult> RunCaseWithRetriesAsync(TestPlan plan, TestCase tc, CancellationToken ct)
+    {
+        var maxRetries = _cfg.Policy.RetryOnFlake ? Math.Max(0, _cfg.Policy.MaxRetries) : 0;
+        var attempt = 0;
+        var sawFlake = false;
+        string? flakeCategory = null;
+
+        while (true)
+        {
+            var result = await ExecuteCaseAsync(plan, tc, ct);
+            var classification = ResultClassificationRules.Classify(result);
+
+            if (classification == ResultClassification.FlakyExternal)
+            {
+                sawFlake = true;
+                flakeCategory ??= result.FlakeReasonCategory;
+
+                if (attempt < maxRetries)
+                {
+                    attempt++;
+                    continue;
+                }
+            }
+
+            if (sawFlake && result.Pass)
+            {
+                result.IsFlaky = true;
+                result.FlakeReasonCategory ??= flakeCategory;
+                result.Classification = ResultClassification.FlakyExternal;
+            }
+
+            return result;
+        }
+    }
+
+    private async Task<TestCaseResult> ExecuteCaseAsync(TestPlan plan, TestCase tc, CancellationToken ct)
     {
         var missing = ExtractPathParamNames(plan.PathTemplate)
             .Where(p => !tc.PathParams.ContainsKey(p))
@@ -289,6 +327,39 @@ public sealed class TestPlanRunner
                 Pass = pass,
                 FailureReason = pass ? null : $"Expected [{string.Join(", ", expected)}] but got {status}.",
                 ResponseSnippet = snippet
+            };
+        }
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        {
+            sw.Stop();
+            return new TestCaseResult
+            {
+                Name = tc.Name,
+                Blocked = false,
+                Method = plan.Method,
+                Url = uri.ToString(),
+                DurationMs = sw.ElapsedMilliseconds,
+                Pass = false,
+                FailureReason = "Request timed out."
+            };
+        }
+        catch (HttpRequestException ex)
+        {
+            sw.Stop();
+            var failureReason = ex.InnerException is System.Net.Sockets.SocketException socketException &&
+                                socketException.SocketErrorCode == System.Net.Sockets.SocketError.HostNotFound
+                ? "DNS lookup failed."
+                : ex.Message;
+
+            return new TestCaseResult
+            {
+                Name = tc.Name,
+                Blocked = false,
+                Method = plan.Method,
+                Url = uri.ToString(),
+                DurationMs = sw.ElapsedMilliseconds,
+                Pass = false,
+                FailureReason = failureReason
             };
         }
         catch (Exception ex)

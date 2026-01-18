@@ -18,8 +18,9 @@ public sealed record RunExplanationContext(
 public sealed record RunResultSummary(
     int TotalCases,
     int Passed,
-    int Failed,
-    int Blocked,
+    int ExpectedBlocked,
+    int Flaky,
+    int RealFail,
     long TotalDurationMs,
     ResultClassificationSummary ClassificationSummary);
 

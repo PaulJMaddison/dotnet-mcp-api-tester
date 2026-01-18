@@ -13,13 +13,16 @@ public static class RunMapping
 
     public static RunSummaryDto ToSummaryDto(TestRunRecord record)
     {
+        var classification = record.Result.ClassificationSummary;
+        var realFail = classification.Fail + classification.BlockedUnexpected;
         var summary = new RunSummary(
             record.Result.TotalCases,
-            record.Result.Passed,
-            record.Result.Failed,
-            record.Result.Blocked,
+            classification.Pass,
+            classification.BlockedExpected,
+            classification.FlakyExternal,
+            realFail,
             record.Result.TotalDurationMs,
-            record.Result.ClassificationSummary);
+            classification);
 
         return new RunSummaryDto(
             record.RunId,
@@ -39,6 +42,18 @@ public static class RunMapping
             record.CompletedUtc,
             record.Result);
 
+    public static RunSummaryCountsResponse ToSummaryCounts(TestRunRecord record)
+    {
+        var classification = record.Result.ClassificationSummary;
+        return new RunSummaryCountsResponse(
+            record.RunId,
+            record.Result.TotalCases,
+            classification.Pass,
+            classification.BlockedExpected,
+            classification.FlakyExternal,
+            classification.Fail + classification.BlockedUnexpected);
+    }
+
     public static RunAuditResponse ToAuditResponse(TestRunRecord record)
     {
         var environment = record.Environment is null
@@ -55,7 +70,9 @@ public static class RunMapping
                 record.PolicySnapshot.BlockPrivateNetworks,
                 record.PolicySnapshot.TimeoutSeconds,
                 record.PolicySnapshot.MaxRequestBodyBytes,
-                record.PolicySnapshot.MaxResponseBodyBytes);
+                record.PolicySnapshot.MaxResponseBodyBytes,
+                record.PolicySnapshot.RetryOnFlake,
+                record.PolicySnapshot.MaxRetries);
 
         return new RunAuditResponse(
             record.RunId,
@@ -82,7 +99,9 @@ public static class RunMapping
             ? null
             : new CompliancePolicySection(
                 record.PolicySnapshot.DryRun,
-                record.PolicySnapshot.AllowedMethods);
+                record.PolicySnapshot.AllowedMethods,
+                record.PolicySnapshot.RetryOnFlake,
+                record.PolicySnapshot.MaxRetries);
 
         var ssrf = record.PolicySnapshot is null
             ? null

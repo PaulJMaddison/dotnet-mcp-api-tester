@@ -19,6 +19,7 @@ public class RunMappingTests
         Assert.Single(response.Runs);
         Assert.Equal(record.RunId, response.Runs[0].RunId);
         Assert.Equal(record.Result.TotalCases, response.Runs[0].Snapshot.TotalCases);
+        Assert.Equal(record.Result.ClassificationSummary.Pass, response.Runs[0].Snapshot.Passed);
     }
 
     [Fact]
@@ -52,6 +53,8 @@ public class RunMappingTests
         Assert.Equal(record.PolicySnapshot?.TimeoutSeconds, response.Limits?.TimeoutSeconds);
         Assert.Equal(record.PolicySnapshot?.MaxRequestBodyBytes, response.Limits?.MaxRequestBodyBytes);
         Assert.Equal(record.PolicySnapshot?.MaxResponseBodyBytes, response.Limits?.MaxResponseBodyBytes);
+        Assert.Equal(record.PolicySnapshot?.RetryOnFlake, response.Policy?.RetryOnFlake);
+        Assert.Equal(record.PolicySnapshot?.MaxRetries, response.Policy?.MaxRetries);
     }
 
     private static TestRunRecord BuildRunRecord()
@@ -94,7 +97,9 @@ public class RunMappingTests
                 true,
                 30,
                 1024,
-                2048),
+                2048,
+                true,
+                2),
             ProjectKey = "sample-project",
             OperationId = "op-1",
             StartedUtc = DateTimeOffset.UtcNow.AddMinutes(-5),

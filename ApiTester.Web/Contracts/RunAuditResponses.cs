@@ -16,4 +16,6 @@ public sealed record RunPolicySnapshot(
     bool BlockPrivateNetworks,
     int TimeoutSeconds,
     int MaxRequestBodyBytes,
-    int MaxResponseBodyBytes);
+    int MaxResponseBodyBytes,
+    bool RetryOnFlake,
+    int MaxRetries);

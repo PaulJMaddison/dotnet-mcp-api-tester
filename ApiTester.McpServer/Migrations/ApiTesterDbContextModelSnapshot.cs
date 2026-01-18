@@ -288,6 +288,12 @@ namespace ApiTester.McpServer.Migrations
                     b.Property<string>("FailureReason")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("FlakeReasonCategory")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsFlaky")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Method")
                         .IsRequired()
                         .HasMaxLength(16)
