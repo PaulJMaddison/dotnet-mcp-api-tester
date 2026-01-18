@@ -1,8 +1,11 @@
+using System.Net.Http;
 using ApiTester.Site.Components.Pages;
 using ApiTester.Site.Components.Pages.Docs;
+using ApiTester.Site.Services;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ApiTester.Site.Tests;
 
@@ -44,6 +47,12 @@ public class SeoMetadataTests
 
     private static IRenderedFragment RenderPage(TestContext context, Type componentType)
     {
+        context.JSInterop.Setup<string>("Blazor._internal.PageTitle.getAndRemoveExistingTitle")
+            .SetResult(string.Empty);
+        context.JSInterop.SetupVoid("Blazor._internal.PageTitle.setTitle");
+        context.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri("http://localhost/") });
+        context.Services.AddScoped<LeadCaptureClient>();
+
         RenderFragment fragment = builder =>
         {
             builder.OpenComponent<HeadOutlet>(0);

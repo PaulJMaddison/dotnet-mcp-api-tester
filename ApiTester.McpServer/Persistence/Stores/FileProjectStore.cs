@@ -96,6 +96,12 @@ public sealed class FileProjectStore : IProjectStore
         return list.Any(p => p.ProjectId == projectId && p.TenantId == tenantId);
     }
 
+    public async Task<bool> ExistsAnyAsync(Guid projectId, CancellationToken ct)
+    {
+        var list = await LoadAsync(ct);
+        return list.Any(p => p.ProjectId == projectId);
+    }
+
     private async Task<List<ProjectRecord>> LoadAsync(CancellationToken ct)
     {
         if (!File.Exists(FilePath))

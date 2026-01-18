@@ -1,5 +1,7 @@
+using System.Text.Json;
 using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
+using ApiTester.McpServer.Serialization;
 using ApiTester.McpServer.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -23,7 +25,9 @@ public sealed class RetentionPrunerTests
             var auditStore = new FileAuditEventStore(appConfig);
 
             var org = await orgStore.CreateAsync("Retention Org", "retention-org", CancellationToken.None);
-            await orgStore.UpdateSettingsAsync(org.OrganisationId, 1, Array.Empty<string>(), CancellationToken.None);
+            var updatedOrg = await orgStore.UpdateSettingsAsync(org.OrganisationId, 1, Array.Empty<string>(), CancellationToken.None);
+            Assert.NotNull(updatedOrg);
+            Assert.Equal(1, updatedOrg!.RetentionDays);
 
             var fixedNow = new DateTimeOffset(2024, 3, 1, 12, 0, 0, TimeSpan.Zero);
             var pruner = new RetentionPruner(
@@ -38,7 +42,7 @@ public sealed class RetentionPrunerTests
             await runStore.SaveAsync(oldRun);
             await runStore.SaveAsync(recentRun);
 
-            await auditStore.CreateAsync(new AuditEventRecord(
+            var createdAudit = await auditStore.CreateAsync(new AuditEventRecord(
                 Guid.NewGuid(),
                 org.OrganisationId,
                 Guid.NewGuid(),
@@ -48,13 +52,22 @@ public sealed class RetentionPrunerTests
                 fixedNow.UtcDateTime,
                 "{}"), CancellationToken.None);
 
+            var auditFile = Directory.EnumerateFiles(
+                Path.Combine(tempDir, "audit-log"),
+                "*.json",
+                SearchOption.AllDirectories).FirstOrDefault();
+            Assert.NotNull(auditFile);
+            var auditJson = await File.ReadAllTextAsync(auditFile!, CancellationToken.None);
+            var auditRecord = JsonSerializer.Deserialize<AuditEventRecord>(auditJson, JsonDefaults.Default);
+            Assert.NotNull(auditRecord);
+
             var result = await pruner.PruneAsync(org.OrganisationId, CancellationToken.None);
 
             Assert.Equal(1, result.RunsPruned);
             Assert.Null(await runStore.GetAsync(org.OrganisationId, oldRun.RunId));
             Assert.NotNull(await runStore.GetAsync(org.OrganisationId, recentRun.RunId));
 
-            var audits = await auditStore.ListAsync(org.OrganisationId, 10, null, null, null, CancellationToken.None);
+            var audits = await auditStore.ListAsync(auditRecord!.OrganisationId, 10, null, null, null, CancellationToken.None);
             Assert.Single(audits);
         }
         finally
@@ -69,6 +82,7 @@ public sealed class RetentionPrunerTests
         {
             RunId = Guid.NewGuid(),
             OrganisationId = organisationId,
+            TenantId = organisationId,
             OperationId = "op",
             StartedUtc = completedUtc.AddMinutes(-1),
             CompletedUtc = completedUtc,

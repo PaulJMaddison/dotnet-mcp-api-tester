@@ -1,9 +1,11 @@
 using System.Text;
+using System.IO;
 using System.Text.Json;
 using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Serialization;
 using ApiTester.McpServer.Services;
+using Microsoft.OpenApi;
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Writers;
@@ -93,13 +95,17 @@ Include a markdown field that can be rendered as documentation.
 
     private static IReadOnlyList<AiExplainParameter> BuildParameters(OpenApiOperation operation)
         => operation.Parameters?
-            .Select(p => new AiExplainParameter(
-                p.Name,
-                p.In?.ToString() ?? string.Empty,
-                p.Required,
-                p.Schema?.Type,
-                p.Schema?.Format,
-                p.Description))
+            .Select(p =>
+            {
+                var location = (ParameterLocation?)p.In;
+                return new AiExplainParameter(
+                    p.Name,
+                    location?.ToString() ?? string.Empty,
+                    p.Required,
+                    p.Schema?.Type,
+                    p.Schema?.Format,
+                    p.Description);
+            })
             .ToList() ?? [];
 
     private static AiExplainRequestBody? BuildRequestBody(OpenApiOperation operation)
@@ -131,7 +137,7 @@ Include a markdown field that can be rendered as documentation.
         var schemes = document.Components?.SecuritySchemes ?? new Dictionary<string, OpenApiSecurityScheme>();
         var requirements = operation.Security?.Count > 0
             ? operation.Security
-            : document.Security ?? new List<OpenApiSecurityRequirement>();
+            : document.SecurityRequirements ?? new List<OpenApiSecurityRequirement>();
 
         var results = new List<AiExplainAuthScheme>();
         foreach (var requirement in requirements)
@@ -145,7 +151,7 @@ Include a markdown field that can be rendered as documentation.
                 results.Add(new AiExplainAuthScheme(
                     key,
                     resolved.Type.ToString(),
-                    resolved.In?.ToString(),
+                    resolved.In.ToString(),
                     resolved.Scheme,
                     resolved.BearerFormat));
             }
@@ -259,9 +265,11 @@ Include a markdown field that can be rendered as documentation.
         if (example is null)
             return null;
 
-        var writer = new OpenApiStringWriter();
+        using var textWriter = new StringWriter();
+        var writer = new OpenApiJsonWriter(textWriter);
         example.Write(writer, OpenApiSpecVersion.OpenApi3_0);
-        return writer.ToString();
+        writer.Flush();
+        return textWriter.ToString();
     }
 }
 

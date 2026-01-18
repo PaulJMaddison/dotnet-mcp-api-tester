@@ -109,6 +109,7 @@ public class RunAnnotationEndpointsTests
         {
             ProjectId = Guid.NewGuid(),
             OrganisationId = organisationId ?? ApiTesterWebFactory.OrganisationAlphaId,
+            TenantId = organisationId ?? ApiTesterWebFactory.OrganisationAlphaId,
             OwnerKey = ownerKey,
             Name = name,
             ProjectKey = key,
@@ -132,6 +133,7 @@ public class RunAnnotationEndpointsTests
         {
             RunId = Guid.NewGuid(),
             OrganisationId = project.OrganisationId,
+            TenantId = project.TenantId,
             ProjectId = project.ProjectId,
             OperationId = operationId,
             StartedUtc = started,
