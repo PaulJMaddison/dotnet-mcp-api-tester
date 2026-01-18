@@ -25,12 +25,14 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<FileUserStore>();
         services.AddSingleton<FileMembershipStore>();
         services.AddSingleton<FileApiKeyStore>();
+        services.AddSingleton<FileAuditEventStore>();
         services.AddScoped<SqlTestRunStore>();
         services.AddScoped<SqlProjectStore>();
         services.AddScoped<SqlOrganisationStore>();
         services.AddScoped<SqlUserStore>();
         services.AddScoped<SqlMembershipStore>();
         services.AddScoped<SqlApiKeyStore>();
+        services.AddScoped<SqlAuditEventStore>();
 
         if (selection.UseSqlProvider)
         {
@@ -48,6 +50,7 @@ public static class PersistenceServiceCollectionExtensions
             services.AddScoped<SqlUserStore>();
             services.AddScoped<SqlMembershipStore>();
             services.AddScoped<SqlApiKeyStore>();
+            services.AddScoped<SqlAuditEventStore>();
             services.AddScoped<IOpenApiSpecStore>(sp => sp.GetRequiredService<SqlOpenApiSpecStore>());
             services.AddScoped<ITestPlanStore>(sp => sp.GetRequiredService<SqlTestPlanStore>());
             services.AddScoped<IEnvironmentStore>(sp => sp.GetRequiredService<SqlEnvironmentStore>());
@@ -56,6 +59,7 @@ public static class PersistenceServiceCollectionExtensions
             services.AddScoped<IUserStore>(sp => sp.GetRequiredService<SqlUserStore>());
             services.AddScoped<IMembershipStore>(sp => sp.GetRequiredService<SqlMembershipStore>());
             services.AddScoped<IApiKeyStore>(sp => sp.GetRequiredService<SqlApiKeyStore>());
+            services.AddScoped<IAuditEventStore>(sp => sp.GetRequiredService<SqlAuditEventStore>());
         }
         else
         {
@@ -67,6 +71,7 @@ public static class PersistenceServiceCollectionExtensions
             services.AddSingleton<IUserStore>(sp => sp.GetRequiredService<FileUserStore>());
             services.AddSingleton<IMembershipStore>(sp => sp.GetRequiredService<FileMembershipStore>());
             services.AddSingleton<IApiKeyStore>(sp => sp.GetRequiredService<FileApiKeyStore>());
+            services.AddSingleton<IAuditEventStore>(sp => sp.GetRequiredService<FileAuditEventStore>());
         }
 
         services.AddScoped<ITestRunStore>(sp => UseSqlServer(sp)

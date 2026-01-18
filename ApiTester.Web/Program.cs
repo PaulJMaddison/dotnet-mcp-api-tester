@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ApiTester.Web;
@@ -128,7 +129,9 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseWhen(
-    context => context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/api-keys"),
+    context => context.Request.Path.StartsWithSegments("/api")
+        || context.Request.Path.StartsWithSegments("/api-keys")
+        || context.Request.Path.StartsWithSegments("/audit"),
     builder =>
     {
         builder.UseMiddleware<ApiKeyAuthMiddleware>();
@@ -206,7 +209,31 @@ app.MapGet("/api/orgs/current/members", async (IOrganisationStore orgStore, IUse
     return Results.Ok(new OrgMembersResponse(members));
 });
 
-app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKeyStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/audit", async (int? take, string? action, string? from, string? to, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    var orgContext = httpContext.GetOrgContext();
+    var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
+    if (adminCheck is not null)
+        return adminCheck;
+
+    var normalizedTake = take ?? 50;
+    if (normalizedTake is < 1 or > 200)
+        return InvalidRequest("take must be between 1 and 200.");
+
+    if (!TryParseAuditTimestamp(from, "from", out var fromUtc, out var fromError))
+        return InvalidRequest(fromError);
+
+    if (!TryParseAuditTimestamp(to, "to", out var toUtc, out var toError))
+        return InvalidRequest(toError);
+
+    if (fromUtc.HasValue && toUtc.HasValue && fromUtc > toUtc)
+        return InvalidRequest("from must be earlier than to.");
+
+    var records = await auditStore.ListAsync(orgContext.OrganisationId, normalizedTake, action, fromUtc, toUtc, ct);
+    return Results.Ok(AuditMapping.ToListResponse(records));
+});
+
+app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKeyStore, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredName(request?.Name, out var nameError))
         return InvalidRequest(nameError);
@@ -234,6 +261,23 @@ app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKey
         token.Prefix,
         ct);
 
+    var metadataJson = JsonSerializer.Serialize(new
+    {
+        record.Name,
+        record.Scopes,
+        record.ExpiresUtc
+    }, jsonOptions);
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.ApiKeyCreated,
+        "api_key",
+        record.KeyId.ToString(),
+        DateTime.UtcNow,
+        metadataJson), ct);
+
     return Results.Ok(new ApiKeyCreateResponse(ApiKeyMapping.ToDto(record), token.Token));
 });
 
@@ -248,7 +292,7 @@ app.MapGet("/api-keys", async (IApiKeyStore apiKeyStore, HttpContext httpContext
     return Results.Ok(ApiKeyMapping.ToListResponse(keys));
 });
 
-app.MapPost("/api-keys/{id}/revoke", async (string id, IApiKeyStore apiKeyStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapPost("/api-keys/{id}/revoke", async (string id, IApiKeyStore apiKeyStore, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(id, out var keyId, out var error))
         return InvalidRequest(error);
@@ -259,9 +303,26 @@ app.MapPost("/api-keys/{id}/revoke", async (string id, IApiKeyStore apiKeyStore,
         return adminCheck;
 
     var record = await apiKeyStore.RevokeAsync(orgContext.OrganisationId, keyId, DateTime.UtcNow, ct);
-    return record is null
-        ? Results.NotFound()
-        : Results.Ok(ApiKeyMapping.ToDto(record));
+    if (record is null)
+        return Results.NotFound();
+
+    var metadataJson = JsonSerializer.Serialize(new
+    {
+        record.Name,
+        record.RevokedUtc
+    }, jsonOptions);
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.ApiKeyRevoked,
+        "api_key",
+        record.KeyId.ToString(),
+        DateTime.UtcNow,
+        metadataJson), ct);
+
+    return Results.Ok(ApiKeyMapping.ToDto(record));
 });
 
 app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, IProjectStore store, HttpContext httpContext, CancellationToken ct) =>
@@ -769,6 +830,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     IEnvironmentStore environmentStore,
     TestPlanRunner runner,
     ApiRuntimeConfig runtime,
+    IAuditEventStore auditStore,
     HttpContext httpContext,
     ILogger<Program> logger,
     CancellationToken ct) =>
@@ -844,6 +906,25 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     logger.LogInformation("Executing run for project {ProjectId} operation {OperationId}", project.ProjectId, trimmedOperationId);
     var run = await runner.RunPlanAsync(plan, project.ProjectKey, orgContext.OrganisationId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
     logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, trimmedOperationId);
+
+    var runMetadata = JsonSerializer.Serialize(new
+    {
+        project.ProjectId,
+        project.ProjectKey,
+        run.OperationId,
+        Environment = environmentName
+    }, jsonOptions);
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.RunExecuted,
+        "run",
+        run.RunId.ToString(),
+        DateTime.UtcNow,
+        runMetadata), ct);
+
     return Results.Ok(RunMapping.ToDetailDto(run));
 });
 
@@ -1062,7 +1143,7 @@ app.MapDelete("/api/runs/{runId}/annotations/{annotationId}", async (string runI
     return Results.NoContent();
 });
 
-app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITestRunStore store, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITestRunStore store, EntitlementService entitlements, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!entitlements.CanExport)
         return FeatureNotAvailable("Export", entitlements);
@@ -1086,6 +1167,22 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
     var contentType = reportFormat == RunReportFormat.Markdown
         ? "text/markdown; charset=utf-8"
         : "text/html; charset=utf-8";
+
+    var exportMetadata = JsonSerializer.Serialize(new
+    {
+        Format = reportFormat.ToString()
+    }, jsonOptions);
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.ExportGenerated,
+        "run",
+        run.RunId.ToString(),
+        DateTime.UtcNow,
+        exportMetadata), ct);
+
     return Results.Text(report, contentType);
 });
 
@@ -1268,6 +1365,24 @@ static bool TryParseReportFormat(string? format, out RunReportFormat reportForma
     reportFormat = RunReportFormat.Markdown;
     error = "Format must be 'md' or 'html'.";
     return false;
+}
+
+static bool TryParseAuditTimestamp(string? value, string name, out DateTime? parsedUtc, out string error)
+{
+    parsedUtc = null;
+    error = string.Empty;
+
+    if (string.IsNullOrWhiteSpace(value))
+        return true;
+
+    if (!DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+    {
+        error = $"{name} must be an ISO 8601 timestamp.";
+        return false;
+    }
+
+    parsedUtc = parsed.ToUniversalTime();
+    return true;
 }
 
 public partial class Program { }

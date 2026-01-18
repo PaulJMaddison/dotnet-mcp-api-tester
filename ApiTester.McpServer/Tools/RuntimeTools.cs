@@ -1,6 +1,9 @@
-﻿using ApiTester.McpServer.Services;
+﻿using ApiTester.McpServer.Models;
+using ApiTester.McpServer.Persistence.Stores;
+using ApiTester.McpServer.Services;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
+using System.Text.Json;
 
 namespace ApiTester.McpServer.Tools;
 
@@ -8,14 +11,16 @@ namespace ApiTester.McpServer.Tools;
 public sealed class RuntimeTools
 {
     private readonly ApiRuntimeConfig _runtime;
+    private readonly IAuditEventStore _auditStore;
 
-    public RuntimeTools(ApiRuntimeConfig runtime)
+    public RuntimeTools(ApiRuntimeConfig runtime, IAuditEventStore auditStore)
     {
         _runtime = runtime;
+        _auditStore = auditStore;
     }
 
     [McpServerTool, Description("Set the base URL used for executing API requests. Overrides servers[] in the OpenAPI spec.")]
-    public object ApiSetBaseUrl(string baseUrl)
+    public async Task<object> ApiSetBaseUrl(string baseUrl)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new ArgumentException("baseUrl is required", nameof(baseUrl));
@@ -28,6 +33,18 @@ public sealed class RuntimeTools
         }
 
         _runtime.SetBaseUrl(trimmed);
+
+        var metadataJson = JsonSerializer.Serialize(new { baseUrl = _runtime.BaseUrl });
+        await _auditStore.CreateAsync(new AuditEventRecord(
+            Guid.NewGuid(),
+            OrgDefaults.DefaultOrganisationId,
+            Guid.Empty,
+            AuditActions.BaseUrlSet,
+            "runtime",
+            "base_url",
+            DateTime.UtcNow,
+            metadataJson), CancellationToken.None);
+
         return new { ok = true, baseUrl = _runtime.BaseUrl };
     }
 

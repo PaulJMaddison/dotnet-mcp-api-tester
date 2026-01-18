@@ -1,5 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Text.Json;
+using ApiTester.McpServer.Models;
+using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Services;
 using ModelContextProtocol.Server;
 
@@ -9,10 +11,12 @@ namespace ApiTester.McpServer.Tools;
 public sealed class PolicyTools
 {
     private readonly ApiRuntimeConfig _cfg;
+    private readonly IAuditEventStore _auditStore;
 
-    public PolicyTools(ApiRuntimeConfig cfg)
+    public PolicyTools(ApiRuntimeConfig cfg, IAuditEventStore auditStore)
     {
         _cfg = cfg;
+        _auditStore = auditStore;
     }
 
     [McpServerTool, Description("Get the current API execution policy.")]
@@ -32,19 +36,21 @@ public sealed class PolicyTools
     }
 
     [McpServerTool, Description("Reset the API execution policy to safe defaults (deny-by-default + dryRun).")]
-    public object ApiResetPolicy()
+    public async Task<object> ApiResetPolicy()
     {
         ApiPolicyDefaults.ApplySafeDefaults(_cfg.Policy);
+        await RecordPolicyAuditAsync(AuditActions.PolicyReset, CancellationToken.None);
         return new { ok = true, policy = ApiGetPolicy() };
 
     }
   
     
     [McpServerTool, Description("Reset runtime state: clears base URL + auth + resets policy to safe defaults.")]
-    public object ApiResetRuntime()
+    public async Task<object> ApiResetRuntime()
     {
         _cfg.ResetRuntime(); // single call, single source of truth
 
+        await RecordPolicyAuditAsync(AuditActions.PolicyReset, CancellationToken.None);
         return new
         {
             ok = true,
@@ -55,7 +61,7 @@ public sealed class PolicyTools
     }
 
     [McpServerTool, Description("Update the API execution policy. Pass policyJson as a JSON object string.")]
-    public object ApiSetPolicy(string policyJson)
+    public async Task<object> ApiSetPolicy(string policyJson)
     {
         try
         {
@@ -143,6 +149,7 @@ public sealed class PolicyTools
 
             ApplyPolicy(next);
 
+            await RecordPolicyAuditAsync(AuditActions.PolicySet, CancellationToken.None);
             return new { ok = true, policy = ApiGetPolicy() };
         }
         catch (Exception ex)
@@ -182,5 +189,20 @@ public sealed class PolicyTools
             MaxRequestBodyBytes = p.MaxRequestBodyBytes,
             MaxResponseBodyBytes = p.MaxResponseBodyBytes
         };
+    }
+
+    private async Task RecordPolicyAuditAsync(string action, CancellationToken ct)
+    {
+        var metadataJson = JsonSerializer.Serialize(ApiGetPolicy());
+
+        await _auditStore.CreateAsync(new AuditEventRecord(
+            Guid.NewGuid(),
+            OrgDefaults.DefaultOrganisationId,
+            Guid.Empty,
+            action,
+            "policy",
+            "runtime",
+            DateTime.UtcNow,
+            metadataJson), ct);
     }
 }

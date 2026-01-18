@@ -1,4 +1,6 @@
 ﻿using System.ComponentModel;
+using ApiTester.McpServer.Models;
+using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Services;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
@@ -10,11 +12,13 @@ public sealed class TestPlanTools
 {
     private readonly TestPlanRunner _runner;
     private readonly ILogger<TestPlanTools> _logger;
+    private readonly IAuditEventStore _auditStore;
 
-    public TestPlanTools(TestPlanRunner runner, ILogger<TestPlanTools> logger)
+    public TestPlanTools(TestPlanRunner runner, ILogger<TestPlanTools> logger, IAuditEventStore auditStore)
     {
         _runner = runner;
         _logger = logger;
+        _auditStore = auditStore;
     }
 
     [McpServerTool, Description("Run a deterministic test plan for an operationId and return a stored run record.")]
@@ -25,6 +29,16 @@ public sealed class TestPlanTools
         // Day 14: runner should persist with projectKey (file store folders today, SQL later)
         _logger.LogInformation("Running test plan for operation {OperationId} in project {ProjectKey}", operationId, projectKey);
         var record = await _runner.RunAsync(operationId, projectKey);
+
+        await _auditStore.CreateAsync(new AuditEventRecord(
+            Guid.NewGuid(),
+            OrgDefaults.DefaultOrganisationId,
+            Guid.Empty,
+            AuditActions.RunExecuted,
+            "run",
+            record.RunId.ToString(),
+            DateTime.UtcNow,
+            null), CancellationToken.None);
 
         return new
         {
