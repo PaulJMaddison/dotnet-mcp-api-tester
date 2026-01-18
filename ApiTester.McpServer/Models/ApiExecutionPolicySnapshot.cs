@@ -11,6 +11,7 @@ public sealed record ApiExecutionPolicySnapshot(
     int TimeoutSeconds,
     int MaxRequestBodyBytes,
     int MaxResponseBodyBytes,
+    bool ValidateSchema,
     bool RetryOnFlake,
     int MaxRetries)
 {
@@ -41,6 +42,7 @@ public sealed record ApiExecutionPolicySnapshot(
             (int)policy.Timeout.TotalSeconds,
             policy.MaxRequestBodyBytes,
             policy.MaxResponseBodyBytes,
+            policy.ValidateSchema,
             policy.RetryOnFlake,
             policy.MaxRetries);
     }

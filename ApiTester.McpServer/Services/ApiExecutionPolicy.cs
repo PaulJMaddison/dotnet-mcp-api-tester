@@ -21,6 +21,8 @@ public sealed class ApiExecutionPolicy
     public int MaxRequestBodyBytes { get; set; } = 256 * 1024;   // 256 KB
     public int MaxResponseBodyBytes { get; set; } = 512 * 1024;  // 512 KB
 
+    public bool ValidateSchema { get; set; } = true;
+
     public bool RetryOnFlake { get; set; }
     public int MaxRetries { get; set; }
 }
