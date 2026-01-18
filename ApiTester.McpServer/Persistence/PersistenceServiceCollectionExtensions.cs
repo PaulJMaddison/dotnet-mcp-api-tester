@@ -21,6 +21,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<FileProjectStore>();
         services.AddSingleton<FileOpenApiSpecStore>();
         services.AddSingleton<FileTestPlanStore>();
+        services.AddSingleton<FileTestPlanDraftStore>();
         services.AddSingleton<FileEnvironmentStore>();
         services.AddSingleton<FileRunAnnotationStore>();
         services.AddSingleton<FileOrganisationStore>();
@@ -50,6 +51,7 @@ public static class PersistenceServiceCollectionExtensions
 
             services.AddScoped<SqlOpenApiSpecStore>();
             services.AddScoped<SqlTestPlanStore>();
+            services.AddScoped<SqlTestPlanDraftStore>();
             services.AddScoped<SqlEnvironmentStore>();
             services.AddScoped<SqlRunAnnotationStore>();
             services.AddScoped<SqlOrganisationStore>();
@@ -61,6 +63,7 @@ public static class PersistenceServiceCollectionExtensions
             services.AddScoped<SqlAiInsightStore>();
             services.AddScoped<IOpenApiSpecStore>(sp => sp.GetRequiredService<SqlOpenApiSpecStore>());
             services.AddScoped<ITestPlanStore>(sp => sp.GetRequiredService<SqlTestPlanStore>());
+            services.AddScoped<ITestPlanDraftStore>(sp => sp.GetRequiredService<SqlTestPlanDraftStore>());
             services.AddScoped<IEnvironmentStore>(sp => sp.GetRequiredService<SqlEnvironmentStore>());
             services.AddScoped<IRunAnnotationStore>(sp => sp.GetRequiredService<SqlRunAnnotationStore>());
             services.AddScoped<IOrganisationStore>(sp => sp.GetRequiredService<SqlOrganisationStore>());
@@ -75,6 +78,7 @@ public static class PersistenceServiceCollectionExtensions
         {
             services.AddSingleton<IOpenApiSpecStore>(sp => sp.GetRequiredService<FileOpenApiSpecStore>());
             services.AddSingleton<ITestPlanStore>(sp => sp.GetRequiredService<FileTestPlanStore>());
+            services.AddSingleton<ITestPlanDraftStore>(sp => sp.GetRequiredService<FileTestPlanDraftStore>());
             services.AddSingleton<IEnvironmentStore>(sp => sp.GetRequiredService<FileEnvironmentStore>());
             services.AddSingleton<IRunAnnotationStore>(sp => sp.GetRequiredService<FileRunAnnotationStore>());
             services.AddSingleton<IOrganisationStore>(sp => sp.GetRequiredService<FileOrganisationStore>());

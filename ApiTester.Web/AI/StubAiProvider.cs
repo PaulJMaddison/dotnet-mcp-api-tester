@@ -18,10 +18,29 @@ public sealed class StubAiProvider : IAiProvider
                 examples = Array.Empty<object>(),
                 markdown = "Stub markdown"
             }, JsonDefaults.Default)
-            : JsonSerializer.Serialize(new
-            {
-                insights = Array.Empty<object>()
-            }, JsonDefaults.Default);
+            : request.UserPrompt.Contains(AiSuggestTestsSchemas.SchemaJson, StringComparison.Ordinal)
+                ? JsonSerializer.Serialize(new
+                {
+                    cases = new[]
+                    {
+                        new
+                        {
+                            name = "Stub case",
+                            rationale = "Stub rationale",
+                            @params = new
+                            {
+                                path = new { },
+                                query = new { },
+                                headers = new { }
+                            },
+                            expectedStatusRanges = new[] { "200-299" }
+                        }
+                    }
+                }, JsonDefaults.Default)
+                : JsonSerializer.Serialize(new
+                {
+                    insights = Array.Empty<object>()
+                }, JsonDefaults.Default);
 
         return Task.FromResult(new AiResult(content, "stub"));
     }

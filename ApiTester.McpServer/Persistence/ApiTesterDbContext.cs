@@ -12,6 +12,7 @@ public sealed class ApiTesterDbContext : DbContext
     public DbSet<TestCaseResultEntity> TestCaseResults => Set<TestCaseResultEntity>();
     public DbSet<OpenApiSpecEntity> OpenApiSpecs => Set<OpenApiSpecEntity>();
     public DbSet<TestPlanEntity> TestPlans => Set<TestPlanEntity>();
+    public DbSet<TestPlanDraftEntity> TestPlanDrafts => Set<TestPlanDraftEntity>();
     public DbSet<EnvironmentEntity> Environments => Set<EnvironmentEntity>();
     public DbSet<RunAnnotationEntity> RunAnnotations => Set<RunAnnotationEntity>();
     public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
@@ -159,6 +160,19 @@ public sealed class ApiTesterDbContext : DbContext
 
             b.HasOne(x => x.Project)
                 .WithMany(p => p.TestPlans)
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TestPlanDraftEntity>(b =>
+        {
+            b.HasKey(x => x.DraftId);
+            b.Property(x => x.OperationId).HasMaxLength(200).IsRequired();
+            b.Property(x => x.PlanJson).IsRequired();
+            b.HasIndex(x => x.ProjectId);
+
+            b.HasOne(x => x.Project)
+                .WithMany(p => p.TestPlanDrafts)
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

@@ -41,6 +41,7 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
             services.RemoveAll<IProjectStore>();
             services.RemoveAll<IOpenApiSpecStore>();
             services.RemoveAll<ITestPlanStore>();
+            services.RemoveAll<ITestPlanDraftStore>();
             services.RemoveAll<IOrganisationStore>();
             services.RemoveAll<IUserStore>();
             services.RemoveAll<IMembershipStore>();
@@ -52,6 +53,7 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
             services.AddScoped<SqlProjectStore>();
             services.AddScoped<SqlOpenApiSpecStore>();
             services.AddScoped<SqlTestPlanStore>();
+            services.AddScoped<SqlTestPlanDraftStore>();
             services.AddScoped<SqlOrganisationStore>();
             services.AddScoped<SqlUserStore>();
             services.AddScoped<SqlMembershipStore>();
@@ -61,6 +63,7 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
             services.AddScoped<IProjectStore>(sp => sp.GetRequiredService<SqlProjectStore>());
             services.AddScoped<IOpenApiSpecStore>(sp => sp.GetRequiredService<SqlOpenApiSpecStore>());
             services.AddScoped<ITestPlanStore>(sp => sp.GetRequiredService<SqlTestPlanStore>());
+            services.AddScoped<ITestPlanDraftStore>(sp => sp.GetRequiredService<SqlTestPlanDraftStore>());
             services.AddScoped<IOrganisationStore>(sp => sp.GetRequiredService<SqlOrganisationStore>());
             services.AddScoped<IUserStore>(sp => sp.GetRequiredService<SqlUserStore>());
             services.AddScoped<IMembershipStore>(sp => sp.GetRequiredService<SqlMembershipStore>());
