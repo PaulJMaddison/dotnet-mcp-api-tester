@@ -1,3 +1,4 @@
+using ApiTester.McpServer.Persistence.Stores;
 using Microsoft.AspNetCore.Http;
 
 namespace ApiTester.Web.Auth;
@@ -5,15 +6,13 @@ namespace ApiTester.Web.Auth;
 public sealed class ApiKeyAuthMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly ApiKeyAuthSettings _settings;
 
-    public ApiKeyAuthMiddleware(RequestDelegate next, ApiKeyAuthSettings settings)
+    public ApiKeyAuthMiddleware(RequestDelegate next)
     {
         _next = next;
-        _settings = settings;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, IApiKeyStore apiKeys)
     {
         if (!context.Request.Headers.TryGetValue(ApiKeyAuthDefaults.HeaderName, out var apiKeyHeader))
         {
@@ -22,13 +21,28 @@ public sealed class ApiKeyAuthMiddleware
         }
 
         var apiKey = apiKeyHeader.ToString();
-        if (!_settings.IsAllowed(apiKey))
+        if (!ApiKeyToken.TryGetPrefix(apiKey, out var prefix))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;
         }
 
-        context.Items[ApiKeyAuthDefaults.OwnerKeyItemName] = apiKey.Trim();
+        var record = await apiKeys.GetByPrefixAsync(prefix, context.RequestAborted);
+        if (record is null)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
+        if (!ApiKeyHasher.Verify(apiKey, record.Hash) || !ApiKeyAccessEvaluator.IsActive(record, DateTime.UtcNow))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
+        var scopes = ApiKeyScopes.Parse(record.Scopes);
+        var apiKeyContext = new ApiKeyContext(record.KeyId, record.OrganisationId, record.UserId, scopes, record.ExpiresUtc, record.RevokedUtc, record.Prefix);
+        context.Items[ApiKeyAuthDefaults.ApiKeyContextItemName] = apiKeyContext;
         await _next(context);
     }
 }

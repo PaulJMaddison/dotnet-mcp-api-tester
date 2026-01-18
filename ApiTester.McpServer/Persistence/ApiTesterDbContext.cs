@@ -17,6 +17,7 @@ public sealed class ApiTesterDbContext : DbContext
     public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
     public DbSet<UserEntity> Users => Set<UserEntity>();
     public DbSet<MembershipEntity> Memberships => Set<MembershipEntity>();
+    public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -184,6 +185,28 @@ public sealed class ApiTesterDbContext : DbContext
 
             b.HasOne(x => x.User)
                 .WithMany(u => u.Memberships)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ApiKeyEntity>(b =>
+        {
+            b.HasKey(x => x.KeyId);
+            b.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Scopes).HasMaxLength(400).IsRequired();
+            b.Property(x => x.Hash).HasMaxLength(128).IsRequired();
+            b.Property(x => x.Prefix).HasMaxLength(32).IsRequired();
+            b.HasIndex(x => x.Prefix).IsUnique();
+            b.HasIndex(x => x.OrganisationId);
+            b.HasIndex(x => x.UserId);
+
+            b.HasOne(x => x.Organisation)
+                .WithMany()
+                .HasForeignKey(x => x.OrganisationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(x => x.User)
+                .WithMany()
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

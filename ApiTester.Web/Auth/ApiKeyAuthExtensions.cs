@@ -2,13 +2,19 @@ using Microsoft.AspNetCore.Http;
 
 namespace ApiTester.Web.Auth;
 
-public static class ApiKeyAuthExtensions
+public static class ApiKeyContextExtensions
 {
-    public static string GetOwnerKey(this HttpContext context)
+    public static ApiKeyContext GetApiKeyContext(this HttpContext context)
     {
-        if (context.Items.TryGetValue(ApiKeyAuthDefaults.OwnerKeyItemName, out var value) && value is string ownerKey)
-            return ownerKey;
+        if (context.Items.TryGetValue(ApiKeyAuthDefaults.ApiKeyContextItemName, out var value) && value is ApiKeyContext apiKeyContext)
+            return apiKeyContext;
 
-        throw new InvalidOperationException("Owner key not available on the current request.");
+        throw new InvalidOperationException("API key context is missing.");
+    }
+
+    public static bool HasScope(this HttpContext context, string scope)
+    {
+        var apiKeyContext = context.GetApiKeyContext();
+        return apiKeyContext.Scopes.Contains(scope);
     }
 }
