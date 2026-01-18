@@ -64,6 +64,12 @@ public sealed class OpenApiDiffEngineTests
             && item.Change == OpenApiDiffChange.ResponseCodeAdded
             && item.Path == "/pets"
             && item.Method == "GET");
+
+        Assert.Contains(result.Items, item =>
+            item.Classification == OpenApiDiffClassification.Breaking
+            && item.Change == OpenApiDiffChange.ResponseSchemaChanged
+            && item.Path == "/pets"
+            && item.Method == "GET");
     }
 
     [Fact]

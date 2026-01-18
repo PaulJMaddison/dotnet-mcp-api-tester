@@ -5,7 +5,8 @@ public sealed record OpenApiSpecMetadataDto(
     Guid ProjectId,
     string Title,
     string Version,
-    DateTime CreatedUtc);
+    string SpecHash,
+    DateTime UploadedUtc);
 
 public sealed record OpenApiSpecDetailDto(
     Guid SpecId,
@@ -14,7 +15,7 @@ public sealed record OpenApiSpecDetailDto(
     string Version,
     string SpecJson,
     string SpecHash,
-    DateTime CreatedUtc);
+    DateTime UploadedUtc);
 
 public sealed record OpenApiDiffItemDto(
     string Classification,

@@ -538,127 +538,8 @@ app.MapDelete("/api/projects/{projectId}/environments/{environmentId}", async (s
     return Results.NoContent();
 });
 
-app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId, HttpRequest request, IProjectStore projectStore, IOpenApiSpecStore specStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
-{
-    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(error);
-
-    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
-    if (scopeCheck is not null)
-        return scopeCheck;
-
-    var orgContext = httpContext.GetOrgContext();
-    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
-    if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
-
-    string? specJson = null;
-
-    var specSource = "payload";
-
-    if (request.HasFormContentType)
-    {
-        var form = await request.ReadFormAsync(ct);
-        var file = form.Files.FirstOrDefault();
-        if (file is not null)
-        {
-            specSource = "upload";
-            if (file.Length > WebOpenApiImportLimits.MaxSpecBytes)
-                return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
-
-            await using var stream = file.OpenReadStream();
-            using var reader = new StreamReader(stream, Encoding.UTF8);
-            specJson = await reader.ReadToEndAsync(ct);
-        }
-
-        if (specJson is null)
-        {
-            var path = form["path"].ToString();
-            if (!string.IsNullOrWhiteSpace(path))
-            {
-                specSource = "path";
-                if (!File.Exists(path))
-                    return InvalidRequest("Spec path does not exist.");
-
-                var fileInfo = new FileInfo(path);
-                if (fileInfo.Length > WebOpenApiImportLimits.MaxSpecBytes)
-                    return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
-
-                specJson = await File.ReadAllTextAsync(path, ct);
-            }
-        }
-    }
-    else
-    {
-        OpenApiImportRequest? payload;
-        try
-        {
-            payload = await request.ReadFromJsonAsync<OpenApiImportRequest>(cancellationToken: ct);
-        }
-        catch (JsonException)
-        {
-            return InvalidRequest("OpenAPI import request must be valid JSON.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(payload?.Path))
-        {
-            var path = payload.Path.Trim();
-            specSource = "path";
-            if (!File.Exists(path))
-                return InvalidRequest("Spec path does not exist.");
-
-            var fileInfo = new FileInfo(path);
-            if (fileInfo.Length > WebOpenApiImportLimits.MaxSpecBytes)
-                return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
-
-            specJson = await File.ReadAllTextAsync(path, ct);
-        }
-    }
-
-    if (string.IsNullOrWhiteSpace(specJson))
-        return InvalidRequest("Provide an OpenAPI file upload or path.");
-
-    if (Encoding.UTF8.GetByteCount(specJson) > WebOpenApiImportLimits.MaxSpecBytes)
-        return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
-
-    JsonDocument document;
-    try
-    {
-        document = JsonDocument.Parse(specJson);
-    }
-    catch (JsonException)
-    {
-        return InvalidRequest("OpenAPI spec must be valid JSON.");
-    }
-
-    using (document)
-    {
-        var title = "Untitled API";
-        var version = "unknown";
-
-        if (document.RootElement.TryGetProperty("info", out var info))
-        {
-            if (info.TryGetProperty("title", out var titleElement) && titleElement.ValueKind == JsonValueKind.String)
-                title = titleElement.GetString() ?? title;
-
-            if (info.TryGetProperty("version", out var versionElement) && versionElement.ValueKind == JsonValueKind.String)
-                version = versionElement.GetString() ?? version;
-        }
-
-        title = string.IsNullOrWhiteSpace(title) ? "Untitled API" : title.Trim();
-        version = string.IsNullOrWhiteSpace(version) ? "unknown" : version.Trim();
-
-        var specHash = ComputeSpecHash(specJson);
-        var record = await specStore.UpsertAsync(project.ProjectId, title, version, specJson, specHash, DateTime.UtcNow, ct);
-        logger.LogInformation(
-            "Imported OpenAPI spec for project {ProjectId} titled {Title} version {Version} from {SpecSource}",
-            project.ProjectId,
-            title,
-            version,
-            specSource);
-        return Results.Ok(OpenApiMapping.ToMetadataDto(record));
-    }
-});
+app.MapPost("/api/projects/{projectId}/openapi/import", ImportOpenApiSpecAsync);
+app.MapPost("/api/projects/{projectId}/specs/import", ImportOpenApiSpecAsync);
 
 app.MapGet("/api/projects/{projectId}/openapi", async (string projectId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
@@ -696,6 +577,60 @@ app.MapGet("/api/projects/{projectId}/specs", async (string projectId, IOpenApiS
 
     var records = await specStore.ListAsync(id, ct);
     return Results.Ok(records.Select(OpenApiMapping.ToMetadataDto));
+});
+
+app.MapGet("/api/projects/{projectId}/specs/diff", async (string projectId, string? from, string? to, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
+        return InvalidRequest("Both from and to spec ids are required.");
+
+    if (!RequestValidation.TryParseGuid(from, out var specAId, out var specAError))
+        return InvalidRequest(specAError);
+
+    if (!RequestValidation.TryParseGuid(to, out var specBId, out var specBError))
+        return InvalidRequest(specBError);
+
+    var recordA = await specStore.GetByIdAsync(specAId, ct);
+    if (recordA is null || recordA.ProjectId != id)
+        return Results.NotFound();
+
+    var recordB = await specStore.GetByIdAsync(specBId, ct);
+    if (recordB is null || recordB.ProjectId != id)
+        return Results.NotFound();
+
+    var reader = new OpenApiStringReader();
+    var docA = reader.Read(recordA.SpecJson, out _);
+    if (docA is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Spec A could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var docB = reader.Read(recordB.SpecJson, out _);
+    if (docB is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Spec B could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var diff = OpenApiDiffEngine.Diff(docA, docB);
+    var response = new OpenApiDiffResponse(
+        recordA.SpecId,
+        recordB.SpecId,
+        diff.Items.Select(item => new OpenApiDiffItemDto(
+            item.Classification.ToString(),
+            item.Change,
+            item.Path,
+            item.Method,
+            item.Detail)).ToList());
+
+    return Results.Ok(response);
 });
 
 app.MapGet("/api/specs/{specId}", async (string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
@@ -1631,6 +1566,135 @@ static string ComputeSpecHash(string specJson)
     var bytes = Encoding.UTF8.GetBytes(specJson);
     var hash = sha.ComputeHash(bytes);
     return Convert.ToHexString(hash).ToLowerInvariant();
+}
+
+static async Task<IResult> ImportOpenApiSpecAsync(
+    string projectId,
+    HttpRequest request,
+    IProjectStore projectStore,
+    IOpenApiSpecStore specStore,
+    HttpContext httpContext,
+    ILogger<Program> logger,
+    CancellationToken ct)
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    string? specJson = null;
+
+    var specSource = "payload";
+
+    if (request.HasFormContentType)
+    {
+        var form = await request.ReadFormAsync(ct);
+        var file = form.Files.FirstOrDefault();
+        if (file is not null)
+        {
+            specSource = "upload";
+            if (file.Length > WebOpenApiImportLimits.MaxSpecBytes)
+                return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+
+            await using var stream = file.OpenReadStream();
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            specJson = await reader.ReadToEndAsync(ct);
+        }
+
+        if (specJson is null)
+        {
+            var path = form["path"].ToString();
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                specSource = "path";
+                if (!File.Exists(path))
+                    return InvalidRequest("Spec path does not exist.");
+
+                var fileInfo = new FileInfo(path);
+                if (fileInfo.Length > WebOpenApiImportLimits.MaxSpecBytes)
+                    return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+
+                specJson = await File.ReadAllTextAsync(path, ct);
+            }
+        }
+    }
+    else
+    {
+        OpenApiImportRequest? payload;
+        try
+        {
+            payload = await request.ReadFromJsonAsync<OpenApiImportRequest>(cancellationToken: ct);
+        }
+        catch (JsonException)
+        {
+            return InvalidRequest("OpenAPI import request must be valid JSON.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(payload?.Path))
+        {
+            var path = payload.Path.Trim();
+            specSource = "path";
+            if (!File.Exists(path))
+                return InvalidRequest("Spec path does not exist.");
+
+            var fileInfo = new FileInfo(path);
+            if (fileInfo.Length > WebOpenApiImportLimits.MaxSpecBytes)
+                return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+
+            specJson = await File.ReadAllTextAsync(path, ct);
+        }
+    }
+
+    if (string.IsNullOrWhiteSpace(specJson))
+        return InvalidRequest("Provide an OpenAPI file upload or path.");
+
+    if (Encoding.UTF8.GetByteCount(specJson) > WebOpenApiImportLimits.MaxSpecBytes)
+        return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+
+    JsonDocument document;
+    try
+    {
+        document = JsonDocument.Parse(specJson);
+    }
+    catch (JsonException)
+    {
+        return InvalidRequest("OpenAPI spec must be valid JSON.");
+    }
+
+    using (document)
+    {
+        var title = "Untitled API";
+        var version = "unknown";
+
+        if (document.RootElement.TryGetProperty("info", out var info))
+        {
+            if (info.TryGetProperty("title", out var titleElement) && titleElement.ValueKind == JsonValueKind.String)
+                title = titleElement.GetString() ?? title;
+
+            if (info.TryGetProperty("version", out var versionElement) && versionElement.ValueKind == JsonValueKind.String)
+                version = versionElement.GetString() ?? version;
+        }
+
+        title = string.IsNullOrWhiteSpace(title) ? "Untitled API" : title.Trim();
+        version = string.IsNullOrWhiteSpace(version) ? "unknown" : version.Trim();
+
+        var specHash = ComputeSpecHash(specJson);
+        var record = await specStore.UpsertAsync(project.ProjectId, title, version, specJson, specHash, DateTime.UtcNow, ct);
+        logger.LogInformation(
+            "Imported OpenAPI spec for project {ProjectId} titled {Title} version {Version} from {SpecSource}",
+            project.ProjectId,
+            title,
+            version,
+            specSource);
+        return Results.Ok(OpenApiMapping.ToMetadataDto(record));
+    }
 }
 
 static bool TryParseReportFormat(string? format, out RunReportFormat reportFormat, out string error)
