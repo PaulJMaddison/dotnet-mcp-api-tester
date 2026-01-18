@@ -35,7 +35,20 @@ public sealed class StubAiProvider : IAiProvider
                             },
                             expectedStatusRanges = new[] { "200-299" }
                         }
-                    }
+                }
+            }, JsonDefaults.Default)
+            : request.UserPrompt.Contains(AiRunSummarySchemas.SchemaJson, StringComparison.Ordinal)
+                ? JsonSerializer.Serialize(new
+                {
+                    overallSummary = "Stub summary with no critical risk.",
+                    topFailures = Array.Empty<object>(),
+                    flakeAssessment = "No clear flake signals in stub data.",
+                    regressionLikelihood = new
+                    {
+                        level = "low",
+                        rationale = "Stub response does not indicate persistent regression."
+                    },
+                    recommendedNextActions = new[] { "Re-run to confirm." }
                 }, JsonDefaults.Default)
                 : JsonSerializer.Serialize(new
                 {

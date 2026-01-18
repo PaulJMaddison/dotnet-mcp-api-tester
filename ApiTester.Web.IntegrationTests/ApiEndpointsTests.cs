@@ -517,6 +517,114 @@ public class ApiEndpointsTests
     }
 
     [Fact]
+    public async Task AiSummariseRunEndpoint_ReturnsForbidden_ForFreeTier()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Free"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "FreeSummary", "free-summary");
+        var run = await SeedRunAsync(factory, project, "op-free-summary");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsJsonAsync("/api/ai/summarise-run", new AiSummariseRunRequest(run.RunId.ToString()));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AiSummariseRunEndpoint_ReturnsNotFound_ForMissingRun()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsJsonAsync("/api/ai/summarise-run", new AiSummariseRunRequest(Guid.NewGuid().ToString()));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AiSummariseRunEndpoint_ReturnsEvidenceRefs()
+    {
+        const string aiPayload = """
+        {
+          "overallSummary": "Run failed with a single 502 response; risk is moderate until upstream stability improves.",
+          "topFailures": [
+            {
+              "title": "502 from pets endpoint",
+              "evidenceRefs": [
+                {
+                  "caseName": "Failing Case",
+                  "failureReason": "Expected 200 but got 502."
+                }
+              ]
+            }
+          ],
+          "flakeAssessment": "Likely flaky external dependency due to 502 response.",
+          "regressionLikelihood": {
+            "level": "medium",
+            "rationale": "Single failure suggests instability but not a systemic regression."
+          },
+          "recommendedNextActions": [
+            "Re-run the failing case to confirm flakiness.",
+            "Check upstream service logs for 502 spikes."
+          ]
+        }
+        """;
+
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IAiProvider>();
+                services.AddSingleton<IAiProvider>(new FixedAiProvider(aiPayload));
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "SummaryEvidence", "summary-evidence");
+        var run = await SeedFailingRunAsync(factory, project, "op-summary");
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsJsonAsync("/api/ai/summarise-run", new AiSummariseRunRequest(run.RunId.ToString()));
+        var payload = await response.Content.ReadFromJsonAsync<AiRunSummaryResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Single(payload!.TopFailures);
+        Assert.Single(payload.TopFailures[0].EvidenceRefs);
+        Assert.Equal("Failing Case", payload.TopFailures[0].EvidenceRefs[0].CaseName);
+    }
+
+    [Fact]
     public async Task AiExplainEndpoint_ReturnsForbidden_ForFreeTier()
     {
         using var baseFactory = new ApiTesterWebFactory();
@@ -982,6 +1090,47 @@ public class ApiEndpointsTests
                     StatusCode = 200,
                     DurationMs = 120,
                     Pass = true
+                }
+            ]
+        };
+
+        db.TestRuns.Add(run);
+        await db.SaveChangesAsync();
+        return run;
+    }
+
+    private static async Task<TestRunEntity> SeedFailingRunAsync(WebApplicationFactory<Program> factory, ProjectEntity project, string operationId)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var started = DateTime.UtcNow.AddMinutes(-3);
+        var run = new TestRunEntity
+        {
+            RunId = Guid.NewGuid(),
+            OrganisationId = project.OrganisationId,
+            ProjectId = project.ProjectId,
+            OperationId = operationId,
+            StartedUtc = started,
+            CompletedUtc = started.AddMinutes(1),
+            TotalCases = 1,
+            Passed = 0,
+            Failed = 1,
+            Blocked = 0,
+            TotalDurationMs = 100,
+            Results =
+            [
+                new TestCaseResultEntity
+                {
+                    Name = "Failing Case",
+                    Method = "GET",
+                    Url = "https://example.test",
+                    StatusCode = 502,
+                    DurationMs = 100,
+                    Pass = false,
+                    FailureReason = "Expected 200 but got 502.",
+                    ResponseSnippet = "Bad Gateway"
                 }
             ]
         };

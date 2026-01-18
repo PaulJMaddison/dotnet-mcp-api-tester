@@ -6,6 +6,20 @@ public sealed record AiSpecSummaryResponse(Guid SpecId, string Summary);
 
 public sealed record AiExplainExampleDto(string Title, string Content);
 
+public sealed record AiRunSummaryEvidenceRefDto(string CaseName, string? FailureReason);
+
+public sealed record AiRunSummaryFailureDto(string Title, IReadOnlyList<AiRunSummaryEvidenceRefDto> EvidenceRefs);
+
+public sealed record AiRunSummaryRegressionLikelihoodDto(string Level, string Rationale);
+
+public sealed record AiRunSummaryResponse(
+    Guid RunId,
+    string OverallSummary,
+    IReadOnlyList<AiRunSummaryFailureDto> TopFailures,
+    string FlakeAssessment,
+    AiRunSummaryRegressionLikelihoodDto RegressionLikelihood,
+    IReadOnlyList<string> RecommendedNextActions);
+
 public sealed record AiExplainResponse(
     Guid ProjectId,
     string OperationId,
