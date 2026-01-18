@@ -18,6 +18,7 @@ public sealed class ApiTesterDbContext : DbContext
     public DbSet<UserEntity> Users => Set<UserEntity>();
     public DbSet<MembershipEntity> Memberships => Set<MembershipEntity>();
     public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
+    public DbSet<AuditEventEntity> AuditEvents => Set<AuditEventEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -111,6 +112,23 @@ public sealed class ApiTesterDbContext : DbContext
                 .WithMany(p => p.OpenApiSpecs)
                 .HasForeignKey(x => x.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AuditEventEntity>(b =>
+        {
+            b.HasKey(x => x.AuditEventId);
+            b.Property(x => x.Action).HasMaxLength(120).IsRequired();
+            b.Property(x => x.TargetType).HasMaxLength(100).IsRequired();
+            b.Property(x => x.TargetId).HasMaxLength(200).IsRequired();
+            b.Property(x => x.MetadataJson);
+            b.HasIndex(x => new { x.OrganisationId, x.CreatedUtc });
+            b.HasIndex(x => new { x.OrganisationId, x.Action, x.CreatedUtc });
+
+            b.HasOne(x => x.Organisation)
+                .WithMany(o => o.AuditEvents)
+                .HasForeignKey(x => x.OrganisationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
         });
 
         modelBuilder.Entity<TestPlanEntity>(b =>

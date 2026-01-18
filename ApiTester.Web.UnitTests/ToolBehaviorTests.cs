@@ -225,7 +225,7 @@ public sealed class RunHistoryToolsTests
 public sealed class PolicyToolsTests
 {
     [Fact]
-    public void ApiResetRuntime_ClearsBaseUrlAuthAndPolicy()
+    public async Task ApiResetRuntime_ClearsBaseUrlAuthAndPolicy()
     {
         var runtime = new ApiRuntimeConfig();
         runtime.SetBaseUrl("https://example.com");
@@ -235,8 +235,8 @@ public sealed class PolicyToolsTests
         runtime.Policy.AllowedBaseUrls.Add("https://example.com");
         runtime.Policy.MaxResponseBodyBytes = 42;
 
-        var tools = new PolicyTools(runtime);
-        var response = tools.ApiResetRuntime();
+        var tools = new PolicyTools(runtime, new NullAuditEventStore());
+        var response = await tools.ApiResetRuntime();
 
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(response));
         Assert.True(doc.RootElement.GetProperty("ok").GetBoolean());
@@ -248,11 +248,11 @@ public sealed class PolicyToolsTests
     }
 
     [Fact]
-    public void ApiSetPolicy_ReturnsIsError_OnInvalidJson()
+    public async Task ApiSetPolicy_ReturnsIsError_OnInvalidJson()
     {
-        var tools = new PolicyTools(new ApiRuntimeConfig());
+        var tools = new PolicyTools(new ApiRuntimeConfig(), new NullAuditEventStore());
 
-        var response = tools.ApiSetPolicy("not-json");
+        var response = await tools.ApiSetPolicy("not-json");
 
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(response));
         Assert.True(doc.RootElement.GetProperty("isError").GetBoolean());
@@ -262,15 +262,30 @@ public sealed class PolicyToolsTests
 public sealed class RuntimeToolsTests
 {
     [Fact]
-    public void ApiSetBaseUrl_RejectsInvalidScheme()
+    public async Task ApiSetBaseUrl_RejectsInvalidScheme()
     {
         var runtime = new ApiRuntimeConfig();
-        var tools = new RuntimeTools(runtime);
+        var tools = new RuntimeTools(runtime, new NullAuditEventStore());
 
-        var response = tools.ApiSetBaseUrl("ftp://example.com");
+        var response = await tools.ApiSetBaseUrl("ftp://example.com");
 
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(response));
         Assert.True(doc.RootElement.GetProperty("isError").GetBoolean());
         Assert.Null(runtime.BaseUrl);
     }
+}
+
+internal sealed class NullAuditEventStore : IAuditEventStore
+{
+    public Task<AuditEventRecord> CreateAsync(AuditEventRecord record, CancellationToken ct)
+        => Task.FromResult(record);
+
+    public Task<IReadOnlyList<AuditEventRecord>> ListAsync(
+        Guid organisationId,
+        int take,
+        string? action,
+        DateTime? fromUtc,
+        DateTime? toUtc,
+        CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<AuditEventRecord>>(Array.Empty<AuditEventRecord>());
 }
