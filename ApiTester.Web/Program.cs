@@ -100,12 +100,6 @@ var jsonOptions = new JsonSerializerOptions
     WriteIndented = true
 };
 
-var authOptions = builder.Configuration.GetSection(ApiKeyAuthOptions.SectionName).Get<ApiKeyAuthOptions>() ?? new ApiKeyAuthOptions();
-var allowedKeys = authOptions.ResolveKeys();
-if (allowedKeys.Count == 0)
-    throw new InvalidOperationException("API key authentication requires at least one key in configuration (Auth:ApiKey or Auth:ApiKeys).");
-builder.Services.AddSingleton(new ApiKeyAuthSettings(allowedKeys));
-
 var app = builder.Build();
 var appVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";
 
@@ -134,7 +128,7 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseWhen(
-    context => context.Request.Path.StartsWithSegments("/api"),
+    context => context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/api-keys"),
     builder =>
     {
         builder.UseMiddleware<ApiKeyAuthMiddleware>();
@@ -212,6 +206,64 @@ app.MapGet("/api/orgs/current/members", async (IOrganisationStore orgStore, IUse
     return Results.Ok(new OrgMembersResponse(members));
 });
 
+app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKeyStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryValidateRequiredName(request?.Name, out var nameError))
+        return InvalidRequest(nameError);
+
+    if (!ApiKeyScopes.TryNormalize(request?.Scopes, out var normalizedScopes, out var scopeError))
+        return InvalidRequest(scopeError);
+
+    if (request?.ExpiresUtc is { } expiresUtc && expiresUtc <= DateTime.UtcNow)
+        return InvalidRequest("ExpiresUtc must be in the future.");
+
+    var orgContext = httpContext.GetOrgContext();
+    var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
+    if (adminCheck is not null)
+        return adminCheck;
+
+    var token = ApiKeyToken.Generate();
+    var hash = ApiKeyHasher.Hash(token.Token);
+    var record = await apiKeyStore.CreateAsync(
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        request!.Name!,
+        ApiKeyScopes.Serialize(normalizedScopes),
+        request.ExpiresUtc,
+        hash,
+        token.Prefix,
+        ct);
+
+    return Results.Ok(new ApiKeyCreateResponse(ApiKeyMapping.ToDto(record), token.Token));
+});
+
+app.MapGet("/api-keys", async (IApiKeyStore apiKeyStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    var orgContext = httpContext.GetOrgContext();
+    var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
+    if (adminCheck is not null)
+        return adminCheck;
+
+    var keys = await apiKeyStore.ListAsync(orgContext.OrganisationId, ct);
+    return Results.Ok(ApiKeyMapping.ToListResponse(keys));
+});
+
+app.MapPost("/api-keys/{id}/revoke", async (string id, IApiKeyStore apiKeyStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(id, out var keyId, out var error))
+        return InvalidRequest(error);
+
+    var orgContext = httpContext.GetOrgContext();
+    var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
+    if (adminCheck is not null)
+        return adminCheck;
+
+    var record = await apiKeyStore.RevokeAsync(orgContext.OrganisationId, keyId, DateTime.UtcNow, ct);
+    return record is null
+        ? Results.NotFound()
+        : Results.Ok(ApiKeyMapping.ToDto(record));
+});
+
 app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, IProjectStore store, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryNormalizePageSize(pageSize, take, 50, 1, 200, out var normalizedPageSize, out var sizeError))
@@ -226,6 +278,10 @@ app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, 
     if (!RequestValidation.TryNormalizeOrder(order, SortDirection.Desc, out var direction, out var orderError))
         return InvalidRequest(orderError);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var result = await store.ListAsync(orgContext.OrganisationId, new PageRequest(normalizedPageSize, offset), sortField, direction, ct);
     var metadata = new PageMetadata(result.Total, normalizedPageSize, result.NextOffset?.ToString());
@@ -236,6 +292,10 @@ app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore 
 {
     if (!RequestValidation.TryValidateRequiredName(request?.Name, out var error))
         return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var project = await store.CreateAsync(orgContext.OrganisationId, orgContext.OwnerKey, request!.Name!, ct);
@@ -248,6 +308,10 @@ app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore s
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var project = await store.GetAsync(orgContext.OrganisationId, id, ct);
     return project is null
@@ -259,6 +323,10 @@ app.MapGet("/api/projects/{projectId}/environments", async (string projectId, IP
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
@@ -279,6 +347,10 @@ app.MapPost("/api/projects/{projectId}/environments", async (string projectId, E
 
     if (!RequestValidation.TryNormalizeBaseUrl(request?.BaseUrl, out var normalizedBaseUrl, out var baseUrlError))
         return InvalidRequest(baseUrlError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
@@ -305,6 +377,10 @@ app.MapGet("/api/projects/{projectId}/environments/{environmentId}", async (stri
     if (!RequestValidation.TryParseGuid(environmentId, out var envId, out var envError))
         return InvalidRequest(envError);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
@@ -329,6 +405,10 @@ app.MapPut("/api/projects/{projectId}/environments/{environmentId}", async (stri
 
     if (!RequestValidation.TryNormalizeBaseUrl(request?.BaseUrl, out var normalizedBaseUrl, out var baseUrlError))
         return InvalidRequest(baseUrlError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
@@ -358,6 +438,10 @@ app.MapDelete("/api/projects/{projectId}/environments/{environmentId}", async (s
     if (!RequestValidation.TryParseGuid(environmentId, out var envId, out var envError))
         return InvalidRequest(envError);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
@@ -375,6 +459,10 @@ app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId,
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
@@ -494,6 +582,10 @@ app.MapGet("/api/projects/{projectId}/openapi", async (string projectId, IOpenAp
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
@@ -510,6 +602,10 @@ app.MapGet("/api/projects/{projectId}/specs", async (string projectId, IOpenApiS
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
@@ -523,6 +619,10 @@ app.MapGet("/api/specs/{specId}", async (string specId, IOpenApiSpecStore specSt
 {
     if (!RequestValidation.TryParseGuid(specId, out var id, out var error))
         return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var record = await specStore.GetByIdAsync(id, ct);
@@ -600,6 +700,10 @@ app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async 
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
@@ -640,6 +744,10 @@ app.MapGet("/api/projects/{projectId}/testplans/{operationId}", async (
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
@@ -670,6 +778,10 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
 
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
@@ -755,6 +867,10 @@ app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pag
     if (!RequestValidation.TryNormalizeOrder(order, SortDirection.Desc, out var direction, out var orderError))
         return InvalidRequest(orderError);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetByKeyAsync(orgContext.OrganisationId, projectKey!.Trim(), ct);
     if (project is null)
@@ -781,6 +897,10 @@ app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, HttpCo
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(orgContext.OrganisationId, id);
     return run is null
@@ -792,6 +912,10 @@ app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, 
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(orgContext.OrganisationId, id);
@@ -805,6 +929,10 @@ app.MapGet("/api/runs/{runId}/compliance-report", async (string runId, ITestRunS
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(orgContext.OrganisationId, id);
     return run is null
@@ -816,6 +944,10 @@ app.MapGet("/api/runs/{runId}/annotations", async (string runId, ITestRunStore r
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var run = await runStore.GetAsync(orgContext.OrganisationId, id);
@@ -837,6 +969,10 @@ app.MapPost("/api/runs/{runId}/annotations", async (string runId, RunAnnotationC
     if (!RequestValidation.TryNormalizeOptionalJiraLink(request?.JiraLink, out var normalizedJiraLink, out var jiraError))
         return InvalidRequest(jiraError);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var run = await runStore.GetAsync(orgContext.OrganisationId, id);
     if (run is null)
@@ -854,6 +990,10 @@ app.MapGet("/api/runs/{runId}/annotations/{annotationId}", async (string runId, 
 
     if (!RequestValidation.TryParseGuid(annotationId, out var annotationGuid, out var annotationError))
         return InvalidRequest(annotationError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var run = await runStore.GetAsync(orgContext.OrganisationId, id);
@@ -880,6 +1020,10 @@ app.MapPut("/api/runs/{runId}/annotations/{annotationId}", async (string runId, 
     if (!RequestValidation.TryNormalizeOptionalJiraLink(request?.JiraLink, out var normalizedJiraLink, out var jiraError))
         return InvalidRequest(jiraError);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var run = await runStore.GetAsync(orgContext.OrganisationId, id);
     if (run is null)
@@ -900,6 +1044,10 @@ app.MapDelete("/api/runs/{runId}/annotations/{annotationId}", async (string runI
 
     if (!RequestValidation.TryParseGuid(annotationId, out var annotationGuid, out var annotationError))
         return InvalidRequest(annotationError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var run = await runStore.GetAsync(orgContext.OrganisationId, id);
@@ -925,6 +1073,10 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
     if (!TryParseReportFormat(format, out var reportFormat, out var formatError))
         return InvalidRequest(formatError);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(orgContext.OrganisationId, id);
     if (run is null)
@@ -945,6 +1097,10 @@ app.MapPost("/api/runs/{runId}/baseline/{baselineRunId}", async (string runId, s
     if (!RequestValidation.TryParseGuid(baselineRunId, out var baselineId, out var baselineError))
         return InvalidRequest(baselineError);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var updated = await store.SetBaselineAsync(orgContext.OrganisationId, id, baselineId);
     return updated ? Results.NoContent() : Results.NotFound();
@@ -957,6 +1113,10 @@ app.MapGet("/api/runs/{runId}/compare/{baselineRunId}", async (string runId, str
 
     if (!RequestValidation.TryParseGuid(baselineRunId, out var baselineId, out var baselineError))
         return InvalidRequest(baselineError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(orgContext.OrganisationId, id);
@@ -979,6 +1139,10 @@ app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunSto
     if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
         return InvalidRequest(runError);
 
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
     var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(orgContext.OrganisationId, id);
     if (run is null)
@@ -998,6 +1162,10 @@ app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpec
 
     if (!RequestValidation.TryParseGuid(specId, out var id, out var error))
         return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
 
     var orgContext = httpContext.GetOrgContext();
     var record = await specStore.GetByIdAsync(id, ct);
@@ -1025,6 +1193,22 @@ static IResult FeatureNotAvailable(string feature, EntitlementService entitlemen
         title: "Feature not available",
         detail: $"{feature} features require a Pro subscription. Current tier: {entitlements.Tier}.",
         statusCode: StatusCodes.Status403Forbidden);
+
+static IResult? RequireScope(HttpContext context, string scope)
+{
+    if (!context.HasScope(scope))
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+    return null;
+}
+
+static IResult? RequireAdminKeyAccess(HttpContext context, OrgContext orgContext)
+{
+    if (!OrgRoleAccess.CanManageKeys(orgContext.Role))
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+    return RequireScope(context, ApiKeyScopes.AdminKeys);
+}
 
 static async Task<IResult> NotFoundOrForbiddenAsync(IProjectStore store, Guid projectId, CancellationToken ct)
 {

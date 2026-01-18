@@ -33,7 +33,7 @@ public class ApiEndpointsTests
     public async Task GetProject_ReturnsForbidden_WhenOwnerMismatch()
     {
         using var factory = new ApiTesterWebFactory();
-        var project = await SeedProjectAsync(factory, "OwnerA", "owner-a", ApiTesterWebFactory.ApiKeyAlpha);
+        var project = await SeedProjectAsync(factory, "OwnerA", "owner-a");
 
         var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyBravo);
         var response = await client.GetAsync($"/api/projects/{project.ProjectId}");
@@ -612,7 +612,13 @@ public class ApiEndpointsTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    private static async Task<ProjectEntity> SeedProjectAsync(WebApplicationFactory<Program> factory, string name, string key, string ownerKey = ApiTesterWebFactory.ApiKeyAlpha, DateTime? createdUtc = null)
+    private static async Task<ProjectEntity> SeedProjectAsync(
+        WebApplicationFactory<Program> factory,
+        string name,
+        string key,
+        string ownerKey = ApiTesterWebFactory.AlphaExternalId,
+        Guid? organisationId = null,
+        DateTime? createdUtc = null)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
@@ -621,6 +627,7 @@ public class ApiEndpointsTests
         var project = new ProjectEntity
         {
             ProjectId = Guid.NewGuid(),
+            OrganisationId = organisationId ?? ApiTesterWebFactory.OrganisationAlphaId,
             OwnerKey = ownerKey,
             Name = name,
             ProjectKey = key,
@@ -643,6 +650,7 @@ public class ApiEndpointsTests
         var run = new TestRunEntity
         {
             RunId = Guid.NewGuid(),
+            OrganisationId = project.OrganisationId,
             ProjectId = project.ProjectId,
             OperationId = operationId,
             StartedUtc = started,
