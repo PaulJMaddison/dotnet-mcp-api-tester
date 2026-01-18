@@ -30,6 +30,7 @@ public sealed class PolicyTools
             timeoutSeconds = (int)_cfg.Policy.Timeout.TotalSeconds,
             maxRequestBodyBytes = _cfg.Policy.MaxRequestBodyBytes,
             maxResponseBodyBytes = _cfg.Policy.MaxResponseBodyBytes,
+            validateSchema = _cfg.Policy.ValidateSchema,
             blockLocalhost = _cfg.Policy.BlockLocalhost,
             blockPrivateNetworks = _cfg.Policy.BlockPrivateNetworks,
             retryOnFlake = _cfg.Policy.RetryOnFlake,
@@ -138,6 +139,9 @@ public sealed class PolicyTools
                 next.MaxResponseBodyBytes = v;
             }
 
+            if (root.TryGetProperty("validateSchema", out var validateSchema))
+                next.ValidateSchema = validateSchema.GetBoolean();
+
             if (root.TryGetProperty("blockLocalhost", out var blockLocalhost))
                 next.BlockLocalhost = blockLocalhost.GetBoolean();
 
@@ -179,6 +183,7 @@ public sealed class PolicyTools
         _cfg.Policy.Timeout = policy.Timeout;
         _cfg.Policy.MaxRequestBodyBytes = policy.MaxRequestBodyBytes;
         _cfg.Policy.MaxResponseBodyBytes = policy.MaxResponseBodyBytes;
+        _cfg.Policy.ValidateSchema = policy.ValidateSchema;
         _cfg.Policy.RetryOnFlake = policy.RetryOnFlake;
         _cfg.Policy.MaxRetries = policy.MaxRetries;
 
@@ -203,6 +208,7 @@ public sealed class PolicyTools
             Timeout = p.Timeout,
             MaxRequestBodyBytes = p.MaxRequestBodyBytes,
             MaxResponseBodyBytes = p.MaxResponseBodyBytes,
+            ValidateSchema = p.ValidateSchema,
             RetryOnFlake = p.RetryOnFlake,
             MaxRetries = p.MaxRetries
         };
