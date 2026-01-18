@@ -64,6 +64,24 @@ public sealed class FileOpenApiSpecStore : IOpenApiSpecStore
         }
     }
 
+    public async Task<bool> DeleteAsync(Guid specId, CancellationToken ct)
+    {
+        await _mutex.WaitAsync(ct);
+        try
+        {
+            var list = await LoadAsync(ct);
+            var removed = list.RemoveAll(spec => spec.SpecId == specId) > 0;
+            if (removed)
+                await SaveAsync(list, ct);
+
+            return removed;
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
+
     private async Task<List<OpenApiSpecRecord>> LoadAsync(CancellationToken ct)
     {
         if (!File.Exists(FilePath))

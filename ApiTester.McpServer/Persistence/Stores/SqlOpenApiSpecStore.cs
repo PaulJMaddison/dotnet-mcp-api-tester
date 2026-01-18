@@ -74,4 +74,15 @@ public sealed class SqlOpenApiSpecStore : IOpenApiSpecStore
 
         return new OpenApiSpecRecord(entity.SpecId, entity.ProjectId, entity.Title, entity.Version, entity.SpecJson, entity.SpecHash, entity.CreatedUtc);
     }
+
+    public async Task<bool> DeleteAsync(Guid specId, CancellationToken ct)
+    {
+        var entity = await _db.OpenApiSpecs.FirstOrDefaultAsync(s => s.SpecId == specId, ct);
+        if (entity is null)
+            return false;
+
+        _db.OpenApiSpecs.Remove(entity);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
 }
