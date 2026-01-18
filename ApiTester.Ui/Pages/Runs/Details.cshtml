@@ -37,6 +37,9 @@ else if (Model.Run is not null)
     var realFail = classification.Fail + classification.BlockedUnexpected;
 
     <h2>Run Summary</h2>
+    <div class="toolbar">
+        <button class="button" type="button">Generate explanation</button>
+    </div>
     <div class="summary-grid">
         <div class="summary-card">
             <span>Total Cases</span>

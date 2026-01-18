@@ -100,6 +100,7 @@ builder.Services.Configure<AiRateLimitOptions>(builder.Configuration.GetSection(
 builder.Services.AddSingleton<AiRateLimiter>();
 builder.Services.AddSingleton<IAiProvider, StubAiProvider>();
 builder.Services.AddScoped<AiAnalysisService>();
+builder.Services.AddScoped<AiExplainService>();
 builder.Services.Configure<EntitlementOptions>(builder.Configuration.GetSection("Entitlements"));
 builder.Services.AddSingleton<EntitlementService>();
 builder.Services.AddScoped<OrgContextResolver>();
@@ -1483,6 +1484,81 @@ app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunSto
     var aiResponse = await aiClient.GetResponseAsync(prompt, ct);
     return Results.Ok(new AiRunExplanationResponse(run.RunId, aiResponse.Content));
 });
+
+async Task<IResult> ExplainAiEndpointAsync(
+    HttpContext httpContext,
+    IProjectStore projectStore,
+    IOpenApiSpecStore specStore,
+    IOrganisationStore orgStore,
+    AiExplainService aiExplainService,
+    EntitlementService entitlements,
+    CancellationToken ct)
+{
+    if (!entitlements.CanUseAi)
+        return FeatureNotAvailable("AI", entitlements);
+
+    var payload = await httpContext.Request.ReadFromJsonAsync<AiExplainRequest>(cancellationToken: ct);
+    if (payload is null)
+        return InvalidRequest("Request body is required.");
+
+    if (!RequestValidation.TryParseGuid(payload.ProjectId, out var projectId, out var error))
+        return InvalidRequest(error);
+
+    if (string.IsNullOrWhiteSpace(payload.OperationId))
+        return InvalidRequest("operationId is required.");
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, projectId, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, projectId, ct);
+
+    var spec = await specStore.GetAsync(projectId, ct);
+    if (spec is null)
+        return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before generating an explanation.", statusCode: StatusCodes.Status409Conflict);
+
+    var reader = new OpenApiStringReader();
+    var doc = reader.Read(spec.SpecJson, out _);
+    if (doc is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Stored OpenAPI spec could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var trimmedOperationId = payload.OperationId.Trim();
+    var match = FindOperation(doc, trimmedOperationId);
+    if (match is null)
+        return Results.NotFound();
+
+    var (path, method, op) = match.Value;
+    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    if (org is null)
+        return Results.NotFound();
+
+    try
+    {
+        var input = new AiExplainInput(org, projectId, trimmedOperationId, method.ToString(), path, doc, op);
+        var result = await aiExplainService.ExplainAsync(input, ct);
+        var response = new AiExplainResponse(
+            projectId,
+            trimmedOperationId,
+            result.Payload.Summary,
+            result.Payload.Inputs,
+            result.Payload.Outputs,
+            result.Payload.Auth,
+            result.Payload.Gotchas,
+            result.Payload.Examples.Select(example => new AiExplainExampleDto(example.Title, example.Content)).ToList(),
+            result.Payload.Markdown);
+        return Results.Ok(response);
+    }
+    catch (AiSchemaValidationException ex)
+    {
+        return Results.Problem(title: "AI response invalid", detail: ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
+    }
+}
+
+app.MapPost("/api/ai/explain", ExplainAiEndpointAsync);
+app.MapPost("/ai/explain", ExplainAiEndpointAsync);
 
 app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, IAiClient aiClient, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
 {
