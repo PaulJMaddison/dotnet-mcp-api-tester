@@ -36,19 +36,61 @@ public sealed class BaselineComparisonServiceTests
         Assert.Null(result.Response);
     }
 
-    private static TestRunRecord BuildRun()
+    [Fact]
+    public async Task CompareAsync_MissingRun_ReturnsRunNotFound()
     {
+        var run = BuildRun();
+        var runStore = new FakeRunStore();
+        var baselineStore = new FakeBaselineStore(null);
+        var service = new BaselineComparisonService(runStore, baselineStore, new RunComparisonService());
+
+        var result = await service.CompareAsync(run.OrganisationId, run.RunId, CancellationToken.None);
+
+        Assert.Equal(BaselineComparisonStatus.RunNotFound, result.Status);
+        Assert.Null(result.Response);
+    }
+
+    [Fact]
+    public async Task CompareAsync_WithBaselineAndRun_ReturnsComparison()
+    {
+        var run = BuildRun();
+        var baselineRun = BuildRun(
+            organisationId: run.OrganisationId,
+            projectKey: run.ProjectKey,
+            operationId: run.OperationId);
+
+        var baseline = new BaselineRecord(baselineRun.RunId, run.ProjectKey, run.OperationId, DateTimeOffset.UtcNow);
+        var runStore = new FakeRunStore(run, baselineRun);
+        var baselineStore = new FakeBaselineStore(baseline);
+        var service = new BaselineComparisonService(runStore, baselineStore, new RunComparisonService());
+
+        var result = await service.CompareAsync(run.OrganisationId, run.RunId, CancellationToken.None);
+
+        Assert.Equal(BaselineComparisonStatus.Ok, result.Status);
+        Assert.NotNull(result.Response);
+        Assert.Equal(run.RunId, result.Response?.RunId);
+        Assert.Equal(baselineRun.RunId, result.Response?.BaselineRunId);
+    }
+
+    private static TestRunRecord BuildRun(
+        Guid? organisationId = null,
+        string? projectKey = null,
+        string? operationId = null,
+        Guid? runId = null)
+    {
+        var resolvedOperationId = operationId ?? "op-1";
+        var resolvedProjectKey = projectKey ?? "project";
         return new TestRunRecord
         {
-            RunId = Guid.NewGuid(),
-            OrganisationId = Guid.NewGuid(),
-            ProjectKey = "project",
-            OperationId = "op-1",
+            RunId = runId ?? Guid.NewGuid(),
+            OrganisationId = organisationId ?? Guid.NewGuid(),
+            ProjectKey = resolvedProjectKey,
+            OperationId = resolvedOperationId,
             StartedUtc = DateTimeOffset.UtcNow.AddMinutes(-1),
             CompletedUtc = DateTimeOffset.UtcNow,
             Result = new TestRunResult
             {
-                OperationId = "op-1",
+                OperationId = resolvedOperationId,
                 TotalCases = 1,
                 Passed = 1,
                 Failed = 0,
@@ -73,17 +115,17 @@ public sealed class BaselineComparisonServiceTests
 
     private sealed class FakeRunStore : ITestRunStore
     {
-        private readonly TestRunRecord _run;
+        private readonly Dictionary<Guid, TestRunRecord> _runs;
 
-        public FakeRunStore(TestRunRecord run)
+        public FakeRunStore(params TestRunRecord[] runs)
         {
-            _run = run;
+            _runs = runs.ToDictionary(record => record.RunId, record => record);
         }
 
         public Task SaveAsync(TestRunRecord record) => Task.CompletedTask;
 
         public Task<TestRunRecord?> GetAsync(Guid organisationId, Guid runId)
-            => Task.FromResult(runId == _run.RunId ? _run : null);
+            => Task.FromResult(_runs.TryGetValue(runId, out var record) ? record : null);
 
         public Task<bool> SetBaselineAsync(Guid organisationId, Guid runId, Guid baselineRunId)
             => Task.FromResult(false);
