@@ -9,10 +9,12 @@ using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Entities;
 using ApiTester.Web;
 using ApiTester.Web.Auth;
+using ApiTester.Web.AI;
 using ApiTester.Web.Contracts;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace ApiTester.Web.IntegrationTests;
@@ -515,6 +517,86 @@ public class ApiEndpointsTests
     }
 
     [Fact]
+    public async Task AiExplainEndpoint_ReturnsForbidden_ForFreeTier()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Free"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "FreeExplain", "free-explain");
+        await SeedSpecAsync(factory, project, BuildExplainSpecJson());
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsJsonAsync("/api/ai/explain", new AiExplainRequest(project.ProjectId.ToString(), "listPets"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AiExplainEndpoint_ReturnsBadRequest_ForMissingOperationId()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "MissingExplainOp", "missing-explain-op");
+        await SeedSpecAsync(factory, project, BuildExplainSpecJson());
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsJsonAsync("/api/ai/explain", new AiExplainRequest(project.ProjectId.ToString(), null));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AiExplainEndpoint_ReturnsUnprocessableEntity_ForInvalidSchema()
+    {
+        using var baseFactory = new ApiTesterWebFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                var settings = new Dictionary<string, string?>
+                {
+                    ["Entitlements:Tier"] = "Pro"
+                };
+                config.AddInMemoryCollection(settings);
+            });
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IAiProvider>();
+                services.AddSingleton<IAiProvider>(new FixedAiProvider("{\"summary\":\"oops\"}"));
+            });
+        });
+
+        var project = await SeedProjectAsync(factory, "ExplainSchema", "explain-schema");
+        await SeedSpecAsync(factory, project, BuildExplainSpecJson());
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.PostAsJsonAsync("/api/ai/explain", new AiExplainRequest(project.ProjectId.ToString(), "listPets"));
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+    }
+
+    [Fact]
     public async Task RunReport_ReturnsForbidden_ForFreeTier()
     {
         using var baseFactory = new ApiTesterWebFactory();
@@ -938,6 +1020,62 @@ public class ApiEndpointsTests
         var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add(ApiKeyAuthDefaults.HeaderName, apiKey);
         return client;
+    }
+
+    private static string BuildExplainSpecJson()
+    {
+        return """
+        {
+          "openapi": "3.0.1",
+          "info": {
+            "title": "Explain API",
+            "version": "1.0.0"
+          },
+          "paths": {
+            "/pets": {
+              "get": {
+                "operationId": "listPets",
+                "summary": "List pets",
+                "parameters": [
+                  {
+                    "name": "limit",
+                    "in": "query",
+                    "schema": { "type": "integer" },
+                    "example": 10
+                  }
+                ],
+                "responses": {
+                  "200": {
+                    "description": "OK",
+                    "content": {
+                      "application/json": {
+                        "example": {
+                          "pets": [
+                            { "id": 1, "name": "Fluffy" }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """;
+    }
+
+    private sealed class FixedAiProvider : IAiProvider
+    {
+        private readonly string _payload;
+
+        public FixedAiProvider(string payload)
+        {
+            _payload = payload;
+        }
+
+        public Task<AiResult> CompleteAsync(AiRequest request, CancellationToken ct)
+            => Task.FromResult(new AiResult(_payload, "test-model"));
     }
 
     private static string GetHttpbinSpecPath()
