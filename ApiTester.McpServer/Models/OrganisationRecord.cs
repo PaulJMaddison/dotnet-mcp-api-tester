@@ -10,6 +10,7 @@ public sealed record OrganisationRecord
     public DateTime CreatedUtc { get; init; }
     public int? RetentionDays { get; init; }
     public List<string> RedactionRules { get; init; } = new();
+    public OrgSettings OrgSettings { get; init; } = OrgSettings.Default;
 
     [JsonConstructor]
     public OrganisationRecord(
@@ -18,7 +19,8 @@ public sealed record OrganisationRecord
         string slug,
         DateTime createdUtc,
         int? retentionDays = null,
-        List<string>? redactionRules = null)
+        List<string>? redactionRules = null,
+        OrgSettings? orgSettings = null)
     {
         OrganisationId = organisationId;
         Name = name;
@@ -26,5 +28,6 @@ public sealed record OrganisationRecord
         CreatedUtc = createdUtc;
         RetentionDays = retentionDays;
         RedactionRules = redactionRules ?? new List<string>();
+        OrgSettings = orgSettings ?? OrgSettings.Default;
     }
 }

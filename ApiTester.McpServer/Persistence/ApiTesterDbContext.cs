@@ -15,6 +15,7 @@ public sealed class ApiTesterDbContext : DbContext
     public DbSet<EnvironmentEntity> Environments => Set<EnvironmentEntity>();
     public DbSet<RunAnnotationEntity> RunAnnotations => Set<RunAnnotationEntity>();
     public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
+    public DbSet<AiInsightEntity> AiInsights => Set<AiInsightEntity>();
     public DbSet<UserEntity> Users => Set<UserEntity>();
     public DbSet<MembershipEntity> Memberships => Set<MembershipEntity>();
     public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
@@ -198,6 +199,7 @@ public sealed class ApiTesterDbContext : DbContext
             b.Property(x => x.Name).HasMaxLength(200).IsRequired();
             b.Property(x => x.Slug).HasMaxLength(80).IsRequired();
             b.Property(x => x.RedactionRulesJson);
+            b.Property(x => x.OrgSettingsJson);
             b.HasIndex(x => x.Slug).IsUnique();
         });
 
@@ -224,6 +226,17 @@ public sealed class ApiTesterDbContext : DbContext
                 .WithMany(u => u.Memberships)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AiInsightEntity>(b =>
+        {
+            b.HasKey(x => x.InsightId);
+            b.Property(x => x.OperationId).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Type).HasMaxLength(120).IsRequired();
+            b.Property(x => x.ModelId).HasMaxLength(120).IsRequired();
+            b.Property(x => x.JsonPayload).IsRequired();
+            b.HasIndex(x => new { x.OrganisationId, x.ProjectId, x.RunId });
+            b.HasIndex(x => new { x.OrganisationId, x.OperationId });
         });
 
         modelBuilder.Entity<ApiKeyEntity>(b =>
