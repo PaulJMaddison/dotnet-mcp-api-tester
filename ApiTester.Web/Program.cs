@@ -9,6 +9,7 @@ using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Options;
 using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Stores;
+using ApiTester.McpServer.Runtime;
 using ApiTester.McpServer.Services;
 using ApiTester.Web.Observability;
 using ApiTester.Web.Contracts;
@@ -42,6 +43,7 @@ builder.Services.AddApiTesterPersistence(builder.Configuration);
 
 builder.Services.Configure<ExecutionOptions>(builder.Configuration.GetSection("Execution"));
 builder.Services.AddSingleton<OpenApiStore>();
+builder.Services.AddSingleton<ProjectContext>();
 builder.Services.AddSingleton<SsrfGuard>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ApiRuntimeConfig>(sp =>
@@ -195,6 +197,594 @@ app.MapGet("/health", (IHostEnvironment env, IOptions<PersistenceOptions> option
 });
 
 app.MapGet("/api/version", () => Results.Ok(new VersionResponse(appVersion)));
+
+var v1 = app.MapGroup("/api/v1");
+
+v1.MapGet("/projects", async (int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, IProjectStore store, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryNormalizePageSize(pageSize, take, 50, 1, 200, out var normalizedPageSize, out var sizeError))
+        return InvalidRequest(sizeError);
+
+    if (!RequestValidation.TryNormalizePageToken(pageToken, skip, out var offset, out var tokenError))
+        return InvalidRequest(tokenError);
+
+    if (!RequestValidation.TryNormalizeSort(sort, SortField.CreatedUtc, out var sortField, out var sortError))
+        return InvalidRequest(sortError);
+
+    if (!RequestValidation.TryNormalizeOrder(order, SortDirection.Desc, out var direction, out var orderError))
+        return InvalidRequest(orderError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var result = await store.ListAsync(orgContext.OrganisationId, new PageRequest(normalizedPageSize, offset), sortField, direction, ct);
+    var metadata = new PageMetadata(result.Total, normalizedPageSize, result.NextOffset?.ToString());
+    return Results.Ok(ProjectMapping.ToListResponse(metadata, result.Items));
+});
+
+v1.MapPost("/projects", async (ProjectCreateRequest request, IProjectStore store, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryValidateRequiredName(request?.Name, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await store.CreateAsync(orgContext.OrganisationId, orgContext.OwnerKey, request!.Name!, ct);
+    logger.LogInformation("Created project {ProjectId} for org {OrganisationId} with name {ProjectName}", project.ProjectId, orgContext.OrganisationId, project.Name);
+    return Results.Ok(ProjectMapping.ToDto(project));
+});
+
+v1.MapGet("/projects/current", (ProjectContext context, HttpContext httpContext) =>
+{
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    return Results.Ok(new ProjectCurrentResponse(context.CurrentProjectId));
+});
+
+v1.MapPut("/projects/current", async (ProjectCurrentRequest request, IProjectStore store, ProjectContext context, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (request is null || request.ProjectId == Guid.Empty)
+        return InvalidRequest("projectId is required.");
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await store.GetAsync(orgContext.OrganisationId, request.ProjectId, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(store, request.ProjectId, ct);
+
+    context.SetCurrentProject(request.ProjectId);
+    return Results.Ok(new ProjectCurrentResponse(context.CurrentProjectId));
+});
+
+v1.MapPost("/projects/{projectId}/openapi/import", ImportOpenApiSpecAsync);
+v1.MapPost("/projects/{projectId}/specs/import", ImportOpenApiSpecAsync);
+
+v1.MapGet("/projects/{projectId}/specs", async (string projectId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    var records = await specStore.ListAsync(id, ct);
+    return Results.Ok(records.Select(OpenApiMapping.ToMetadataDto));
+});
+
+v1.MapDelete("/projects/{projectId}/specs/{specId}", async (string projectId, string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (!RequestValidation.TryParseGuid(specId, out var specGuid, out var specError))
+        return InvalidRequest(specError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    var record = await specStore.GetByIdAsync(specGuid, ct);
+    if (record is null || record.ProjectId != id)
+        return Results.NotFound();
+
+    var removed = await specStore.DeleteAsync(specGuid, ct);
+    return removed ? Results.NoContent() : Results.NotFound();
+});
+
+v1.MapGet("/projects/{projectId}/operations", async (string projectId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    var spec = await specStore.GetAsync(id, ct);
+    if (spec is null)
+        return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before listing operations.", statusCode: StatusCodes.Status409Conflict);
+
+    var reader = new OpenApiStringReader();
+    var doc = reader.Read(spec.SpecJson, out _);
+    if (doc is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Stored OpenAPI spec could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var operations = EnumerateOperations(doc)
+        .Select(op => new OpenApiOperationSummaryDto(
+            op.OperationId,
+            op.Method.ToString().ToUpperInvariant(),
+            op.Path,
+            op.Operation.Summary ?? string.Empty,
+            op.Operation.Description ?? string.Empty,
+            op.Operation.Security is { Count: > 0 }))
+        .OrderBy(op => op.Path)
+        .ThenBy(op => op.Method)
+        .ToList();
+
+    return Results.Ok(new OpenApiOperationListResponse(operations));
+});
+
+v1.MapGet("/projects/{projectId}/operations/describe", async (string projectId, string? operationId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (string.IsNullOrWhiteSpace(operationId))
+        return InvalidRequest("operationId is required.");
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    var spec = await specStore.GetAsync(id, ct);
+    if (spec is null)
+        return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before describing operations.", statusCode: StatusCodes.Status409Conflict);
+
+    var reader = new OpenApiStringReader();
+    var doc = reader.Read(spec.SpecJson, out _);
+    if (doc is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Stored OpenAPI spec could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var match = EnumerateOperations(doc)
+        .FirstOrDefault(op => string.Equals(op.OperationId, operationId.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    if (match == default)
+        return Results.NotFound();
+
+    var parameters = (match.Operation.Parameters ?? new List<OpenApiParameter>())
+        .Select(param => new OpenApiOperationParameterDto(
+            param.Name,
+            param.In.ToString(),
+            param.Required,
+            param.Description ?? string.Empty,
+            DescribeSchema(param.Schema)))
+        .ToList();
+
+    OpenApiOperationRequestBodyDto? requestBody = null;
+    if (match.Operation.RequestBody is not null)
+    {
+        requestBody = new OpenApiOperationRequestBodyDto(
+            match.Operation.RequestBody.Required,
+            match.Operation.RequestBody.Description ?? string.Empty,
+            match.Operation.RequestBody.Content.ToDictionary(
+                kv => kv.Key,
+                kv => new OpenApiOperationContentDto(DescribeSchema(kv.Value.Schema))));
+    }
+
+    var responses = match.Operation.Responses.ToDictionary(
+        kv => kv.Key,
+        kv => new OpenApiOperationResponseDto(
+            kv.Value.Description ?? string.Empty,
+            (kv.Value.Content ?? new Dictionary<string, OpenApiMediaType>()).ToDictionary(
+                content => content.Key,
+                content => new OpenApiOperationContentDto(DescribeSchema(content.Value.Schema)))));
+
+    var response = new OpenApiOperationDescribeResponse(
+        match.OperationId,
+        match.Method.ToString().ToUpperInvariant(),
+        match.Path,
+        match.Operation.Summary ?? string.Empty,
+        match.Operation.Description ?? string.Empty,
+        match.Operation.Security is { Count: > 0 },
+        parameters,
+        requestBody,
+        responses);
+
+    return Results.Ok(response);
+});
+
+v1.MapGet("/runtime/policy", (ApiRuntimeConfig runtime, HttpContext httpContext) =>
+{
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    return Results.Ok(ToPolicyResponse(runtime.Policy));
+});
+
+v1.MapPut("/runtime/policy", async (ApiPolicyUpdateRequest request, ApiRuntimeConfig runtime, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (request is null)
+        return InvalidRequest("Request body is required.");
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    if (!TryApplyPolicyUpdate(runtime.Policy, request, out var error))
+        return InvalidRequest(error);
+
+    var orgContext = httpContext.GetOrgContext();
+    var metadataJson = JsonSerializer.Serialize(ToPolicyResponse(runtime.Policy), jsonOptions);
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.PolicySet,
+        "policy",
+        "runtime",
+        DateTime.UtcNow,
+        metadataJson), ct);
+
+    return Results.Ok(ToPolicyResponse(runtime.Policy));
+});
+
+v1.MapPost("/runtime/policy/reset", async (ApiRuntimeConfig runtime, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    ApiPolicyDefaults.ApplySafeDefaults(runtime.Policy);
+
+    var orgContext = httpContext.GetOrgContext();
+    var metadataJson = JsonSerializer.Serialize(ToPolicyResponse(runtime.Policy), jsonOptions);
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.PolicyReset,
+        "policy",
+        "runtime",
+        DateTime.UtcNow,
+        metadataJson), ct);
+
+    return Results.Ok(ToPolicyResponse(runtime.Policy));
+});
+
+v1.MapGet("/runtime/base-url", (ApiRuntimeConfig runtime, HttpContext httpContext) =>
+{
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    return Results.Ok(new ApiRuntimeBaseUrlResponse(runtime.BaseUrl));
+});
+
+v1.MapPut("/runtime/base-url", async (ApiRuntimeBaseUrlRequest request, ApiRuntimeConfig runtime, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryNormalizeBaseUrl(request?.BaseUrl, out var normalizedBaseUrl, out var baseUrlError))
+        return InvalidRequest(baseUrlError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    runtime.SetBaseUrl(normalizedBaseUrl);
+
+    var orgContext = httpContext.GetOrgContext();
+    var metadataJson = JsonSerializer.Serialize(new { baseUrl = runtime.BaseUrl }, jsonOptions);
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.BaseUrlSet,
+        "runtime",
+        "base_url",
+        DateTime.UtcNow,
+        metadataJson), ct);
+
+    return Results.Ok(new ApiRuntimeBaseUrlResponse(runtime.BaseUrl));
+});
+
+v1.MapPost("/runtime/auth/bearer", (ApiRuntimeBearerTokenRequest request, ApiRuntimeConfig runtime, HttpContext httpContext) =>
+{
+    if (string.IsNullOrWhiteSpace(request?.Token))
+        return InvalidRequest("token is required.");
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    runtime.SetBearerToken(request.Token.Trim());
+    return Results.Ok(new ApiRuntimeAuthResponse(true, runtime.BearerToken is not null));
+});
+
+v1.MapDelete("/runtime/auth/bearer", (ApiRuntimeConfig runtime, HttpContext httpContext) =>
+{
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    runtime.ClearAuth();
+    return Results.Ok(new ApiRuntimeAuthResponse(true, runtime.BearerToken is not null));
+});
+
+v1.MapPost("/runtime/reset", async (ApiRuntimeConfig runtime, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    runtime.ResetRuntime();
+
+    var orgContext = httpContext.GetOrgContext();
+    var metadataJson = JsonSerializer.Serialize(ToPolicyResponse(runtime.Policy), jsonOptions);
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.PolicyReset,
+        "policy",
+        "runtime",
+        DateTime.UtcNow,
+        metadataJson), ct);
+
+    return Results.Ok(new ApiRuntimeResetResponse(runtime.BaseUrl, runtime.BearerToken is not null, ToPolicyResponse(runtime.Policy)));
+});
+
+v1.MapPost("/projects/{projectId}/testplans/{operationId}/generate", async (
+    string projectId,
+    string operationId,
+    IProjectStore projectStore,
+    IOrganisationStore orgStore,
+    IOpenApiSpecStore specStore,
+    ITestPlanStore planStore,
+    RedactionService redactionService,
+    HttpContext httpContext,
+    CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (string.IsNullOrWhiteSpace(operationId))
+        return InvalidRequest("operationId is required.");
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    var spec = await specStore.GetAsync(id, ct);
+    if (spec is null)
+        return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before generating a test plan.", statusCode: StatusCodes.Status409Conflict);
+
+    var reader = new OpenApiStringReader();
+    var doc = reader.Read(spec.SpecJson, out _);
+    if (doc is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Stored OpenAPI spec could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var match = FindOperation(doc, operationId);
+    if (match is null)
+        return Results.NotFound();
+
+    var (path, method, op) = match.Value;
+    var plan = TestPlanFactory.Create(op, method, path, operationId.Trim());
+    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    var redactedPlan = redactionService.RedactPlan(plan, org?.RedactionRules);
+    var planJson = JsonSerializer.Serialize(redactedPlan, jsonOptions);
+
+    var record = await planStore.UpsertAsync(id, operationId.Trim(), planJson, DateTime.UtcNow, ct);
+    return Results.Ok(new TestPlanResponse(record.ProjectId, record.OperationId, record.PlanJson, record.CreatedUtc));
+});
+
+v1.MapPost("/projects/{projectId}/testplans/{operationId}/run", async (
+    string projectId,
+    string operationId,
+    string? environment,
+    IProjectStore projectStore,
+    IOrganisationStore orgStore,
+    IOpenApiSpecStore specStore,
+    ITestPlanStore planStore,
+    IEnvironmentStore environmentStore,
+    TestPlanRunner runner,
+    ApiRuntimeConfig runtime,
+    RedactionService redactionService,
+    IAuditEventStore auditStore,
+    HttpContext httpContext,
+    ILogger<Program> logger,
+    CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (string.IsNullOrWhiteSpace(operationId))
+        return InvalidRequest("operationId is required.");
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsWrite);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+
+    var spec = await specStore.GetAsync(id, ct);
+    if (spec is null)
+        return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before executing runs.", statusCode: StatusCodes.Status409Conflict);
+
+    var reader = new OpenApiStringReader();
+    var doc = reader.Read(spec.SpecJson, out _);
+    if (doc is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Stored OpenAPI spec could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    if (!RequestValidation.TryNormalizeOptionalValue(environment, out var environmentName, out var environmentError))
+        return InvalidRequest(environmentError);
+
+    string? environmentBaseUrl = null;
+    if (!string.IsNullOrWhiteSpace(environmentName))
+    {
+        var environmentRecord = await environmentStore.GetByNameAsync(orgContext.OwnerKey, id, environmentName, ct);
+        if (environmentRecord is null)
+            return Results.NotFound();
+
+        environmentBaseUrl = environmentRecord.BaseUrl;
+    }
+
+    if (!EnvironmentSelector.TryApplyBaseUrl(runtime, doc, environmentBaseUrl, out _, out var selectionError))
+        return Results.Problem(title: "Base URL missing", detail: selectionError, statusCode: StatusCodes.Status409Conflict);
+
+    var trimmedOperationId = operationId.Trim();
+    TestPlan plan;
+
+    var existingPlan = await planStore.GetAsync(id, trimmedOperationId, ct);
+    if (existingPlan is null)
+    {
+        var match = FindOperation(doc, trimmedOperationId);
+        if (match is null)
+            return Results.NotFound();
+
+        var (path, method, op) = match.Value;
+        plan = TestPlanFactory.Create(op, method, path, trimmedOperationId);
+        var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+        var redactedPlan = redactionService.RedactPlan(plan, org?.RedactionRules);
+        var planJson = JsonSerializer.Serialize(redactedPlan, jsonOptions);
+        await planStore.UpsertAsync(id, trimmedOperationId, planJson, DateTime.UtcNow, ct);
+    }
+    else
+    {
+        try
+        {
+            plan = JsonSerializer.Deserialize<TestPlan>(existingPlan.PlanJson, jsonOptions)
+                ?? throw new JsonException("Stored test plan was empty.");
+        }
+        catch (JsonException)
+        {
+            return Results.Problem(title: "Stored test plan invalid", detail: "Stored test plan could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+        }
+    }
+
+    logger.LogInformation("Executing run for project {ProjectId} operation {OperationId}", project.ProjectId, trimmedOperationId);
+    var run = await runner.RunPlanAsync(plan, project.ProjectKey, orgContext.OrganisationId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
+    logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, trimmedOperationId);
+
+    var runMetadata = JsonSerializer.Serialize(new
+    {
+        project.ProjectId,
+        project.ProjectKey,
+        run.OperationId,
+        Environment = environmentName
+    }, jsonOptions);
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        orgContext.OrganisationId,
+        orgContext.UserId,
+        AuditActions.RunExecuted,
+        "run",
+        run.RunId.ToString(),
+        DateTime.UtcNow,
+        runMetadata), ct);
+
+    return Results.Ok(RunMapping.ToDetailDto(run));
+});
+
+v1.MapGet("/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, IProjectStore projectStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryValidateRequiredKey(projectKey, "projectKey", out var keyError))
+        return InvalidRequest(keyError);
+
+    if (!RequestValidation.TryNormalizePageSize(pageSize, take, 20, 1, 200, out var normalizedPageSize, out var sizeError))
+        return InvalidRequest(sizeError);
+
+    if (!RequestValidation.TryNormalizePageToken(pageToken, skip, out var offset, out var tokenError))
+        return InvalidRequest(tokenError);
+
+    if (!RequestValidation.TryNormalizeOptionalValue(operationId, out var normalizedOperationId, out var opError))
+        return InvalidRequest(opError);
+
+    if (!RequestValidation.TryNormalizeSort(sort, SortField.StartedUtc, out var sortField, out var sortError))
+        return InvalidRequest(sortError);
+
+    if (!RequestValidation.TryNormalizeOrder(order, SortDirection.Desc, out var direction, out var orderError))
+        return InvalidRequest(orderError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetByKeyAsync(orgContext.OrganisationId, projectKey!.Trim(), ct);
+    if (project is null)
+        return Results.NotFound();
+
+    logger.LogInformation(
+        "Listing runs for project {ProjectKey} operation {OperationId}",
+        projectKey!.Trim(),
+        normalizedOperationId ?? "(all)");
+
+    var result = await store.ListAsync(
+        orgContext.OrganisationId,
+        projectKey!.Trim(),
+        new PageRequest(normalizedPageSize, offset),
+        sortField,
+        direction,
+        normalizedOperationId);
+    var metadata = new PageMetadata(result.Total, normalizedPageSize, result.NextOffset?.ToString());
+    return Results.Ok(RunMapping.ToSummaryResponse(projectKey!.Trim(), metadata, result.Items));
+});
+
+v1.MapGet("/runs/{runId}", async (string runId, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, id);
+    return run is null
+        ? Results.NotFound()
+        : Results.Ok(RunMapping.ToDetailDto(run));
+});
 
 app.MapGet("/api/orgs/current", async (IOrganisationStore orgStore, HttpContext httpContext, CancellationToken ct) =>
 {
@@ -2064,6 +2654,163 @@ static async Task<IResult> NotFoundOrForbiddenAsync(IProjectStore store, Guid pr
     return Results.NotFound();
 }
 
+static ApiPolicyResponse ToPolicyResponse(ApiExecutionPolicy policy)
+    => new(
+        policy.DryRun,
+        policy.AllowedBaseUrls.ToList(),
+        policy.AllowedMethods.ToList(),
+        (int)policy.Timeout.TotalSeconds,
+        policy.MaxRequestBodyBytes,
+        policy.MaxResponseBodyBytes,
+        policy.ValidateSchema,
+        policy.BlockLocalhost,
+        policy.BlockPrivateNetworks,
+        policy.RetryOnFlake,
+        policy.MaxRetries);
+
+static bool TryApplyPolicyUpdate(ApiExecutionPolicy policy, ApiPolicyUpdateRequest request, out string error)
+{
+    error = string.Empty;
+
+    var next = ClonePolicy(policy);
+
+    if (request.DryRun.HasValue)
+        next.DryRun = request.DryRun.Value;
+
+    if (request.AllowedMethods is not null)
+    {
+        next.AllowedMethods.Clear();
+        foreach (var method in request.AllowedMethods)
+        {
+            var trimmed = (method ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(trimmed))
+                next.AllowedMethods.Add(trimmed);
+        }
+    }
+
+    if (request.AllowedBaseUrls is not null)
+    {
+        next.AllowedBaseUrls.Clear();
+        foreach (var url in request.AllowedBaseUrls)
+        {
+            var trimmed = (url ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+                continue;
+
+            trimmed = trimmed.TrimEnd('/');
+            if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                error = $"Invalid allowedBaseUrl: {trimmed}. Must be absolute http/https URL.";
+                return false;
+            }
+
+            next.AllowedBaseUrls.Add(trimmed);
+        }
+    }
+
+    if (request.TimeoutSeconds.HasValue)
+    {
+        var seconds = request.TimeoutSeconds.Value;
+        if (seconds < 1) seconds = 1;
+        if (seconds > 60) seconds = 60;
+        next.Timeout = TimeSpan.FromSeconds(seconds);
+    }
+
+    if (request.MaxRequestBodyBytes.HasValue)
+    {
+        var value = request.MaxRequestBodyBytes.Value;
+        if (value < 0)
+        {
+            error = "maxRequestBodyBytes must be >= 0.";
+            return false;
+        }
+
+        next.MaxRequestBodyBytes = value;
+    }
+
+    if (request.MaxResponseBodyBytes.HasValue)
+    {
+        var value = request.MaxResponseBodyBytes.Value;
+        if (value < 0)
+        {
+            error = "maxResponseBodyBytes must be >= 0.";
+            return false;
+        }
+
+        next.MaxResponseBodyBytes = value;
+    }
+
+    if (request.ValidateSchema.HasValue)
+        next.ValidateSchema = request.ValidateSchema.Value;
+
+    if (request.BlockLocalhost.HasValue)
+        next.BlockLocalhost = request.BlockLocalhost.Value;
+
+    if (request.BlockPrivateNetworks.HasValue)
+        next.BlockPrivateNetworks = request.BlockPrivateNetworks.Value;
+
+    if (request.RetryOnFlake.HasValue)
+        next.RetryOnFlake = request.RetryOnFlake.Value;
+
+    if (request.MaxRetries.HasValue)
+    {
+        var retries = request.MaxRetries.Value;
+        if (retries < 0)
+        {
+            error = "maxRetries must be >= 0.";
+            return false;
+        }
+
+        next.MaxRetries = retries;
+    }
+
+    if (next.AllowedMethods.Count == 0)
+        next.AllowedMethods.Add("GET");
+
+    ApplyPolicy(policy, next);
+    return true;
+}
+
+static ApiExecutionPolicy ClonePolicy(ApiExecutionPolicy policy)
+{
+    return new ApiExecutionPolicy
+    {
+        DryRun = policy.DryRun,
+        AllowedBaseUrls = policy.AllowedBaseUrls.Select(x => x).ToList(),
+        BlockLocalhost = policy.BlockLocalhost,
+        BlockPrivateNetworks = policy.BlockPrivateNetworks,
+        AllowedMethods = new HashSet<string>(policy.AllowedMethods, StringComparer.OrdinalIgnoreCase),
+        Timeout = policy.Timeout,
+        MaxRequestBodyBytes = policy.MaxRequestBodyBytes,
+        MaxResponseBodyBytes = policy.MaxResponseBodyBytes,
+        ValidateSchema = policy.ValidateSchema,
+        RetryOnFlake = policy.RetryOnFlake,
+        MaxRetries = policy.MaxRetries
+    };
+}
+
+static void ApplyPolicy(ApiExecutionPolicy target, ApiExecutionPolicy source)
+{
+    target.DryRun = source.DryRun;
+    target.BlockLocalhost = source.BlockLocalhost;
+    target.BlockPrivateNetworks = source.BlockPrivateNetworks;
+    target.Timeout = source.Timeout;
+    target.MaxRequestBodyBytes = source.MaxRequestBodyBytes;
+    target.MaxResponseBodyBytes = source.MaxResponseBodyBytes;
+    target.ValidateSchema = source.ValidateSchema;
+    target.RetryOnFlake = source.RetryOnFlake;
+    target.MaxRetries = source.MaxRetries;
+
+    target.AllowedMethods.Clear();
+    foreach (var method in source.AllowedMethods)
+        target.AllowedMethods.Add(method);
+
+    target.AllowedBaseUrls.Clear();
+    foreach (var url in source.AllowedBaseUrls)
+        target.AllowedBaseUrls.Add(url);
+}
+
 static (string path, OperationType method, OpenApiOperation op)? FindOperation(OpenApiDocument doc, string operationId)
 {
     foreach (var path in doc.Paths)
@@ -2079,6 +2826,37 @@ static (string path, OperationType method, OpenApiOperation op)? FindOperation(O
     return null;
 }
 
+static IEnumerable<(string OperationId, string Path, OperationType Method, OpenApiOperation Operation)> EnumerateOperations(OpenApiDocument doc)
+{
+    foreach (var path in doc.Paths)
+    {
+        foreach (var kv in path.Value.Operations)
+        {
+            var operationId = string.IsNullOrWhiteSpace(kv.Value.OperationId)
+                ? $"{kv.Key.ToString().ToUpperInvariant()}:{path.Key}"
+                : kv.Value.OperationId;
+
+            yield return (operationId, path.Key, kv.Key, kv.Value);
+        }
+    }
+}
+
+static OpenApiSchemaDto? DescribeSchema(OpenApiSchema? schema)
+{
+    if (schema is null)
+        return null;
+
+    var items = schema.Items is null
+        ? null
+        : new OpenApiSchemaItemDto(schema.Items.Type ?? string.Empty, schema.Items.Format ?? string.Empty);
+
+    return new OpenApiSchemaDto(
+        schema.Type ?? string.Empty,
+        schema.Format ?? string.Empty,
+        schema.Nullable ?? false,
+        items);
+}
+
 static string ComputeSpecHash(string specJson)
 {
     using var sha = SHA256.Create();
@@ -2087,11 +2865,42 @@ static string ComputeSpecHash(string specJson)
     return Convert.ToHexString(hash).ToLowerInvariant();
 }
 
+static async Task<string> ReadBodyCappedAsync(HttpContent content, int maxBytes, CancellationToken ct)
+{
+    await using var stream = await content.ReadAsStreamAsync(ct);
+    using var ms = new MemoryStream();
+
+    var buffer = new byte[8192];
+    var total = 0;
+
+    while (true)
+    {
+        var read = await stream.ReadAsync(buffer, 0, buffer.Length, ct);
+        if (read <= 0) break;
+
+        var remaining = maxBytes - total;
+        if (remaining <= 0)
+            throw new InvalidOperationException($"OpenAPI spec exceeds {maxBytes} bytes.");
+
+        var toWrite = Math.Min(read, remaining);
+        ms.Write(buffer, 0, toWrite);
+        total += toWrite;
+
+        if (toWrite < read)
+            throw new InvalidOperationException($"OpenAPI spec exceeds {maxBytes} bytes.");
+    }
+
+    return Encoding.UTF8.GetString(ms.ToArray());
+}
+
 static async Task<IResult> ImportOpenApiSpecAsync(
     string projectId,
     HttpRequest request,
     IProjectStore projectStore,
     IOpenApiSpecStore specStore,
+    IHttpClientFactory httpClientFactory,
+    SsrfGuard ssrfGuard,
+    ApiRuntimeConfig runtime,
     HttpContext httpContext,
     ILogger<Program> logger,
     CancellationToken ct)
@@ -2109,6 +2918,7 @@ static async Task<IResult> ImportOpenApiSpecAsync(
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
     string? specJson = null;
+    string? specUrl = null;
 
     var specSource = "payload";
 
@@ -2143,6 +2953,9 @@ static async Task<IResult> ImportOpenApiSpecAsync(
                 specJson = await File.ReadAllTextAsync(path, ct);
             }
         }
+
+        if (specJson is null)
+            specUrl = form["url"].ToString();
     }
     else
     {
@@ -2169,10 +2982,52 @@ static async Task<IResult> ImportOpenApiSpecAsync(
 
             specJson = await File.ReadAllTextAsync(path, ct);
         }
+
+        if (specJson is null && !string.IsNullOrWhiteSpace(payload?.Url))
+            specUrl = payload.Url.Trim();
+    }
+
+    if (specJson is null && !string.IsNullOrWhiteSpace(specUrl))
+    {
+        specSource = "url";
+
+        if (!Uri.TryCreate(specUrl, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            return InvalidRequest("OpenAPI URL must be an absolute http or https URL.");
+        }
+
+        var (allowed, reason) = await ssrfGuard.CheckAsync(
+            uri,
+            runtime.Policy.BlockLocalhost,
+            runtime.Policy.BlockPrivateNetworks,
+            ct);
+
+        if (!allowed)
+            return Results.Problem(title: "OpenAPI URL blocked", detail: reason, statusCode: StatusCodes.Status403Forbidden);
+
+        var client = httpClientFactory.CreateClient();
+        client.Timeout = runtime.Policy.Timeout;
+
+        using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, ct);
+        if (!response.IsSuccessStatusCode)
+            return Results.Problem(title: "OpenAPI fetch failed", detail: $"Remote server returned {(int)response.StatusCode}.", statusCode: StatusCodes.Status400BadRequest);
+
+        if (response.Content.Headers.ContentLength > WebOpenApiImportLimits.MaxSpecBytes)
+            return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+
+        try
+        {
+            specJson = await ReadBodyCappedAsync(response.Content, WebOpenApiImportLimits.MaxSpecBytes, ct);
+        }
+        catch (InvalidOperationException)
+        {
+            return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
+        }
     }
 
     if (string.IsNullOrWhiteSpace(specJson))
-        return InvalidRequest("Provide an OpenAPI file upload or path.");
+        return InvalidRequest("Provide an OpenAPI file upload, path, or URL.");
 
     if (Encoding.UTF8.GetByteCount(specJson) > WebOpenApiImportLimits.MaxSpecBytes)
         return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
