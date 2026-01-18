@@ -31,6 +31,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<FileAuditEventStore>();
         services.AddSingleton<FileBaselineStore>();
         services.AddSingleton<FileAiInsightStore>();
+        services.AddSingleton<FileGeneratedDocsStore>();
         services.AddScoped<SqlTestRunStore>();
         services.AddScoped<SqlProjectStore>();
         services.AddScoped<SqlOrganisationStore>();
@@ -40,6 +41,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<SqlAuditEventStore>();
         services.AddScoped<SqlBaselineStore>();
         services.AddScoped<SqlAiInsightStore>();
+        services.AddScoped<SqlGeneratedDocsStore>();
 
         if (selection.UseSqlProvider)
         {
@@ -61,6 +63,7 @@ public static class PersistenceServiceCollectionExtensions
             services.AddScoped<SqlAuditEventStore>();
             services.AddScoped<SqlBaselineStore>();
             services.AddScoped<SqlAiInsightStore>();
+            services.AddScoped<SqlGeneratedDocsStore>();
             services.AddScoped<IOpenApiSpecStore>(sp => sp.GetRequiredService<SqlOpenApiSpecStore>());
             services.AddScoped<ITestPlanStore>(sp => sp.GetRequiredService<SqlTestPlanStore>());
             services.AddScoped<ITestPlanDraftStore>(sp => sp.GetRequiredService<SqlTestPlanDraftStore>());
@@ -73,6 +76,7 @@ public static class PersistenceServiceCollectionExtensions
             services.AddScoped<IAuditEventStore>(sp => sp.GetRequiredService<SqlAuditEventStore>());
             services.AddScoped<IBaselineStore>(sp => sp.GetRequiredService<SqlBaselineStore>());
             services.AddScoped<IAiInsightStore>(sp => sp.GetRequiredService<SqlAiInsightStore>());
+            services.AddScoped<IGeneratedDocsStore>(sp => sp.GetRequiredService<SqlGeneratedDocsStore>());
         }
         else
         {
@@ -88,6 +92,7 @@ public static class PersistenceServiceCollectionExtensions
             services.AddSingleton<IAuditEventStore>(sp => sp.GetRequiredService<FileAuditEventStore>());
             services.AddSingleton<IBaselineStore>(sp => sp.GetRequiredService<FileBaselineStore>());
             services.AddSingleton<IAiInsightStore>(sp => sp.GetRequiredService<FileAiInsightStore>());
+            services.AddSingleton<IGeneratedDocsStore>(sp => sp.GetRequiredService<FileGeneratedDocsStore>());
         }
 
         services.AddScoped<ITestRunStore>(sp => UseSqlServer(sp)

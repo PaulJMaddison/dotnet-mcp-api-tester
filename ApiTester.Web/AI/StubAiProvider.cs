@@ -50,10 +50,29 @@ public sealed class StubAiProvider : IAiProvider
                     },
                     recommendedNextActions = new[] { "Re-run to confirm." }
                 }, JsonDefaults.Default)
-                : JsonSerializer.Serialize(new
-                {
-                    insights = Array.Empty<object>()
-                }, JsonDefaults.Default);
+                : request.UserPrompt.Contains(AiDocsSchemas.SchemaJson, StringComparison.Ordinal)
+                    ? JsonSerializer.Serialize(new
+                    {
+                        title = "Stub API Docs",
+                        summary = "Stub summary for generated docs.",
+                        sections = new[]
+                        {
+                            new
+                            {
+                                operationId = "listPets",
+                                method = "GET",
+                                path = "/pets",
+                                title = "List pets",
+                                summary = "Stub section summary.",
+                                markdown = "### GET /pets\\nStub markdown section.",
+                                examples = Array.Empty<object>()
+                            }
+                        }
+                    }, JsonDefaults.Default)
+            : JsonSerializer.Serialize(new
+            {
+                insights = Array.Empty<object>()
+            }, JsonDefaults.Default);
 
         return Task.FromResult(new AiResult(content, "stub"));
     }
