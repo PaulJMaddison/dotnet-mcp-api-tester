@@ -9,4 +9,5 @@ public interface IProjectStore
     Task<ProjectRecord?> GetAsync(Guid tenantId, Guid projectId, CancellationToken ct);
     Task<ProjectRecord?> GetByKeyAsync(Guid tenantId, string projectKey, CancellationToken ct);
     Task<bool> ExistsAsync(Guid tenantId, Guid projectId, CancellationToken ct);
+    Task<bool> ExistsAnyAsync(Guid projectId, CancellationToken ct);
 }

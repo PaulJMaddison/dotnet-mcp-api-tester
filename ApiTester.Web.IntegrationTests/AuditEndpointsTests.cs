@@ -133,6 +133,7 @@ public class AuditEndpointsTests
         {
             ProjectId = Guid.NewGuid(),
             OrganisationId = organisationId ?? ApiTesterWebFactory.OrganisationAlphaId,
+            TenantId = organisationId ?? ApiTesterWebFactory.OrganisationAlphaId,
             OwnerKey = ownerKey,
             Name = name,
             ProjectKey = key,
@@ -154,6 +155,7 @@ public class AuditEndpointsTests
         {
             SpecId = Guid.NewGuid(),
             ProjectId = project.ProjectId,
+            TenantId = project.TenantId,
             Title = "Spec",
             Version = "1.0",
             SpecJson = specJson,

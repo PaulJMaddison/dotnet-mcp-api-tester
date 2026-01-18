@@ -13,7 +13,7 @@ public static class ComplianceReportBuilder
         RedactionService redactionService,
         string? narrative = null)
     {
-        var redactionRules = org?.RedactionRules ?? Array.Empty<string>();
+        var redactionRules = org?.RedactionRules ?? new List<string>();
         var redactedRun = RunExportRedactor.RedactRun(run, redactionService, redactionRules);
         var policy = redactedRun.PolicySnapshot;
         var policySummary = new CompliancePolicySummary(

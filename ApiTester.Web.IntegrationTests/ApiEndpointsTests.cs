@@ -494,6 +494,8 @@ public class ApiEndpointsTests
     [Fact]
     public async Task AiEndpoint_ReturnsOk_ForProTier()
     {
+        const string aiPayload = "{\"summary\":\"Run explanation.\"}";
+
         using var baseFactory = new ApiTesterWebFactory();
         using var factory = baseFactory.WithWebHostBuilder(builder =>
         {
@@ -1289,6 +1291,7 @@ public class ApiEndpointsTests
         {
             ProjectId = Guid.NewGuid(),
             OrganisationId = organisationId ?? ApiTesterWebFactory.OrganisationAlphaId,
+            TenantId = organisationId ?? ApiTesterWebFactory.OrganisationAlphaId,
             OwnerKey = ownerKey,
             Name = name,
             ProjectKey = key,
@@ -1340,6 +1343,7 @@ public class ApiEndpointsTests
         {
             RunId = runId ?? Guid.NewGuid(),
             OrganisationId = project.OrganisationId,
+            TenantId = project.TenantId,
             ProjectId = project.ProjectId,
             OperationId = operationId,
             StartedUtc = started,
@@ -1380,6 +1384,7 @@ public class ApiEndpointsTests
         {
             RunId = Guid.NewGuid(),
             OrganisationId = project.OrganisationId,
+            TenantId = project.TenantId,
             ProjectId = project.ProjectId,
             OperationId = operationId,
             StartedUtc = started,
@@ -1420,6 +1425,7 @@ public class ApiEndpointsTests
         {
             SpecId = Guid.NewGuid(),
             ProjectId = project.ProjectId,
+            TenantId = project.TenantId,
             Title = "Spec",
             Version = "1.0",
             SpecJson = specJson,

@@ -117,6 +117,9 @@ public sealed class SqlProjectStore : IProjectStore
         return _db.Projects.AnyAsync(x => x.ProjectId == projectId && x.TenantId == tenantId, ct);
     }
 
+    public Task<bool> ExistsAnyAsync(Guid projectId, CancellationToken ct)
+        => _db.Projects.AnyAsync(x => x.ProjectId == projectId, ct);
+
     private static string NormalizeOwnerKey(string ownerKey)
     {
         ownerKey = (ownerKey ?? "").Trim();

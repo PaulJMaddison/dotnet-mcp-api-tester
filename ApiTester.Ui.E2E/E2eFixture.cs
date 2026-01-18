@@ -48,7 +48,7 @@ public sealed class E2eFixture : IAsyncLifetime
 
         _apiProcess = StartProcess(
             "dotnet",
-            "run --project ApiTester.Web",
+            "ApiTester.Web/bin/Release/net8.0/ApiTester.Web.dll",
             new Dictionary<string, string?>
             {
                 ["ASPNETCORE_URLS"] = ApiBaseUri.ToString(),
@@ -59,11 +59,11 @@ public sealed class E2eFixture : IAsyncLifetime
                 ["Execution__AllowedBaseUrls__0"] = "https://httpbin.org"
             });
 
-        await WaitForHealthyAsync(new Uri(ApiBaseUri, "/health"), TimeSpan.FromSeconds(30));
+        await WaitForHealthyAsync(new Uri(ApiBaseUri, "/health"), TimeSpan.FromSeconds(60));
 
         _uiProcess = StartProcess(
             "dotnet",
-            "run --project ApiTester.Ui",
+            "ApiTester.Ui/bin/Release/net8.0/ApiTester.Ui.dll",
             new Dictionary<string, string?>
             {
                 ["ASPNETCORE_URLS"] = UiBaseUri.ToString(),
@@ -73,7 +73,7 @@ public sealed class E2eFixture : IAsyncLifetime
                 ["ApiTesterWeb__BaseUrl"] = ApiBaseUri.ToString()
             });
 
-        await WaitForHealthyAsync(new Uri(UiBaseUri, "/ping"), TimeSpan.FromSeconds(30));
+        await WaitForHealthyAsync(new Uri(UiBaseUri, "/ping"), TimeSpan.FromSeconds(60));
     }
 
     public async Task DisposeAsync()
@@ -148,6 +148,7 @@ public sealed class E2eFixture : IAsyncLifetime
         {
             ProjectId = ProjectId,
             OrganisationId = orgId,
+            TenantId = orgId,
             OwnerKey = OwnerKeyValue,
             Name = ProjectName,
             ProjectKey = ProjectKeyValue,
@@ -158,6 +159,7 @@ public sealed class E2eFixture : IAsyncLifetime
         {
             RunId = RunId,
             OrganisationId = orgId,
+            TenantId = orgId,
             ProjectId = ProjectId,
             OperationId = "op-e2e",
             StartedUtc = now.AddMinutes(-5),

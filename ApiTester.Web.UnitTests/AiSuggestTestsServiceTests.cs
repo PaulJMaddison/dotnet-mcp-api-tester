@@ -64,10 +64,10 @@ public sealed class AiSuggestTestsServiceTests
         Assert.Equal("Missing auth — Should reject", plan.Cases[0].Name);
         Assert.Equal("123", plan.Cases[0].PathParams["id"]);
         Assert.Equal("1", plan.Cases[0].QueryParams["limit"]);
-        Assert.True(plan.Cases[0].ExpectedStatusCodes.Contains(401));
-        Assert.True(plan.Cases[0].ExpectedStatusCodes.Contains(402));
-        Assert.True(plan.Cases[0].ExpectedStatusCodes.Contains(403));
-        Assert.True(plan.Cases[0].ExpectedStatusCodes.Contains(400));
+        Assert.Contains(401, plan.Cases[0].ExpectedStatusCodes);
+        Assert.Contains(402, plan.Cases[0].ExpectedStatusCodes);
+        Assert.Contains(403, plan.Cases[0].ExpectedStatusCodes);
+        Assert.Contains(400, plan.Cases[0].ExpectedStatusCodes);
     }
 
     private static AiSuggestTestsInput BuildInput()

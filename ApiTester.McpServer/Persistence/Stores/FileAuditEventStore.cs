@@ -59,14 +59,14 @@ public sealed class FileAuditEventStore : IAuditEventStore
         CancellationToken ct)
     {
         organisationId = NormalizeOrganisationId(organisationId);
-        var dir = OrgPath(organisationId);
+        var dir = RootPath;
 
         if (!Directory.Exists(dir))
             return Array.Empty<AuditEventRecord>();
 
         var normalizedAction = string.IsNullOrWhiteSpace(action) ? null : action.Trim();
 
-        var files = Directory.EnumerateFiles(dir, "*.json", SearchOption.TopDirectoryOnly)
+        var files = Directory.EnumerateFiles(dir, "*.json", SearchOption.AllDirectories)
             .Select(f => new FileInfo(f))
             .OrderByDescending(f => f.Name)
             .ToList();
@@ -81,6 +81,9 @@ public sealed class FileAuditEventStore : IAuditEventStore
             var json = await File.ReadAllTextAsync(file.FullName, ct);
             var record = JsonSerializer.Deserialize<AuditEventRecord>(json, JsonDefaults.Default);
             if (record is null)
+                continue;
+
+            if (record.OrganisationId != organisationId)
                 continue;
 
             if (normalizedAction is not null && !string.Equals(record.Action, normalizedAction, StringComparison.Ordinal))

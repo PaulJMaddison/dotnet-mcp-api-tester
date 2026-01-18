@@ -271,7 +271,7 @@ v1.MapPut("/projects/current", async (ProjectCurrentRequest request, IProjectSto
     var tenantContext = httpContext.GetTenantContext();
     var project = await store.GetAsync(tenantContext.TenantId, request.ProjectId, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(store, request.ProjectId, ct);
+        return await NotFoundOrForbiddenAsync(store, tenantContext, request.ProjectId, ct);
 
     context.SetCurrentProject(request.ProjectId);
     return Results.Ok(new ProjectCurrentResponse(context.CurrentProjectId));
@@ -293,7 +293,7 @@ v1.MapGet("/projects/{projectId}/specs", async (string projectId, IOpenApiSpecSt
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var records = await specStore.ListAsync(tenantContext.TenantId, id, ct);
     return Results.Ok(records.Select(OpenApiMapping.ToMetadataDto));
@@ -315,7 +315,7 @@ v1.MapDelete("/projects/{projectId}/specs/{specId}", async (string projectId, st
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var record = await specStore.GetByIdAsync(tenantContext.TenantId, specGuid, ct);
     if (record is null || record.ProjectId != id)
@@ -338,7 +338,7 @@ v1.MapGet("/projects/{projectId}/operations", async (string projectId, IOpenApiS
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
@@ -380,7 +380,7 @@ v1.MapGet("/projects/{projectId}/operations/describe", async (string projectId, 
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
@@ -398,12 +398,16 @@ v1.MapGet("/projects/{projectId}/operations/describe", async (string projectId, 
         return Results.NotFound();
 
     var parameters = (match.Operation.Parameters ?? new List<OpenApiParameter>())
-        .Select(param => new OpenApiOperationParameterDto(
-            param.Name,
-            param.In.ToString(),
-            param.Required,
-            param.Description ?? string.Empty,
-            DescribeSchema(param.Schema)))
+        .Select(param =>
+        {
+            var location = (ParameterLocation?)param.In;
+            return new OpenApiOperationParameterDto(
+                param.Name,
+                location?.ToString() ?? string.Empty,
+                param.Required,
+                param.Description ?? string.Empty,
+                DescribeSchema(param.Schema));
+        })
         .ToList();
 
     OpenApiOperationRequestBodyDto? requestBody = null;
@@ -608,7 +612,7 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/generate", async (
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
@@ -664,7 +668,7 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/run", async (
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
@@ -1037,7 +1041,7 @@ app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore s
     var tenantContext = httpContext.GetTenantContext();
     var project = await store.GetAsync(tenantContext.TenantId, id, ct);
     return project is null
-        ? await NotFoundOrForbiddenAsync(store, id, ct)
+        ? await NotFoundOrForbiddenAsync(store, tenantContext, id, ct)
         : Results.Ok(ProjectMapping.ToDto(project));
 });
 
@@ -1054,7 +1058,7 @@ app.MapGet("/api/projects/{projectId}/environments", async (string projectId, IP
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var environments = await environmentStore.ListAsync(orgContext.OwnerKey, id, ct);
     return Results.Ok(EnvironmentMapping.ToListResponse(environments));
@@ -1079,7 +1083,7 @@ app.MapPost("/api/projects/{projectId}/environments", async (string projectId, E
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     try
     {
@@ -1109,7 +1113,7 @@ app.MapGet("/api/projects/{projectId}/environments/{environmentId}", async (stri
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var environment = await environmentStore.GetAsync(orgContext.OwnerKey, id, envId, ct);
     return environment is null
@@ -1139,7 +1143,7 @@ app.MapPut("/api/projects/{projectId}/environments/{environmentId}", async (stri
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     try
     {
@@ -1172,7 +1176,7 @@ app.MapDelete("/api/projects/{projectId}/environments/{environmentId}", async (s
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var removed = await environmentStore.DeleteAsync(orgContext.OwnerKey, id, envId, ct);
     if (!removed)
@@ -1198,7 +1202,7 @@ app.MapGet("/api/projects/{projectId}/openapi", async (string projectId, IOpenAp
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var record = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     return record is null
@@ -1219,7 +1223,7 @@ app.MapGet("/api/projects/{projectId}/specs", async (string projectId, IOpenApiS
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var records = await specStore.ListAsync(tenantContext.TenantId, id, ct);
     return Results.Ok(records.Select(OpenApiMapping.ToMetadataDto));
@@ -1238,7 +1242,7 @@ app.MapGet("/api/projects/{projectId}/specs/diff", async (string projectId, stri
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
         return InvalidRequest("Both from and to spec ids are required.");
@@ -1297,7 +1301,7 @@ app.MapGet("/api/specs/{specId}", async (string specId, IOpenApiSpecStore specSt
 
     var project = await projectStore.GetAsync(tenantContext.TenantId, record.ProjectId, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, record.ProjectId, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, record.ProjectId, ct);
 
     return Results.Ok(OpenApiMapping.ToDetailDto(record));
 });
@@ -1319,7 +1323,7 @@ app.MapGet("/specs/{specA}/diff/{specB}", async (string specA, string specB, IOp
 
     var projectA = await projectStore.GetAsync(tenantContext.TenantId, recordA.ProjectId, ct);
     if (projectA is null)
-        return await NotFoundOrForbiddenAsync(projectStore, recordA.ProjectId, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, recordA.ProjectId, ct);
 
     var recordB = await specStore.GetByIdAsync(tenantContext.TenantId, specBId, ct);
     if (recordB is null)
@@ -1327,7 +1331,7 @@ app.MapGet("/specs/{specA}/diff/{specB}", async (string specA, string specB, IOp
 
     var projectB = await projectStore.GetAsync(tenantContext.TenantId, recordB.ProjectId, ct);
     if (projectB is null)
-        return await NotFoundOrForbiddenAsync(projectStore, recordB.ProjectId, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, recordB.ProjectId, ct);
 
     var reader = new OpenApiStringReader();
     var docA = reader.Read(recordA.SpecJson, out _);
@@ -1377,7 +1381,7 @@ app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async 
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
@@ -1424,7 +1428,7 @@ app.MapGet("/api/projects/{projectId}/testplans/{operationId}", async (
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var record = await planStore.GetAsync(id, operationId.Trim(), ct);
     return record is null
@@ -1463,7 +1467,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
@@ -2187,7 +2191,7 @@ async Task<IResult> ExplainAiEndpointAsync(
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, projectId, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, projectId, ct);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (spec is null)
@@ -2260,7 +2264,7 @@ async Task<IResult> SuggestAiTestsEndpointAsync(
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, projectId, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, projectId, ct);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (spec is null)
@@ -2285,7 +2289,7 @@ async Task<IResult> SuggestAiTestsEndpointAsync(
     {
         var input = new AiSuggestTestsInput(org, projectId, trimmedOperationId, method.ToString(), path, op);
         var result = await aiSuggestTestsService.SuggestAsync(input, ct);
-        return Results.Ok(new AiSuggestTestsResponse(
+        return Results.Ok(new ApiTester.Web.Contracts.AiSuggestTestsResponse(
             result.Draft.DraftId,
             result.Draft.ProjectId,
             result.Draft.OperationId,
@@ -2459,7 +2463,7 @@ async Task<IResult> GenerateDocsAiEndpointAsync(
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, projectId, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, projectId, ct);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (spec is null)
@@ -2534,7 +2538,7 @@ async Task<IResult> GetGeneratedDocsAsync(
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     var record = await docsStore.GetAsync(tenantContext.TenantId, id, ct);
     if (record is null)
@@ -2581,7 +2585,7 @@ async Task<IResult> RunDraftPlanFromAiAsync(
 
     var project = await projectStore.GetAsync(tenantContext.TenantId, draft.ProjectId, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, draft.ProjectId, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, draft.ProjectId, ct);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, draft.ProjectId, ct);
     if (spec is null)
@@ -2677,7 +2681,7 @@ app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpec
 
     var project = await projectStore.GetAsync(tenantContext.TenantId, record.ProjectId, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, record.ProjectId, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, record.ProjectId, ct);
 
     var context = AiContextFactory.BuildSpecSummaryContext(record);
     var specJson = JsonSerializer.Serialize(context, jsonOptions);
@@ -2721,9 +2725,9 @@ static IResult? RequireAdminKeyAccess(HttpContext context, OrgContext orgContext
     return RequireScope(context, ApiKeyScopes.AdminKeys);
 }
 
-static async Task<IResult> NotFoundOrForbiddenAsync(IProjectStore store, Guid projectId, CancellationToken ct)
+static async Task<IResult> NotFoundOrForbiddenAsync(IProjectStore store, ITenantContext tenantContext, Guid projectId, CancellationToken ct)
 {
-    if (await store.ExistsAsync(tenantContext.TenantId, projectId, ct))
+    if (await store.ExistsAnyAsync(projectId, ct))
         return Results.StatusCode(StatusCodes.Status403Forbidden);
 
     return Results.NotFound();
@@ -2928,7 +2932,7 @@ static OpenApiSchemaDto? DescribeSchema(OpenApiSchema? schema)
     return new OpenApiSchemaDto(
         schema.Type ?? string.Empty,
         schema.Format ?? string.Empty,
-        schema.Nullable ?? false,
+        schema.Nullable,
         items);
 }
 
@@ -2991,7 +2995,7 @@ static async Task<IResult> ImportOpenApiSpecAsync(
     var tenantContext = httpContext.GetTenantContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
-        return await NotFoundOrForbiddenAsync(projectStore, id, ct);
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
 
     string? specJson = null;
     string? specUrl = null;
