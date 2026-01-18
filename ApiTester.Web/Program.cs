@@ -88,6 +88,7 @@ builder.Services.AddSingleton<RunComparisonService>();
 builder.Services.AddSingleton<IAiClient, NullAiClient>();
 builder.Services.Configure<EntitlementOptions>(builder.Configuration.GetSection("Entitlements"));
 builder.Services.AddSingleton<EntitlementService>();
+builder.Services.AddScoped<OrgContextResolver>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -134,7 +135,11 @@ app.UseSwaggerUI();
 
 app.UseWhen(
     context => context.Request.Path.StartsWithSegments("/api"),
-    builder => builder.UseMiddleware<ApiKeyAuthMiddleware>());
+    builder =>
+    {
+        builder.UseMiddleware<ApiKeyAuthMiddleware>();
+        builder.UseMiddleware<OrgContextMiddleware>();
+    });
 
 app.UseWhen(context => context.Request.Path.StartsWithSegments("/api"), branch =>
 {
@@ -173,6 +178,40 @@ app.MapGet("/health", (IHostEnvironment env, IOptions<PersistenceOptions> option
 
 app.MapGet("/api/version", () => Results.Ok(new VersionResponse(appVersion)));
 
+app.MapGet("/api/orgs/current", async (IOrganisationStore orgStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    var orgContext = httpContext.GetOrgContext();
+    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    return org is null
+        ? Results.NotFound()
+        : Results.Ok(OrgMapping.ToDto(org));
+});
+
+app.MapGet("/api/orgs/current/members", async (IOrganisationStore orgStore, IUserStore userStore, IMembershipStore membershipStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    var orgContext = httpContext.GetOrgContext();
+    if (!OrgRoleAccess.CanViewMembers(orgContext.Role))
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+    var org = await orgStore.GetAsync(orgContext.OrganisationId, ct);
+    if (org is null)
+        return Results.NotFound();
+
+    var memberships = await membershipStore.ListByOrganisationAsync(orgContext.OrganisationId, ct);
+    var members = new List<OrgMemberDto>(memberships.Count);
+
+    foreach (var membership in memberships)
+    {
+        var user = await userStore.GetAsync(membership.UserId, ct);
+        if (user is null)
+            continue;
+
+        members.Add(OrgMapping.ToMemberDto(user, membership.Role));
+    }
+
+    return Results.Ok(new OrgMembersResponse(members));
+});
+
 app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, IProjectStore store, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryNormalizePageSize(pageSize, take, 50, 1, 200, out var normalizedPageSize, out var sizeError))
@@ -187,8 +226,8 @@ app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, 
     if (!RequestValidation.TryNormalizeOrder(order, SortDirection.Desc, out var direction, out var orderError))
         return InvalidRequest(orderError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var result = await store.ListAsync(ownerKey, new PageRequest(normalizedPageSize, offset), sortField, direction, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var result = await store.ListAsync(orgContext.OrganisationId, new PageRequest(normalizedPageSize, offset), sortField, direction, ct);
     var metadata = new PageMetadata(result.Total, normalizedPageSize, result.NextOffset?.ToString());
     return Results.Ok(ProjectMapping.ToListResponse(metadata, result.Items));
 });
@@ -198,9 +237,9 @@ app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore 
     if (!RequestValidation.TryValidateRequiredName(request?.Name, out var error))
         return InvalidRequest(error);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await store.CreateAsync(ownerKey, request!.Name!, ct);
-    logger.LogInformation("Created project {ProjectId} for owner {OwnerKey} with name {ProjectName}", project.ProjectId, ownerKey, project.Name);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await store.CreateAsync(orgContext.OrganisationId, orgContext.OwnerKey, request!.Name!, ct);
+    logger.LogInformation("Created project {ProjectId} for org {OrganisationId} with name {ProjectName}", project.ProjectId, orgContext.OrganisationId, project.Name);
     return Results.Ok(ProjectMapping.ToDto(project));
 });
 
@@ -209,8 +248,8 @@ app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore s
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await store.GetAsync(ownerKey, id, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await store.GetAsync(orgContext.OrganisationId, id, ct);
     return project is null
         ? await NotFoundOrForbiddenAsync(store, id, ct)
         : Results.Ok(ProjectMapping.ToDto(project));
@@ -221,12 +260,12 @@ app.MapGet("/api/projects/{projectId}/environments", async (string projectId, IP
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var environments = await environmentStore.ListAsync(ownerKey, id, ct);
+    var environments = await environmentStore.ListAsync(orgContext.OwnerKey, id, ct);
     return Results.Ok(EnvironmentMapping.ToListResponse(environments));
 });
 
@@ -241,14 +280,14 @@ app.MapPost("/api/projects/{projectId}/environments", async (string projectId, E
     if (!RequestValidation.TryNormalizeBaseUrl(request?.BaseUrl, out var normalizedBaseUrl, out var baseUrlError))
         return InvalidRequest(baseUrlError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
     try
     {
-        var environment = await environmentStore.CreateAsync(ownerKey, id, request!.Name!, normalizedBaseUrl, ct);
+        var environment = await environmentStore.CreateAsync(orgContext.OwnerKey, id, request!.Name!, normalizedBaseUrl, ct);
         logger.LogInformation("Created environment {EnvironmentId} for project {ProjectId}", environment.EnvironmentId, id);
         return Results.Ok(EnvironmentMapping.ToDto(environment));
     }
@@ -266,12 +305,12 @@ app.MapGet("/api/projects/{projectId}/environments/{environmentId}", async (stri
     if (!RequestValidation.TryParseGuid(environmentId, out var envId, out var envError))
         return InvalidRequest(envError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var environment = await environmentStore.GetAsync(ownerKey, id, envId, ct);
+    var environment = await environmentStore.GetAsync(orgContext.OwnerKey, id, envId, ct);
     return environment is null
         ? Results.NotFound()
         : Results.Ok(EnvironmentMapping.ToDto(environment));
@@ -291,14 +330,14 @@ app.MapPut("/api/projects/{projectId}/environments/{environmentId}", async (stri
     if (!RequestValidation.TryNormalizeBaseUrl(request?.BaseUrl, out var normalizedBaseUrl, out var baseUrlError))
         return InvalidRequest(baseUrlError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
     try
     {
-        var environment = await environmentStore.UpdateAsync(ownerKey, id, envId, request!.Name!, normalizedBaseUrl, ct);
+        var environment = await environmentStore.UpdateAsync(orgContext.OwnerKey, id, envId, request!.Name!, normalizedBaseUrl, ct);
         if (environment is null)
             return Results.NotFound();
 
@@ -319,12 +358,12 @@ app.MapDelete("/api/projects/{projectId}/environments/{environmentId}", async (s
     if (!RequestValidation.TryParseGuid(environmentId, out var envId, out var envError))
         return InvalidRequest(envError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
-    var removed = await environmentStore.DeleteAsync(ownerKey, id, envId, ct);
+    var removed = await environmentStore.DeleteAsync(orgContext.OwnerKey, id, envId, ct);
     if (!removed)
         return Results.NotFound();
 
@@ -337,8 +376,8 @@ app.MapPost("/api/projects/{projectId}/openapi/import", async (string projectId,
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -455,8 +494,8 @@ app.MapGet("/api/projects/{projectId}/openapi", async (string projectId, IOpenAp
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -471,8 +510,8 @@ app.MapGet("/api/projects/{projectId}/specs", async (string projectId, IOpenApiS
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -485,12 +524,12 @@ app.MapGet("/api/specs/{specId}", async (string specId, IOpenApiSpecStore specSt
     if (!RequestValidation.TryParseGuid(specId, out var id, out var error))
         return InvalidRequest(error);
 
-    var ownerKey = httpContext.GetOwnerKey();
+    var orgContext = httpContext.GetOrgContext();
     var record = await specStore.GetByIdAsync(id, ct);
     if (record is null)
         return Results.NotFound();
 
-    var project = await projectStore.GetAsync(ownerKey, record.ProjectId, ct);
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, record.ProjectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, record.ProjectId, ct);
 
@@ -505,13 +544,13 @@ app.MapGet("/specs/{specA}/diff/{specB}", async (string specA, string specB, IOp
     if (!RequestValidation.TryParseGuid(specB, out var specBId, out var specBError))
         return InvalidRequest(specBError);
 
-    var ownerKey = httpContext.GetOwnerKey();
+    var orgContext = httpContext.GetOrgContext();
 
     var recordA = await specStore.GetByIdAsync(specAId, ct);
     if (recordA is null)
         return Results.NotFound();
 
-    var projectA = await projectStore.GetAsync(ownerKey, recordA.ProjectId, ct);
+    var projectA = await projectStore.GetAsync(orgContext.OrganisationId, recordA.ProjectId, ct);
     if (projectA is null)
         return await NotFoundOrForbiddenAsync(projectStore, recordA.ProjectId, ct);
 
@@ -519,7 +558,7 @@ app.MapGet("/specs/{specA}/diff/{specB}", async (string specA, string specB, IOp
     if (recordB is null)
         return Results.NotFound();
 
-    var projectB = await projectStore.GetAsync(ownerKey, recordB.ProjectId, ct);
+    var projectB = await projectStore.GetAsync(orgContext.OrganisationId, recordB.ProjectId, ct);
     if (projectB is null)
         return await NotFoundOrForbiddenAsync(projectStore, recordB.ProjectId, ct);
 
@@ -561,8 +600,8 @@ app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async 
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -601,8 +640,8 @@ app.MapGet("/api/projects/{projectId}/testplans/{operationId}", async (
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -632,8 +671,8 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await projectStore.GetAsync(ownerKey, id, ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, id, ct);
 
@@ -652,7 +691,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     string? environmentBaseUrl = null;
     if (!string.IsNullOrWhiteSpace(environmentName))
     {
-        var environmentRecord = await environmentStore.GetByNameAsync(ownerKey, id, environmentName, ct);
+        var environmentRecord = await environmentStore.GetByNameAsync(orgContext.OwnerKey, id, environmentName, ct);
         if (environmentRecord is null)
             return Results.NotFound();
 
@@ -691,7 +730,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     }
 
     logger.LogInformation("Executing run for project {ProjectId} operation {OperationId}", project.ProjectId, trimmedOperationId);
-    var run = await runner.RunPlanAsync(plan, project.ProjectKey, ownerKey, spec.SpecId, ownerKey, environmentName, ct);
+    var run = await runner.RunPlanAsync(plan, project.ProjectKey, orgContext.OrganisationId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
     logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, trimmedOperationId);
     return Results.Ok(RunMapping.ToDetailDto(run));
 });
@@ -716,8 +755,8 @@ app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pag
     if (!RequestValidation.TryNormalizeOrder(order, SortDirection.Desc, out var direction, out var orderError))
         return InvalidRequest(orderError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var project = await projectStore.GetByKeyAsync(ownerKey, projectKey!.Trim(), ct);
+    var orgContext = httpContext.GetOrgContext();
+    var project = await projectStore.GetByKeyAsync(orgContext.OrganisationId, projectKey!.Trim(), ct);
     if (project is null)
         return Results.NotFound();
 
@@ -727,7 +766,7 @@ app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pag
         normalizedOperationId ?? "(all)");
 
     var result = await store.ListAsync(
-        ownerKey,
+        orgContext.OrganisationId,
         projectKey!.Trim(),
         new PageRequest(normalizedPageSize, offset),
         sortField,
@@ -742,8 +781,8 @@ app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, HttpCo
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var run = await store.GetAsync(ownerKey, id);
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, id);
     return run is null
         ? Results.NotFound()
         : Results.Ok(RunMapping.ToDetailDto(run));
@@ -754,8 +793,8 @@ app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, 
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var run = await store.GetAsync(ownerKey, id);
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, id);
     return run is null
         ? Results.NotFound()
         : Results.Ok(RunMapping.ToAuditResponse(run));
@@ -766,8 +805,8 @@ app.MapGet("/api/runs/{runId}/compliance-report", async (string runId, ITestRunS
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var run = await store.GetAsync(ownerKey, id);
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, id);
     return run is null
         ? Results.NotFound()
         : Results.Ok(RunMapping.ToComplianceReport(run));
@@ -778,12 +817,12 @@ app.MapGet("/api/runs/{runId}/annotations", async (string runId, ITestRunStore r
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var run = await runStore.GetAsync(ownerKey, id);
+    var orgContext = httpContext.GetOrgContext();
+    var run = await runStore.GetAsync(orgContext.OrganisationId, id);
     if (run is null)
         return Results.NotFound();
 
-    var annotations = await annotationStore.ListAsync(ownerKey, id, ct);
+    var annotations = await annotationStore.ListAsync(orgContext.OwnerKey, id, ct);
     return Results.Ok(RunAnnotationMapping.ToListResponse(id, annotations));
 });
 
@@ -798,12 +837,12 @@ app.MapPost("/api/runs/{runId}/annotations", async (string runId, RunAnnotationC
     if (!RequestValidation.TryNormalizeOptionalJiraLink(request?.JiraLink, out var normalizedJiraLink, out var jiraError))
         return InvalidRequest(jiraError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var run = await runStore.GetAsync(ownerKey, id);
+    var orgContext = httpContext.GetOrgContext();
+    var run = await runStore.GetAsync(orgContext.OrganisationId, id);
     if (run is null)
         return Results.NotFound();
 
-    var annotation = await annotationStore.CreateAsync(ownerKey, id, normalizedNote, normalizedJiraLink, ct);
+    var annotation = await annotationStore.CreateAsync(orgContext.OwnerKey, id, normalizedNote, normalizedJiraLink, ct);
     logger.LogInformation("Created annotation {AnnotationId} for run {RunId}", annotation.AnnotationId, id);
     return Results.Ok(RunAnnotationMapping.ToDto(annotation));
 });
@@ -816,12 +855,12 @@ app.MapGet("/api/runs/{runId}/annotations/{annotationId}", async (string runId, 
     if (!RequestValidation.TryParseGuid(annotationId, out var annotationGuid, out var annotationError))
         return InvalidRequest(annotationError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var run = await runStore.GetAsync(ownerKey, id);
+    var orgContext = httpContext.GetOrgContext();
+    var run = await runStore.GetAsync(orgContext.OrganisationId, id);
     if (run is null)
         return Results.NotFound();
 
-    var annotation = await annotationStore.GetAsync(ownerKey, id, annotationGuid, ct);
+    var annotation = await annotationStore.GetAsync(orgContext.OwnerKey, id, annotationGuid, ct);
     return annotation is null
         ? Results.NotFound()
         : Results.Ok(RunAnnotationMapping.ToDto(annotation));
@@ -841,12 +880,12 @@ app.MapPut("/api/runs/{runId}/annotations/{annotationId}", async (string runId, 
     if (!RequestValidation.TryNormalizeOptionalJiraLink(request?.JiraLink, out var normalizedJiraLink, out var jiraError))
         return InvalidRequest(jiraError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var run = await runStore.GetAsync(ownerKey, id);
+    var orgContext = httpContext.GetOrgContext();
+    var run = await runStore.GetAsync(orgContext.OrganisationId, id);
     if (run is null)
         return Results.NotFound();
 
-    var annotation = await annotationStore.UpdateAsync(ownerKey, id, annotationGuid, normalizedNote, normalizedJiraLink, ct);
+    var annotation = await annotationStore.UpdateAsync(orgContext.OwnerKey, id, annotationGuid, normalizedNote, normalizedJiraLink, ct);
     if (annotation is null)
         return Results.NotFound();
 
@@ -862,12 +901,12 @@ app.MapDelete("/api/runs/{runId}/annotations/{annotationId}", async (string runI
     if (!RequestValidation.TryParseGuid(annotationId, out var annotationGuid, out var annotationError))
         return InvalidRequest(annotationError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var run = await runStore.GetAsync(ownerKey, id);
+    var orgContext = httpContext.GetOrgContext();
+    var run = await runStore.GetAsync(orgContext.OrganisationId, id);
     if (run is null)
         return Results.NotFound();
 
-    var removed = await annotationStore.DeleteAsync(ownerKey, id, annotationGuid, ct);
+    var removed = await annotationStore.DeleteAsync(orgContext.OwnerKey, id, annotationGuid, ct);
     if (!removed)
         return Results.NotFound();
 
@@ -886,8 +925,8 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
     if (!TryParseReportFormat(format, out var reportFormat, out var formatError))
         return InvalidRequest(formatError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var run = await store.GetAsync(ownerKey, id);
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, id);
     if (run is null)
         return Results.NotFound();
 
@@ -906,8 +945,8 @@ app.MapPost("/api/runs/{runId}/baseline/{baselineRunId}", async (string runId, s
     if (!RequestValidation.TryParseGuid(baselineRunId, out var baselineId, out var baselineError))
         return InvalidRequest(baselineError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var updated = await store.SetBaselineAsync(ownerKey, id, baselineId);
+    var orgContext = httpContext.GetOrgContext();
+    var updated = await store.SetBaselineAsync(orgContext.OrganisationId, id, baselineId);
     return updated ? Results.NoContent() : Results.NotFound();
 });
 
@@ -919,12 +958,12 @@ app.MapGet("/api/runs/{runId}/compare/{baselineRunId}", async (string runId, str
     if (!RequestValidation.TryParseGuid(baselineRunId, out var baselineId, out var baselineError))
         return InvalidRequest(baselineError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var run = await store.GetAsync(ownerKey, id);
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, id);
     if (run is null)
         return Results.NotFound();
 
-    var baseline = await store.GetAsync(ownerKey, baselineId);
+    var baseline = await store.GetAsync(orgContext.OrganisationId, baselineId);
     if (baseline is null)
         return Results.NotFound();
 
@@ -940,8 +979,8 @@ app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunSto
     if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
         return InvalidRequest(runError);
 
-    var ownerKey = httpContext.GetOwnerKey();
-    var run = await store.GetAsync(ownerKey, id);
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(orgContext.OrganisationId, id);
     if (run is null)
         return Results.NotFound();
 
@@ -960,12 +999,12 @@ app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpec
     if (!RequestValidation.TryParseGuid(specId, out var id, out var error))
         return InvalidRequest(error);
 
-    var ownerKey = httpContext.GetOwnerKey();
+    var orgContext = httpContext.GetOrgContext();
     var record = await specStore.GetByIdAsync(id, ct);
     if (record is null)
         return Results.NotFound();
 
-    var project = await projectStore.GetAsync(ownerKey, record.ProjectId, ct);
+    var project = await projectStore.GetAsync(orgContext.OrganisationId, record.ProjectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, record.ProjectId, ct);
 

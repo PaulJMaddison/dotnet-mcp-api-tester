@@ -14,6 +14,9 @@ public sealed class ApiTesterDbContext : DbContext
     public DbSet<TestPlanEntity> TestPlans => Set<TestPlanEntity>();
     public DbSet<EnvironmentEntity> Environments => Set<EnvironmentEntity>();
     public DbSet<RunAnnotationEntity> RunAnnotations => Set<RunAnnotationEntity>();
+    public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
+    public DbSet<UserEntity> Users => Set<UserEntity>();
+    public DbSet<MembershipEntity> Memberships => Set<MembershipEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -22,6 +25,12 @@ public sealed class ApiTesterDbContext : DbContext
             b.HasKey(x => x.ProjectId);
             b.Property(x => x.Name).HasMaxLength(200).IsRequired();
             b.HasIndex(x => x.Name);
+            b.HasIndex(x => x.OrganisationId);
+
+            b.HasOne(x => x.Organisation)
+                .WithMany(o => o.Projects)
+                .HasForeignKey(x => x.OrganisationId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<TestRunEntity>(b =>
@@ -34,10 +43,16 @@ public sealed class ApiTesterDbContext : DbContext
             b.HasIndex(x => new { x.ProjectId, x.StartedUtc });
             b.HasIndex(x => x.BaselineRunId);
             b.HasIndex(x => x.SpecId);
+            b.HasIndex(x => x.OrganisationId);
 
             b.HasOne(x => x.Project)
                 .WithMany(p => p.Runs)
                 .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(x => x.Organisation)
+                .WithMany(o => o.Runs)
+                .HasForeignKey(x => x.OrganisationId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             b.HasOne(x => x.Spec)
@@ -63,7 +78,7 @@ public sealed class ApiTesterDbContext : DbContext
                 .HasMaxLength(100)
                 .IsRequired();
 
-            b.HasIndex(x => new { x.OwnerKey, x.ProjectKey }).IsUnique();
+            b.HasIndex(x => new { x.OrganisationId, x.ProjectKey }).IsUnique();
             b.HasIndex(x => x.OwnerKey);
         });
 
@@ -137,6 +152,39 @@ public sealed class ApiTesterDbContext : DbContext
             b.HasOne(x => x.Run)
                 .WithMany(r => r.Annotations)
                 .HasForeignKey(x => x.RunId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OrganisationEntity>(b =>
+        {
+            b.HasKey(x => x.OrganisationId);
+            b.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Slug).HasMaxLength(80).IsRequired();
+            b.HasIndex(x => x.Slug).IsUnique();
+        });
+
+        modelBuilder.Entity<UserEntity>(b =>
+        {
+            b.HasKey(x => x.UserId);
+            b.Property(x => x.ExternalId).HasMaxLength(200).IsRequired();
+            b.Property(x => x.DisplayName).HasMaxLength(200).IsRequired();
+            b.Property(x => x.Email).HasMaxLength(320);
+            b.HasIndex(x => x.ExternalId).IsUnique();
+        });
+
+        modelBuilder.Entity<MembershipEntity>(b =>
+        {
+            b.HasKey(x => new { x.OrganisationId, x.UserId });
+            b.Property(x => x.Role).HasConversion<string>().HasMaxLength(40).IsRequired();
+
+            b.HasOne(x => x.Organisation)
+                .WithMany(o => o.Memberships)
+                .HasForeignKey(x => x.OrganisationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(x => x.User)
+                .WithMany(u => u.Memberships)
+                .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

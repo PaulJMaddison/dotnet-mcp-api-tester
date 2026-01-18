@@ -36,10 +36,11 @@ public sealed class PersistenceModeTests
             var projects = scope.ServiceProvider.GetRequiredService<IProjectStore>();
             var runs = scope.ServiceProvider.GetRequiredService<ITestRunStore>();
 
-            var project = await projects.CreateAsync("owner", "File Project", CancellationToken.None);
+            var project = await projects.CreateAsync(OrgDefaults.DefaultOrganisationId, "owner", "File Project", CancellationToken.None);
             var runRecord = new TestRunRecord
             {
                 RunId = Guid.NewGuid(),
+                OrganisationId = project.OrganisationId,
                 OwnerKey = project.OwnerKey,
                 ProjectKey = project.ProjectKey,
                 OperationId = "op",
@@ -57,7 +58,7 @@ public sealed class PersistenceModeTests
             };
 
             await runs.SaveAsync(runRecord);
-            var loaded = await runs.GetAsync(project.OwnerKey, runRecord.RunId);
+            var loaded = await runs.GetAsync(project.OrganisationId, runRecord.RunId);
 
             Assert.NotNull(loaded);
             Assert.Equal(project.ProjectKey, loaded!.ProjectKey);
@@ -121,10 +122,11 @@ public sealed class PersistenceModeTests
         var projects = scope.ServiceProvider.GetRequiredService<IProjectStore>();
         var runs = scope.ServiceProvider.GetRequiredService<ITestRunStore>();
 
-        var project = await projects.CreateAsync("owner", "Sql Project", CancellationToken.None);
+        var project = await projects.CreateAsync(OrgDefaults.DefaultOrganisationId, "owner", "Sql Project", CancellationToken.None);
         var runRecord = new TestRunRecord
         {
             RunId = Guid.NewGuid(),
+            OrganisationId = project.OrganisationId,
             OwnerKey = project.OwnerKey,
             ProjectKey = project.ProjectKey,
             OperationId = "op",
@@ -142,7 +144,7 @@ public sealed class PersistenceModeTests
         };
 
         await runs.SaveAsync(runRecord);
-        var loaded = await runs.GetAsync(project.OwnerKey, runRecord.RunId);
+        var loaded = await runs.GetAsync(project.OrganisationId, runRecord.RunId);
 
         Assert.NotNull(loaded);
         Assert.Equal(project.ProjectKey, loaded!.ProjectKey);

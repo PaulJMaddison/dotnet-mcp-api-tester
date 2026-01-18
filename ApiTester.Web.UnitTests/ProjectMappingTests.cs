@@ -9,7 +9,7 @@ public class ProjectMappingTests
     [Fact]
     public void ToListResponse_MapsProjects()
     {
-        var record = new ProjectRecord(Guid.NewGuid(), "Demo", "demo", DateTime.UtcNow);
+        var record = new ProjectRecord(Guid.NewGuid(), OrgDefaults.DefaultOrganisationId, "Demo", "demo", DateTime.UtcNow);
 
         var metadata = new ApiTester.Web.Contracts.PageMetadata(10, 50, "next");
         var response = ProjectMapping.ToListResponse(metadata, new[] { record });
@@ -22,7 +22,7 @@ public class ProjectMappingTests
     [Fact]
     public void ToCreateResponse_MapsCreatedProject()
     {
-        var record = new ProjectRecord(Guid.NewGuid(), "Demo", "demo", DateTime.UtcNow);
+        var record = new ProjectRecord(Guid.NewGuid(), OrgDefaults.DefaultOrganisationId, "Demo", "demo", DateTime.UtcNow);
 
         var response = ProjectMapping.ToDto(record);
 

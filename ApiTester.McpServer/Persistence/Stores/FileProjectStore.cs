@@ -16,8 +16,9 @@ public sealed class FileProjectStore : IProjectStore
 
     private string FilePath => Path.Combine(_cfg.WorkingDirectory, "run-history", "projects.json");
 
-    public async Task<ProjectRecord> CreateAsync(string ownerKey, string name, CancellationToken ct)
+    public async Task<ProjectRecord> CreateAsync(Guid organisationId, string ownerKey, string name, CancellationToken ct)
     {
+        organisationId = NormalizeOrganisationId(organisationId);
         ownerKey = NormalizeOwnerKey(ownerKey);
         name = (name ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(name))
@@ -29,11 +30,11 @@ public sealed class FileProjectStore : IProjectStore
         try
         {
             var list = await LoadAsync(ct);
-            var existing = list.FirstOrDefault(p => p.OwnerKey == ownerKey && p.ProjectKey.Equals(key, StringComparison.OrdinalIgnoreCase));
+            var existing = list.FirstOrDefault(p => p.OrganisationId == organisationId && p.ProjectKey.Equals(key, StringComparison.OrdinalIgnoreCase));
             if (existing is not null)
                 return existing;
 
-            var record = new ProjectRecord(Guid.NewGuid(), ownerKey, name, key, DateTime.UtcNow);
+            var record = new ProjectRecord(Guid.NewGuid(), organisationId, ownerKey, name, key, DateTime.UtcNow);
             list.Add(record);
             await SaveAsync(list, ct);
             return record;
@@ -44,11 +45,11 @@ public sealed class FileProjectStore : IProjectStore
         }
     }
 
-    public async Task<PagedResult<ProjectRecord>> ListAsync(string ownerKey, PageRequest request, SortField sortField, SortDirection direction, CancellationToken ct)
+    public async Task<PagedResult<ProjectRecord>> ListAsync(Guid organisationId, PageRequest request, SortField sortField, SortDirection direction, CancellationToken ct)
     {
-        ownerKey = NormalizeOwnerKey(ownerKey);
+        organisationId = NormalizeOrganisationId(organisationId);
         var list = await LoadAsync(ct);
-        list = list.Where(p => p.OwnerKey == ownerKey).ToList();
+        list = list.Where(p => p.OrganisationId == organisationId).ToList();
 
         var ordered = sortField switch
         {
@@ -73,19 +74,19 @@ public sealed class FileProjectStore : IProjectStore
         return new PagedResult<ProjectRecord>(page, total, nextOffset);
     }
 
-    public async Task<ProjectRecord?> GetAsync(string ownerKey, Guid projectId, CancellationToken ct)
+    public async Task<ProjectRecord?> GetAsync(Guid organisationId, Guid projectId, CancellationToken ct)
     {
-        ownerKey = NormalizeOwnerKey(ownerKey);
+        organisationId = NormalizeOrganisationId(organisationId);
         var list = await LoadAsync(ct);
-        return list.FirstOrDefault(p => p.ProjectId == projectId && p.OwnerKey == ownerKey);
+        return list.FirstOrDefault(p => p.ProjectId == projectId && p.OrganisationId == organisationId);
     }
 
-    public async Task<ProjectRecord?> GetByKeyAsync(string ownerKey, string projectKey, CancellationToken ct)
+    public async Task<ProjectRecord?> GetByKeyAsync(Guid organisationId, string projectKey, CancellationToken ct)
     {
-        ownerKey = NormalizeOwnerKey(ownerKey);
+        organisationId = NormalizeOrganisationId(organisationId);
         projectKey = NormalizeProjectKey(projectKey);
         var list = await LoadAsync(ct);
-        return list.FirstOrDefault(p => p.OwnerKey == ownerKey && p.ProjectKey.Equals(projectKey, StringComparison.OrdinalIgnoreCase));
+        return list.FirstOrDefault(p => p.OrganisationId == organisationId && p.ProjectKey.Equals(projectKey, StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task<bool> ExistsAsync(Guid projectId, CancellationToken ct)
@@ -104,7 +105,7 @@ public sealed class FileProjectStore : IProjectStore
             return [];
 
         var list = JsonSerializer.Deserialize<List<ProjectRecord>>(json, JsonDefaults.Default) ?? [];
-        return list.Select(NormalizeOwnerKey).ToList();
+        return list.Select(NormalizeOrg).ToList();
     }
 
     private async Task SaveAsync(List<ProjectRecord> list, CancellationToken ct)
@@ -117,8 +118,10 @@ public sealed class FileProjectStore : IProjectStore
         await File.WriteAllTextAsync(FilePath, json, ct);
     }
 
-    private static ProjectRecord NormalizeOwnerKey(ProjectRecord record)
+    private static ProjectRecord NormalizeOrg(ProjectRecord record)
     {
+        if (record.OrganisationId == Guid.Empty)
+            return record with { OrganisationId = OrgDefaults.DefaultOrganisationId };
         if (!string.IsNullOrWhiteSpace(record.OwnerKey))
             return record;
 
@@ -130,6 +133,9 @@ public sealed class FileProjectStore : IProjectStore
         ownerKey = (ownerKey ?? "").Trim();
         return string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey;
     }
+
+    private static Guid NormalizeOrganisationId(Guid organisationId)
+        => organisationId == Guid.Empty ? OrgDefaults.DefaultOrganisationId : organisationId;
 
     private static string NormalizeProjectKey(string projectKey)
     {

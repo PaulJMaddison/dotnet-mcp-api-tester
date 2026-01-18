@@ -3,6 +3,8 @@
 public sealed class ProjectEntity
 {
     public Guid ProjectId { get; set; }
+    public Guid OrganisationId { get; set; }
+    public OrganisationEntity? Organisation { get; set; }
     public string OwnerKey { get; set; } = "";
     public string Name { get; set; } = "";
     public DateTime CreatedUtc { get; set; }

@@ -23,15 +23,17 @@ public sealed class SqlTestRunStore : ITestRunStore
     {
         if (record is null) throw new ArgumentNullException(nameof(record));
 
+        var organisationId = NormalizeOrganisationId(record.OrganisationId);
         var projectKey = string.IsNullOrWhiteSpace(record.ProjectKey) ? "default" : record.ProjectKey.Trim();
         var ownerKey = string.IsNullOrWhiteSpace(record.OwnerKey) ? OwnerKeyDefaults.Default : record.OwnerKey.Trim();
 
         record.Result.ClassificationSummary = ResultClassificationRules.Summarize(record.Result.Results);
 
-        var project = await EnsureProjectAsync(projectKey, ownerKey);
+        var project = await EnsureProjectAsync(organisationId, projectKey, ownerKey);
         _logger.LogInformation(
-            "Saving run {RunId} for owner {OwnerKey} project {ProjectKey} (projectId {ProjectId})",
+            "Saving run {RunId} for org {OrganisationId} owner {OwnerKey} project {ProjectKey} (projectId {ProjectId})",
             record.RunId,
+            organisationId,
             ownerKey,
             projectKey,
             project.ProjectId);
@@ -39,6 +41,7 @@ public sealed class SqlTestRunStore : ITestRunStore
         var run = new TestRunEntity
         {
             RunId = record.RunId,
+            OrganisationId = organisationId,
             ProjectId = project.ProjectId,
             OperationId = record.OperationId,
             SpecId = record.SpecId,
@@ -78,15 +81,15 @@ public sealed class SqlTestRunStore : ITestRunStore
         await _db.SaveChangesAsync();
     }
 
-    public async Task<TestRunRecord?> GetAsync(string ownerKey, Guid runId)
+    public async Task<TestRunRecord?> GetAsync(Guid organisationId, Guid runId)
     {
-        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
+        organisationId = NormalizeOrganisationId(organisationId);
 
         var run = await _db.TestRuns
             .AsNoTracking()
             .Include(x => x.Results)
             .Include(x => x.Project)
-            .FirstOrDefaultAsync(x => x.RunId == runId && x.Project != null && x.Project.OwnerKey == ownerKey);
+            .FirstOrDefaultAsync(x => x.RunId == runId && x.Project != null && x.Project.OrganisationId == organisationId);
 
         if (run is null) return null;
 
@@ -113,6 +116,7 @@ public sealed class SqlTestRunStore : ITestRunStore
         return new TestRunRecord
         {
             RunId = run.RunId,
+            OrganisationId = run.OrganisationId,
             Actor = run.Actor ?? OwnerKeyDefaults.Default,
             Environment = run.EnvironmentName is null && run.EnvironmentBaseUrl is null
                 ? null
@@ -141,19 +145,19 @@ public sealed class SqlTestRunStore : ITestRunStore
         };
     }
 
-    public async Task<bool> SetBaselineAsync(string ownerKey, Guid runId, Guid baselineRunId)
+    public async Task<bool> SetBaselineAsync(Guid organisationId, Guid runId, Guid baselineRunId)
     {
-        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
+        organisationId = NormalizeOrganisationId(organisationId);
 
         var run = await _db.TestRuns
             .Include(x => x.Project)
-            .FirstOrDefaultAsync(x => x.RunId == runId && x.Project != null && x.Project.OwnerKey == ownerKey);
+            .FirstOrDefaultAsync(x => x.RunId == runId && x.Project != null && x.Project.OrganisationId == organisationId);
         if (run is null)
             return false;
 
         var baselineExists = await _db.TestRuns
             .Include(x => x.Project)
-            .AnyAsync(x => x.RunId == baselineRunId && x.Project != null && x.Project.OwnerKey == ownerKey);
+            .AnyAsync(x => x.RunId == baselineRunId && x.Project != null && x.Project.OrganisationId == organisationId);
         if (!baselineExists)
             return false;
 
@@ -163,20 +167,20 @@ public sealed class SqlTestRunStore : ITestRunStore
     }
 
     public async Task<PagedResult<TestRunRecord>> ListAsync(
-        string ownerKey,
+        Guid organisationId,
         string projectKey,
         PageRequest request,
         SortField sortField,
         SortDirection direction,
         string? operationId = null)
     {
-        ownerKey = string.IsNullOrWhiteSpace(ownerKey) ? OwnerKeyDefaults.Default : ownerKey.Trim();
+        organisationId = NormalizeOrganisationId(organisationId);
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
 
         var q = _db.TestRuns
             .AsNoTracking()
             .Include(x => x.Project)
-            .Where(x => x.Project != null && x.Project.ProjectKey == projectKey && x.Project.OwnerKey == ownerKey);
+            .Where(x => x.Project != null && x.Project.ProjectKey == projectKey && x.Project.OrganisationId == organisationId);
 
         if (!string.IsNullOrWhiteSpace(operationId))
         {
@@ -227,14 +231,15 @@ public sealed class SqlTestRunStore : ITestRunStore
             return new TestRunRecord
             {
                 RunId = run.RunId,
-                Actor = run.Actor ?? ownerKey,
+                OrganisationId = run.OrganisationId,
+                Actor = run.Actor ?? OwnerKeyDefaults.Default,
                 Environment = run.EnvironmentName is null && run.EnvironmentBaseUrl is null
                     ? null
                     : new TestRunEnvironmentSnapshot(run.EnvironmentName, run.EnvironmentBaseUrl),
                 PolicySnapshot = run.PolicySnapshotJson is null
                     ? null
                     : JsonSerializer.Deserialize<ApiExecutionPolicySnapshot>(run.PolicySnapshotJson, JsonDefaults.Default),
-                OwnerKey = run.Project?.OwnerKey ?? ownerKey,
+                OwnerKey = run.Project?.OwnerKey ?? OwnerKeyDefaults.Default,
                 ProjectKey = run.Project?.ProjectKey ?? projectKey,
                 OperationId = run.OperationId,
                 SpecId = run.SpecId,
@@ -263,14 +268,15 @@ public sealed class SqlTestRunStore : ITestRunStore
         return new PagedResult<TestRunRecord>(items, total, nextOffset);
     }
 
-    private async Task<ProjectEntity> EnsureProjectAsync(string projectKey, string ownerKey)
+    private async Task<ProjectEntity> EnsureProjectAsync(Guid organisationId, string projectKey, string ownerKey)
     {
-        var existing = await _db.Projects.FirstOrDefaultAsync(p => p.ProjectKey == projectKey && p.OwnerKey == ownerKey);
+        var existing = await _db.Projects.FirstOrDefaultAsync(p => p.ProjectKey == projectKey && p.OrganisationId == organisationId);
         if (existing is not null) return existing;
 
         var created = new ProjectEntity
         {
             ProjectId = Guid.NewGuid(),
+            OrganisationId = organisationId,
             OwnerKey = ownerKey,
             ProjectKey = projectKey,
             Name = projectKey,
@@ -281,4 +287,7 @@ public sealed class SqlTestRunStore : ITestRunStore
         await _db.SaveChangesAsync();
         return created;
     }
+
+    private static Guid NormalizeOrganisationId(Guid organisationId)
+        => organisationId == Guid.Empty ? OrgDefaults.DefaultOrganisationId : organisationId;
 }

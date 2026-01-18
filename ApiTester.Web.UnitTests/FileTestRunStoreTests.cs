@@ -50,7 +50,7 @@ public sealed class FileTestRunStoreTests
 
             await store.SaveAsync(record);
 
-            var loaded = await store.GetAsync(OwnerKeyDefaults.Default, record.RunId);
+            var loaded = await store.GetAsync(OrgDefaults.DefaultOrganisationId, record.RunId);
 
             Assert.NotNull(loaded);
             Assert.Equal(OwnerKeyDefaults.Default, loaded!.OwnerKey);
