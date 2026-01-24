@@ -51,7 +51,10 @@ public sealed class ApiTesterWebClient : IApiTesterWebClient
             if (!response.IsSuccessStatusCode)
             {
                 var details = await response.Content.ReadAsStringAsync(cancellationToken);
-                return ApiResult<T>.Failure($"Request failed with {(int)response.StatusCode} {response.ReasonPhrase}.", details);
+                return ApiResult<T>.Failure(
+                    $"Request failed with {(int)response.StatusCode} {response.ReasonPhrase}.",
+                    details,
+                    (int)response.StatusCode);
             }
 
             var payload = await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken);
@@ -72,8 +75,8 @@ public sealed record ApiResult<T>(T? Data, ApiError? Error)
 
     public static ApiResult<T> Success(T data) => new(data, null);
 
-    public static ApiResult<T> Failure(string message, string? details)
-        => new(default, new ApiError(message, details));
+    public static ApiResult<T> Failure(string message, string? details, int? statusCode = null)
+        => new(default, new ApiError(message, details, statusCode));
 }
 
-public sealed record ApiError(string Message, string? Details);
+public sealed record ApiError(string Message, string? Details, int? StatusCode);

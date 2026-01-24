@@ -1,5 +1,6 @@
 @page "/app/projects/{projectKey}/runs"
 @inject IApiTesterWebClient ApiClient
+@inject NavigationManager NavigationManager
 
 <PageTitle>Runs</PageTitle>
 
@@ -120,6 +121,11 @@
         }
 
         _response = await ApiClient.GetRunsAsync(ProjectKey, OperationId, Take, CancellationToken.None);
+        if (_response?.Error?.StatusCode == 401)
+        {
+            NavigationManager.NavigateTo("/app/sign-in");
+            return;
+        }
         _isLoading = false;
     }
 }
