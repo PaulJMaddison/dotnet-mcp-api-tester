@@ -48,6 +48,7 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
             services.RemoveAll<IApiKeyStore>();
             services.RemoveAll<IAuditEventStore>();
             services.RemoveAll<IGeneratedDocsStore>();
+            services.RemoveAll<ISubscriptionStore>();
 
             services.AddDbContext<ApiTesterDbContext>(opt => opt.UseSqlite(_connection));
             services.AddScoped<SqlTestRunStore>();
@@ -72,6 +73,7 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
             services.AddScoped<IApiKeyStore>(sp => sp.GetRequiredService<SqlApiKeyStore>());
             services.AddScoped<IAuditEventStore>(sp => sp.GetRequiredService<SqlAuditEventStore>());
             services.AddScoped<IGeneratedDocsStore>(sp => sp.GetRequiredService<SqlGeneratedDocsStore>());
+            services.AddScoped<ISubscriptionStore, TestSubscriptionStore>();
 
             using var provider = services.BuildServiceProvider();
             using var scope = provider.CreateScope();
