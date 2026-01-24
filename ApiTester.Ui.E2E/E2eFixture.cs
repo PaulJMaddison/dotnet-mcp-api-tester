@@ -14,6 +14,7 @@ public sealed class E2eFixture : IAsyncLifetime
     private const string ProjectName = "E2E Project";
     private const string ProjectKeyValue = "e2e-project";
     private const string OwnerKeyValue = "e2e-user";
+    private const string TargetFramework = "net8.0";
 
     private Process? _apiProcess;
     private Process? _uiProcess;
@@ -46,9 +47,12 @@ public sealed class E2eFixture : IAsyncLifetime
         ApiBaseUri = new Uri($"http://127.0.0.1:{apiPort}");
         UiBaseUri = new Uri($"http://127.0.0.1:{uiPort}");
 
+        var apiDllPath = ResolveAppDllPath("ApiTester.Web", "ApiTester.Web.dll");
+        var uiDllPath = ResolveAppDllPath("ApiTester.Ui", "ApiTester.Ui.dll");
+
         _apiProcess = StartProcess(
             "dotnet",
-            "ApiTester.Web/bin/Release/net8.0/ApiTester.Web.dll",
+            apiDllPath,
             new Dictionary<string, string?>
             {
                 ["ASPNETCORE_URLS"] = ApiBaseUri.ToString(),
@@ -63,7 +67,7 @@ public sealed class E2eFixture : IAsyncLifetime
 
         _uiProcess = StartProcess(
             "dotnet",
-            "ApiTester.Ui/bin/Release/net8.0/ApiTester.Ui.dll",
+            uiDllPath,
             new Dictionary<string, string?>
             {
                 ["ASPNETCORE_URLS"] = UiBaseUri.ToString(),
@@ -81,10 +85,7 @@ public sealed class E2eFixture : IAsyncLifetime
         await StopProcessAsync(_uiProcess);
         await StopProcessAsync(_apiProcess);
 
-        if (!string.IsNullOrWhiteSpace(_workingDirectory) && Directory.Exists(_workingDirectory))
-        {
-            Directory.Delete(_workingDirectory, true);
-        }
+        await DeleteWorkingDirectoryAsync();
     }
 
     private void SeedDatabase(string apiKeyPrefix)
@@ -256,6 +257,55 @@ public sealed class E2eFixture : IAsyncLifetime
         }
 
         throw new TimeoutException($"Timed out waiting for {uri} to become healthy.");
+    }
+
+    private async Task DeleteWorkingDirectoryAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_workingDirectory) || !Directory.Exists(_workingDirectory))
+        {
+            return;
+        }
+
+        var attempts = 0;
+        while (true)
+        {
+            try
+            {
+                Directory.Delete(_workingDirectory, true);
+                return;
+            }
+            catch (IOException) when (attempts < 5)
+            {
+                attempts++;
+                await Task.Delay(250);
+            }
+            catch (UnauthorizedAccessException) when (attempts < 5)
+            {
+                attempts++;
+                await Task.Delay(250);
+            }
+        }
+    }
+
+    private static string ResolveAppDllPath(string projectName, string dllName)
+    {
+        var repoRoot = GetRepoRoot();
+        var basePath = Path.Combine(repoRoot, projectName, "bin");
+        var configurations = new[] { "Release", "Debug" };
+
+        foreach (var configuration in configurations)
+        {
+            var candidate = Path.Combine(basePath, configuration, TargetFramework, dllName);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        var fallback = Path.Combine(basePath, "Debug", TargetFramework, dllName);
+        throw new FileNotFoundException(
+            $"Unable to locate {dllName}. Ensure the project has been built.",
+            fallback);
     }
 
     private static string GetRepoRoot()

@@ -459,6 +459,7 @@ public class ApiEndpointsTests
 
             var reason = failEl.GetString() ?? string.Empty;
             return reason.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+                   reason.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
                    reason.Contains("canceled", StringComparison.OrdinalIgnoreCase) ||
                    reason.Contains("network", StringComparison.OrdinalIgnoreCase) ||
                    reason.Contains("unreachable", StringComparison.OrdinalIgnoreCase) ||
