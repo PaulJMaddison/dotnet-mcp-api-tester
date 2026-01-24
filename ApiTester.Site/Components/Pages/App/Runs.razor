@@ -17,7 +17,10 @@
     </div>
 
     <div class="app-card app-filter-bar">
-        <div class="text-uppercase small text-secondary">Filters</div>
+        <div class="d-flex align-items-center gap-2 text-uppercase small text-secondary">
+            <img src="/assets/runs/run-filter.svg" alt="" aria-hidden="true" width="16" height="16" />
+            <span>Filters</span>
+        </div>
         <form class="row g-3 align-items-end mt-1" method="get" action="/app/runs">
             <div class="col-12 col-md-4">
                 <label class="form-label" for="runs-project-key">Project key</label>
@@ -78,6 +81,7 @@
                             <th scope="col">Run ID</th>
                             <th scope="col">Project key</th>
                             <th scope="col">Operation ID</th>
+                            <th scope="col">Status</th>
                             <th scope="col">Started</th>
                             <th scope="col">Completed</th>
                             <th scope="col">Total cases</th>
@@ -98,6 +102,15 @@
                                 </td>
                                 <td>@run.ProjectKey</td>
                                 <td>@run.OperationId</td>
+                                <td>
+                                    @{
+                                        var status = GetRunStatus(run.Snapshot);
+                                    }
+                                    <span class="d-inline-flex align-items-center gap-2">
+                                        <img src="@status.IconPath" alt="@status.Label" width="16" height="16" />
+                                        <span>@status.Label</span>
+                                    </span>
+                                </td>
                                 <td>@run.StartedUtc.ToString("g")</td>
                                 <td>@run.CompletedUtc.ToString("g")</td>
                                 <td>@run.Snapshot.TotalCases</td>
@@ -127,6 +140,33 @@
     {
         new("Runs", "/app/runs")
     };
+
+    private static RunStatusViewModel GetRunStatus(RunSummary summary)
+    {
+        if (summary.TotalCases == 0)
+        {
+            return new RunStatusViewModel("/assets/runs/run-status-queued.svg", "Queued");
+        }
+
+        if (summary.RealFail > 0)
+        {
+            return new RunStatusViewModel("/assets/runs/run-status-failed.svg", "Failed");
+        }
+
+        if (summary.Flaky > 0)
+        {
+            return new RunStatusViewModel("/assets/runs/run-status-running.svg", "Flaky");
+        }
+
+        if (summary.ExpectedBlocked > 0)
+        {
+            return new RunStatusViewModel("/assets/runs/run-status-skipped.svg", "Blocked");
+        }
+
+        return new RunStatusViewModel("/assets/runs/run-status-success.svg", "Passed");
+    }
+
+    private sealed record RunStatusViewModel(string IconPath, string Label);
 
     protected override async Task OnParametersSetAsync()
     {

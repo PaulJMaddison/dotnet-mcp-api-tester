@@ -18,7 +18,10 @@
 
     <div class="app-card app-filter-bar">
         <div>
-            <div class="text-uppercase small text-secondary">Filters</div>
+            <div class="d-flex align-items-center gap-2 text-uppercase small text-secondary">
+                <img src="/assets/runs/run-filter.svg" alt="" aria-hidden="true" width="16" height="16" />
+                <span>Filters</span>
+            </div>
             <div class="d-flex flex-wrap gap-3 mt-1">
                 <div><span class="fw-semibold">Operation:</span> @(string.IsNullOrWhiteSpace(OperationId) ? "All" : OperationId)</div>
                 <div><span class="fw-semibold">Take:</span> @(Take is > 0 ? Take.ToString() : "Default")</div>
@@ -81,9 +84,18 @@
                                 </td>
                                 <td>@run.OperationId</td>
                                 <td>
-                                    <span class="badge text-bg-light">
-                                        @run.Snapshot.Passed passed / @run.Snapshot.Flaky flaky / @run.Snapshot.RealFail real fail
-                                    </span>
+                                    @{
+                                        var status = GetRunStatus(run.Snapshot);
+                                    }
+                                    <div class="d-flex flex-column gap-1">
+                                        <span class="d-inline-flex align-items-center gap-2">
+                                            <img src="@status.IconPath" alt="@status.Label" width="16" height="16" />
+                                            <span>@status.Label</span>
+                                        </span>
+                                        <span class="badge text-bg-light">
+                                            @run.Snapshot.Passed passed / @run.Snapshot.Flaky flaky / @run.Snapshot.RealFail real fail
+                                        </span>
+                                    </div>
                                 </td>
                                 <td>@run.Snapshot.TotalCases</td>
                                 <td>@TimeSpan.FromMilliseconds(run.Snapshot.TotalDurationMs).TotalSeconds.ToString("0.##")s</td>
@@ -109,6 +121,33 @@
         new("Projects", "/app/projects"),
         new($"{ProjectKey} runs", $"/app/projects/{ProjectKey}/runs")
     };
+
+    private static RunStatusViewModel GetRunStatus(RunSummary summary)
+    {
+        if (summary.TotalCases == 0)
+        {
+            return new RunStatusViewModel("/assets/runs/run-status-queued.svg", "Queued");
+        }
+
+        if (summary.RealFail > 0)
+        {
+            return new RunStatusViewModel("/assets/runs/run-status-failed.svg", "Failed");
+        }
+
+        if (summary.Flaky > 0)
+        {
+            return new RunStatusViewModel("/assets/runs/run-status-running.svg", "Flaky");
+        }
+
+        if (summary.ExpectedBlocked > 0)
+        {
+            return new RunStatusViewModel("/assets/runs/run-status-skipped.svg", "Blocked");
+        }
+
+        return new RunStatusViewModel("/assets/runs/run-status-success.svg", "Passed");
+    }
+
+    private sealed record RunStatusViewModel(string IconPath, string Label);
 
     protected override async Task OnParametersSetAsync()
     {
