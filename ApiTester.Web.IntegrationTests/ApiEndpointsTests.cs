@@ -1326,7 +1326,16 @@ public class ApiEndpointsTests
 
         var entity = await db.Organisations.FirstOrDefaultAsync(o => o.OrganisationId == organisationId);
         if (entity is null)
-            return;
+        {
+            entity = new OrganisationEntity
+            {
+                OrganisationId = organisationId,
+                Name = "Test Org",
+                Slug = $"test-org-{organisationId:N}",
+                CreatedUtc = DateTime.UtcNow
+            };
+            db.Organisations.Add(entity);
+        }
 
         entity.OrgSettingsJson = JsonSerializer.Serialize(settings);
         if (redactionRules is not null)
