@@ -40,7 +40,8 @@ public sealed class RunHistoryTools
             new PageRequest(normalizedTake, 0),
             SortField.StartedUtc,
             SortDirection.Desc,
-            operationId);
+            operationId,
+            null);
 
         return new
         {
@@ -121,7 +122,8 @@ public sealed class RunHistoryTools
             new PageRequest(Math.Max(1, take), 0),
             SortField.StartedUtc,
             SortDirection.Desc,
-            operationId);
+            operationId,
+            null);
 
         var runs = result.Items
             .OrderBy(r => r.StartedUtc)

@@ -16,7 +16,8 @@ public interface ITestRunStore
         PageRequest request,
         SortField sortField,
         SortDirection direction,
-        string? operationId = null);
+        string? operationId = null,
+        DateTimeOffset? notBeforeUtc = null);
 
     Task<int> PruneAsync(Guid tenantId, DateTimeOffset cutoffUtc, CancellationToken ct);
 }

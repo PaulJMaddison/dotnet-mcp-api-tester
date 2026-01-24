@@ -23,6 +23,7 @@ public sealed class ApiTesterDbContext : DbContext
     public DbSet<ApiKeyEntity> ApiKeys => Set<ApiKeyEntity>();
     public DbSet<AuditEventEntity> AuditEvents => Set<AuditEventEntity>();
     public DbSet<BaselineRunEntity> BaselineRuns => Set<BaselineRunEntity>();
+    public DbSet<SubscriptionEntity> Subscriptions => Set<SubscriptionEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -295,6 +296,21 @@ public sealed class ApiTesterDbContext : DbContext
             b.HasOne(x => x.User)
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SubscriptionEntity>(b =>
+        {
+            b.HasKey(x => x.OrganisationId);
+            b.Property(x => x.Plan).HasConversion<string>().HasMaxLength(40).IsRequired();
+            b.Property(x => x.Status).HasConversion<string>().HasMaxLength(40).IsRequired();
+            b.Property(x => x.PeriodStartUtc).IsRequired();
+            b.Property(x => x.PeriodEndUtc).IsRequired();
+            b.Property(x => x.UpdatedUtc).IsRequired();
+
+            b.HasOne<OrganisationEntity>()
+                .WithOne()
+                .HasForeignKey<SubscriptionEntity>(x => x.OrganisationId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

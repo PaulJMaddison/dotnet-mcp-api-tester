@@ -153,7 +153,8 @@ public sealed class FileTestRunStore : ITestRunStore
         PageRequest request,
         SortField sortField,
         SortDirection direction,
-        string? operationId = null)
+        string? operationId = null,
+        DateTimeOffset? notBeforeUtc = null)
     {
         tenantId = NormalizeTenantId(tenantId);
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
@@ -224,6 +225,11 @@ public sealed class FileTestRunStore : ITestRunStore
             record.Result.ClassificationSummary = ResultClassificationRules.Summarize(record.Result.Results);
 
             list.Add(record);
+        }
+
+        if (notBeforeUtc.HasValue)
+        {
+            list = list.Where(r => r.StartedUtc >= notBeforeUtc.Value).ToList();
         }
 
         var ordered = sortField switch

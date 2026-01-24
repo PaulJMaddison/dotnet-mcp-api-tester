@@ -189,7 +189,8 @@ public sealed class SqlTestRunStore : ITestRunStore
         PageRequest request,
         SortField sortField,
         SortDirection direction,
-        string? operationId = null)
+        string? operationId = null,
+        DateTimeOffset? notBeforeUtc = null)
     {
         tenantId = NormalizeTenantId(tenantId);
         projectKey = string.IsNullOrWhiteSpace(projectKey) ? "default" : projectKey.Trim();
@@ -203,6 +204,12 @@ public sealed class SqlTestRunStore : ITestRunStore
         {
             var op = operationId.Trim();
             q = q.Where(x => x.OperationId == op);
+        }
+
+        if (notBeforeUtc.HasValue)
+        {
+            var cutoff = notBeforeUtc.Value.UtcDateTime;
+            q = q.Where(x => x.StartedUtc >= cutoff);
         }
 
         var total = await q.CountAsync(CancellationToken.None);

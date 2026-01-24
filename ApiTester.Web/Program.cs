@@ -17,8 +17,8 @@ using ApiTester.Web.Comparison;
 using ApiTester.Web.Execution;
 using ApiTester.Web.Auth;
 using ApiTester.Web.AI;
+using ApiTester.Web.Billing;
 using ApiTester.Web.Diff;
-using ApiTester.Web.Entitlements;
 using ApiTester.Web.Mapping;
 using ApiTester.Web.Reports;
 using ApiTester.Web.Validation;
@@ -107,8 +107,7 @@ builder.Services.AddScoped<AiExplainService>();
 builder.Services.AddScoped<AiDocsGenerationService>();
 builder.Services.AddScoped<AiRunSummaryService>();
 builder.Services.AddScoped<AiSuggestTestsService>();
-builder.Services.Configure<EntitlementOptions>(builder.Configuration.GetSection("Entitlements"));
-builder.Services.AddSingleton<EntitlementService>();
+builder.Services.AddScoped<SubscriptionEnforcementService>();
 builder.Services.AddScoped<OrgContextResolver>();
 builder.Services.AddScoped<IRetentionPruner, RetentionPruner>();
 builder.Services.AddScoped<ITenantContext>(sp =>
@@ -211,6 +210,68 @@ app.MapGet("/api/version", () => Results.Ok(new VersionResponse(appVersion)));
 
 var v1 = app.MapGroup("/api/v1");
 
+v1.MapGet("/billing/plan", async (SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
+{
+    var tenantContext = httpContext.GetTenantContext();
+    var snapshot = await subscriptions.GetSnapshotAsync(tenantContext.TenantId, ct);
+    var limits = new BillingPlanLimits(
+        snapshot.Limits.MaxProjects,
+        snapshot.Limits.MaxRunsPerPeriod,
+        snapshot.Limits.MaxAiCallsPerPeriod);
+
+    var response = new BillingPlanResponse(
+        snapshot.Subscription.Plan.ToString(),
+        snapshot.Subscription.Status.ToString(),
+        snapshot.Subscription.Renews,
+        snapshot.Subscription.PeriodStartUtc,
+        snapshot.Subscription.PeriodEndUtc,
+        snapshot.Limits.RetentionDays,
+        snapshot.Limits.AiEnabled,
+        snapshot.Limits.AuditExportEnabled,
+        limits);
+
+    return Results.Ok(response);
+});
+
+v1.MapGet("/billing/usage", async (IProjectStore projectStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
+{
+    var tenantContext = httpContext.GetTenantContext();
+    var totalProjects = await GetProjectCountAsync(projectStore, tenantContext.TenantId, ct);
+    await subscriptions.UpdateProjectsUsedAsync(tenantContext.TenantId, totalProjects, ct);
+
+    var snapshot = await subscriptions.GetSnapshotAsync(tenantContext.TenantId, ct);
+    var limits = new BillingPlanLimits(
+        snapshot.Limits.MaxProjects,
+        snapshot.Limits.MaxRunsPerPeriod,
+        snapshot.Limits.MaxAiCallsPerPeriod);
+
+    var usage = new BillingUsageCounters(
+        totalProjects,
+        snapshot.Subscription.RunsUsed,
+        snapshot.Subscription.AiCallsUsed);
+
+    var response = new BillingUsageResponse(
+        snapshot.Subscription.PeriodStartUtc,
+        snapshot.Subscription.PeriodEndUtc,
+        limits,
+        usage);
+
+    return Results.Ok(response);
+});
+
+v1.MapPost("/billing/upgrade-intent", async (UpgradeIntentRequest request, HttpContext httpContext) =>
+{
+    var desired = (request?.DesiredPlan ?? string.Empty).Trim();
+    if (string.IsNullOrWhiteSpace(desired))
+        return InvalidRequest("desiredPlan is required.");
+
+    var response = new UpgradeIntentResponse(
+        $"Upgrade request received for plan '{desired}'. A billing specialist will follow up with next steps.",
+        "billing@apitester.ai");
+
+    return Results.Ok(response);
+});
+
 v1.MapPost("/admin/tenants", async (AdminTenantCreateRequest request, IOrganisationStore orgStore, IUserStore userStore, IMembershipStore membershipStore, IHostEnvironment env, CancellationToken ct) =>
 {
     if (!env.IsDevelopment())
@@ -312,14 +373,13 @@ v1.MapGet("/projects", async (int? pageSize, string? pageToken, int? skip, strin
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
     var result = await store.ListAsync(tenantContext.TenantId, new PageRequest(normalizedPageSize, offset), sortField, direction, ct);
     var metadata = new PageMetadata(result.Total, normalizedPageSize, result.NextOffset?.ToString());
     return Results.Ok(ProjectMapping.ToListResponse(metadata, result.Items));
 });
 
-v1.MapPost("/projects", async (ProjectCreateRequest request, IProjectStore store, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+v1.MapPost("/projects", async (ProjectCreateRequest request, IProjectStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredName(request?.Name, out var error))
         return InvalidRequest(error);
@@ -330,7 +390,13 @@ v1.MapPost("/projects", async (ProjectCreateRequest request, IProjectStore store
 
     var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var gate = await subscriptions.CheckProjectCreateAsync(tenantContext.TenantId, ct);
+    if (!gate.Allowed)
+        return SubscriptionProblem(gate);
+
     var project = await store.CreateAsync(tenantContext.TenantId, orgContext.OwnerKey, request!.Name!, ct);
+    var totalProjects = await GetProjectCountAsync(store, tenantContext.TenantId, ct);
+    await subscriptions.UpdateProjectsUsedAsync(tenantContext.TenantId, totalProjects, ct);
     logger.LogInformation("Created project {ProjectId} for org {OrganisationId} with name {ProjectName}", project.ProjectId, tenantContext.TenantId, project.Name);
     return Results.Ok(ProjectMapping.ToDto(project));
 });
@@ -732,6 +798,7 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/run", async (
     IOpenApiSpecStore specStore,
     ITestPlanStore planStore,
     IEnvironmentStore environmentStore,
+    SubscriptionEnforcementService subscriptions,
     TestPlanRunner runner,
     ApiRuntimeConfig runtime,
     RedactionService redactionService,
@@ -755,6 +822,10 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/run", async (
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
+
+    var runGate = await subscriptions.TryConsumeRunAsync(tenantContext.TenantId, ct);
+    if (!runGate.Allowed)
+        return SubscriptionProblem(runGate);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
@@ -836,7 +907,7 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/run", async (
     return Results.Ok(RunMapping.ToDetailDto(run));
 });
 
-v1.MapGet("/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, IProjectStore projectStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+v1.MapGet("/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, IProjectStore projectStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredKey(projectKey, "projectKey", out var keyError))
         return InvalidRequest(keyError);
@@ -862,6 +933,7 @@ v1.MapGet("/runs", async (string? projectKey, string? operationId, int? pageSize
 
     var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var retention = await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct);
     var project = await projectStore.GetByKeyAsync(tenantContext.TenantId, projectKey!.Trim(), ct);
     if (project is null)
         return Results.NotFound();
@@ -877,12 +949,13 @@ v1.MapGet("/runs", async (string? projectKey, string? operationId, int? pageSize
         new PageRequest(normalizedPageSize, offset),
         sortField,
         direction,
-        normalizedOperationId);
+        normalizedOperationId,
+        retention.CutoffUtc);
     var metadata = new PageMetadata(result.Total, normalizedPageSize, result.NextOffset?.ToString());
     return Results.Ok(RunMapping.ToSummaryResponse(projectKey!.Trim(), metadata, result.Items));
 });
 
-v1.MapGet("/runs/{runId}", async (string runId, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
+v1.MapGet("/runs/{runId}", async (string runId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
@@ -896,7 +969,7 @@ v1.MapGet("/runs/{runId}", async (string runId, ITestRunStore store, HttpContext
     var run = await store.GetAsync(tenantContext.TenantId, id);
     return run is null
         ? Results.NotFound()
-        : Results.Ok(RunMapping.ToDetailDto(run));
+        : ValidateRetentionOrResult(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct), RunMapping.ToDetailDto(run));
 });
 
 app.MapGet("/api/orgs/current", async (IOrganisationStore orgStore, HttpContext httpContext, CancellationToken ct) =>
@@ -1098,7 +1171,7 @@ app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, 
     return Results.Ok(ProjectMapping.ToListResponse(metadata, result.Items));
 });
 
-app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore store, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredName(request?.Name, out var error))
         return InvalidRequest(error);
@@ -1107,9 +1180,15 @@ app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore 
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var orgContext = httpContext.GetOrgContext();
+    var gate = await subscriptions.CheckProjectCreateAsync(tenantContext.TenantId, ct);
+    if (!gate.Allowed)
+        return SubscriptionProblem(gate);
+
     var project = await store.CreateAsync(tenantContext.TenantId, orgContext.OwnerKey, request!.Name!, ct);
+    var totalProjects = await GetProjectCountAsync(store, tenantContext.TenantId, ct);
+    await subscriptions.UpdateProjectsUsedAsync(tenantContext.TenantId, totalProjects, ct);
     logger.LogInformation("Created project {ProjectId} for org {OrganisationId} with name {ProjectName}", project.ProjectId, tenantContext.TenantId, project.Name);
     return Results.Ok(ProjectMapping.ToDto(project));
 });
@@ -1531,6 +1610,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     IOpenApiSpecStore specStore,
     ITestPlanStore planStore,
     IEnvironmentStore environmentStore,
+    SubscriptionEnforcementService subscriptions,
     TestPlanRunner runner,
     ApiRuntimeConfig runtime,
     RedactionService redactionService,
@@ -1554,6 +1634,10 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
+
+    var runGate = await subscriptions.TryConsumeRunAsync(tenantContext.TenantId, ct);
+    if (!runGate.Allowed)
+        return SubscriptionProblem(runGate);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, id, ct);
     if (spec is null)
@@ -1638,7 +1722,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
 app.MapPost("/test-plans/from-ai-draft/{draftId}/run", RunDraftPlanFromAiAsync);
 app.MapPost("/api/test-plans/from-ai-draft/{draftId}/run", RunDraftPlanFromAiAsync);
 
-app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, IProjectStore projectStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, ITestRunStore store, IProjectStore projectStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredKey(projectKey, "projectKey", out var keyError))
         return InvalidRequest(keyError);
@@ -1664,6 +1748,7 @@ app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pag
 
     var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var retention = await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct);
     var project = await projectStore.GetByKeyAsync(tenantContext.TenantId, projectKey!.Trim(), ct);
     if (project is null)
         return Results.NotFound();
@@ -1679,12 +1764,13 @@ app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pag
         new PageRequest(normalizedPageSize, offset),
         sortField,
         direction,
-        normalizedOperationId);
+        normalizedOperationId,
+        retention.CutoffUtc);
     var metadata = new PageMetadata(result.Total, normalizedPageSize, result.NextOffset?.ToString());
     return Results.Ok(RunMapping.ToSummaryResponse(projectKey!.Trim(), metadata, result.Items));
 });
 
-app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
@@ -1698,10 +1784,10 @@ app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, HttpCo
     var run = await store.GetAsync(tenantContext.TenantId, id);
     return run is null
         ? Results.NotFound()
-        : Results.Ok(RunMapping.ToDetailDto(run));
+        : ValidateRetentionOrResult(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct), RunMapping.ToDetailDto(run));
 });
 
-app.MapGet("/api/runs/{runId}/summary", async (string runId, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/runs/{runId}/summary", async (string runId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
@@ -1713,12 +1799,17 @@ app.MapGet("/api/runs/{runId}/summary", async (string runId, ITestRunStore store
     var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
-    return run is null
-        ? Results.NotFound()
-        : Results.Ok(RunMapping.ToSummaryCounts(run));
+    if (run is null)
+        return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
+    return Results.Ok(RunMapping.ToSummaryCounts(run));
 });
 
-app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
@@ -1730,12 +1821,17 @@ app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, 
     var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
-    return run is null
-        ? Results.NotFound()
-        : Results.Ok(RunMapping.ToAuditResponse(run));
+    if (run is null)
+        return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
+    return Results.Ok(RunMapping.ToAuditResponse(run));
 });
 
-app.MapGet("/api/runs/{runId}/compliance-report", async (string runId, ITestRunStore store, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/runs/{runId}/compliance-report", async (string runId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
@@ -1744,15 +1840,19 @@ app.MapGet("/api/runs/{runId}/compliance-report", async (string runId, ITestRunS
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
-    return run is null
-        ? Results.NotFound()
-        : Results.Ok(RunMapping.ToComplianceReport(run));
+    if (run is null)
+        return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
+    return Results.Ok(RunMapping.ToComplianceReport(run));
 });
 
-app.MapGet("/api/runs/{runId}/annotations", async (string runId, ITestRunStore runStore, IRunAnnotationStore annotationStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/runs/{runId}/annotations", async (string runId, ITestRunStore runStore, IRunAnnotationStore annotationStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
@@ -1767,11 +1867,15 @@ app.MapGet("/api/runs/{runId}/annotations", async (string runId, ITestRunStore r
     if (run is null)
         return Results.NotFound();
 
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
     var annotations = await annotationStore.ListAsync(orgContext.OwnerKey, id, ct);
     return Results.Ok(RunAnnotationMapping.ToListResponse(id, annotations));
 });
 
-app.MapPost("/api/runs/{runId}/annotations", async (string runId, RunAnnotationCreateRequest request, ITestRunStore runStore, IRunAnnotationStore annotationStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+app.MapPost("/api/runs/{runId}/annotations", async (string runId, RunAnnotationCreateRequest request, ITestRunStore runStore, IRunAnnotationStore annotationStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
@@ -1792,12 +1896,16 @@ app.MapPost("/api/runs/{runId}/annotations", async (string runId, RunAnnotationC
     if (run is null)
         return Results.NotFound();
 
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
     var annotation = await annotationStore.CreateAsync(orgContext.OwnerKey, id, normalizedNote, normalizedJiraLink, ct);
     logger.LogInformation("Created annotation {AnnotationId} for run {RunId}", annotation.AnnotationId, id);
     return Results.Ok(RunAnnotationMapping.ToDto(annotation));
 });
 
-app.MapGet("/api/runs/{runId}/annotations/{annotationId}", async (string runId, string annotationId, ITestRunStore runStore, IRunAnnotationStore annotationStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/runs/{runId}/annotations/{annotationId}", async (string runId, string annotationId, ITestRunStore runStore, IRunAnnotationStore annotationStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
@@ -1814,6 +1922,10 @@ app.MapGet("/api/runs/{runId}/annotations/{annotationId}", async (string runId, 
     var run = await runStore.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
 
     var annotation = await annotationStore.GetAsync(orgContext.OwnerKey, id, annotationGuid, ct);
     return annotation is null
@@ -1821,7 +1933,7 @@ app.MapGet("/api/runs/{runId}/annotations/{annotationId}", async (string runId, 
         : Results.Ok(RunAnnotationMapping.ToDto(annotation));
 });
 
-app.MapPut("/api/runs/{runId}/annotations/{annotationId}", async (string runId, string annotationId, RunAnnotationUpdateRequest request, ITestRunStore runStore, IRunAnnotationStore annotationStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+app.MapPut("/api/runs/{runId}/annotations/{annotationId}", async (string runId, string annotationId, RunAnnotationUpdateRequest request, ITestRunStore runStore, IRunAnnotationStore annotationStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
@@ -1844,6 +1956,10 @@ app.MapPut("/api/runs/{runId}/annotations/{annotationId}", async (string runId, 
     var run = await runStore.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
 
     var annotation = await annotationStore.UpdateAsync(orgContext.OwnerKey, id, annotationGuid, normalizedNote, normalizedJiraLink, ct);
     if (annotation is null)
@@ -1853,7 +1969,7 @@ app.MapPut("/api/runs/{runId}/annotations/{annotationId}", async (string runId, 
     return Results.Ok(RunAnnotationMapping.ToDto(annotation));
 });
 
-app.MapDelete("/api/runs/{runId}/annotations/{annotationId}", async (string runId, string annotationId, ITestRunStore runStore, IRunAnnotationStore annotationStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
+app.MapDelete("/api/runs/{runId}/annotations/{annotationId}", async (string runId, string annotationId, ITestRunStore runStore, IRunAnnotationStore annotationStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
@@ -1871,6 +1987,10 @@ app.MapDelete("/api/runs/{runId}/annotations/{annotationId}", async (string runI
     if (run is null)
         return Results.NotFound();
 
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
     var removed = await annotationStore.DeleteAsync(orgContext.OwnerKey, id, annotationGuid, ct);
     if (!removed)
         return Results.NotFound();
@@ -1879,11 +1999,8 @@ app.MapDelete("/api/runs/{runId}/annotations/{annotationId}", async (string runI
     return Results.NoContent();
 });
 
-app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITestRunStore store, EntitlementService entitlements, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITestRunStore store, SubscriptionEnforcementService subscriptions, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
-    if (!entitlements.CanExport)
-        return FeatureNotAvailable("Export", entitlements);
-
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
@@ -1894,11 +2011,19 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var exportGate = await subscriptions.CheckExportAccessAsync(tenantContext.TenantId, ct);
+    if (!exportGate.Allowed)
+        return SubscriptionProblem(exportGate);
+
+    var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
 
     var report = RunReportGenerator.Generate(run, reportFormat);
     var contentType = reportFormat == RunReportFormat.Markdown
@@ -1923,11 +2048,8 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
     return Results.Text(report, contentType);
 });
 
-app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, EntitlementService entitlements, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, SubscriptionEnforcementService subscriptions, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
-    if (!entitlements.CanExport)
-        return FeatureNotAvailable("Export", entitlements);
-
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
@@ -1935,11 +2057,19 @@ app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore stor
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var exportGate = await subscriptions.CheckExportAccessAsync(tenantContext.TenantId, ct);
+    if (!exportGate.Allowed)
+        return SubscriptionProblem(exportGate);
+
+    var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
 
     var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
@@ -1963,11 +2093,8 @@ app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore stor
     return Results.Text(content, "application/junit+xml; charset=utf-8");
 });
 
-app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, EntitlementService entitlements, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, SubscriptionEnforcementService subscriptions, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
-    if (!entitlements.CanExport)
-        return FeatureNotAvailable("Export", entitlements);
-
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
@@ -1975,11 +2102,19 @@ app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var exportGate = await subscriptions.CheckExportAccessAsync(tenantContext.TenantId, ct);
+    if (!exportGate.Allowed)
+        return SubscriptionProblem(exportGate);
+
+    var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
 
     var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
@@ -2003,11 +2138,8 @@ app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store
     return Results.Text(payload, "application/json; charset=utf-8");
 });
 
-app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, EntitlementService entitlements, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, SubscriptionEnforcementService subscriptions, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
-    if (!entitlements.CanExport)
-        return FeatureNotAvailable("Export", entitlements);
-
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
@@ -2015,11 +2147,19 @@ app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store,
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var exportGate = await subscriptions.CheckExportAccessAsync(tenantContext.TenantId, ct);
+    if (!exportGate.Allowed)
+        return SubscriptionProblem(exportGate);
+
+    var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
 
     var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
@@ -2043,11 +2183,8 @@ app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store,
     return Results.Text(payload, "text/csv; charset=utf-8");
 });
 
-app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
-    if (!entitlements.CanExport)
-        return FeatureNotAvailable("Export", entitlements);
-
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
 
@@ -2055,11 +2192,19 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var exportGate = await subscriptions.CheckExportAccessAsync(tenantContext.TenantId, ct);
+    if (!exportGate.Allowed)
+        return SubscriptionProblem(exportGate);
+
+    var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
 
     var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
@@ -2116,7 +2261,7 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
     return Results.File(stream.ToArray(), "application/zip", $"{redactedRun.RunId}-evidence.zip");
 });
 
-app.MapPost("/api/runs/{runId}/baseline/{baselineRunId}", async (string runId, string baselineRunId, ITestRunStore store, HttpContext httpContext) =>
+app.MapPost("/api/runs/{runId}/baseline/{baselineRunId}", async (string runId, string baselineRunId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
         return InvalidRequest(runError);
@@ -2128,13 +2273,20 @@ app.MapPost("/api/runs/{runId}/baseline/{baselineRunId}", async (string runId, s
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
     var updated = await store.SetBaselineAsync(tenantContext.TenantId, id, baselineId);
     return updated ? Results.NoContent() : Results.NotFound();
 });
 
-app.MapPost("/api/baselines", async (BaselineCreateRequest request, ITestRunStore store, IBaselineStore baselineStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapPost("/api/baselines", async (BaselineCreateRequest request, ITestRunStore store, IBaselineStore baselineStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (request is null || request.RunId == Guid.Empty)
         return InvalidRequest("runId is required.");
@@ -2143,11 +2295,14 @@ app.MapPost("/api/baselines", async (BaselineCreateRequest request, ITestRunStor
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
     var run = await store.GetAsync(tenantContext.TenantId, request.RunId);
     if (run is null)
         return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
 
     var baseline = await baselineStore.SetAsync(tenantContext.TenantId, run.ProjectKey, run.OperationId, run.RunId, ct);
     if (baseline is null)
@@ -2175,7 +2330,7 @@ app.MapGet("/api/baselines", async (string? projectKey, string? operationId, int
     return Results.Ok(new BaselineListResponse(response));
 });
 
-app.MapGet("/api/runs/{runId}/compare/{baselineRunId}", async (string runId, string baselineRunId, ITestRunStore store, RunComparisonService comparison, HttpContext httpContext) =>
+app.MapGet("/api/runs/{runId}/compare/{baselineRunId}", async (string runId, string baselineRunId, ITestRunStore store, RunComparisonService comparison, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
         return InvalidRequest(runError);
@@ -2187,21 +2342,29 @@ app.MapGet("/api/runs/{runId}/compare/{baselineRunId}", async (string runId, str
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var retention = await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct);
     var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
+
+    var runRetention = ValidateRetention(run, retention);
+    if (runRetention is not null)
+        return runRetention;
 
     var baseline = await store.GetAsync(tenantContext.TenantId, baselineId);
     if (baseline is null)
         return Results.NotFound();
 
+    var baselineRetention = ValidateRetention(baseline, retention);
+    if (baselineRetention is not null)
+        return baselineRetention;
+
     var response = comparison.Compare(run, baseline);
     return Results.Ok(response);
 });
 
-app.MapGet("/api/runs/{runId}/compare-to-baseline", async (string runId, BaselineComparisonService comparison, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/api/runs/{runId}/compare-to-baseline", async (string runId, ITestRunStore store, BaselineComparisonService comparison, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
         return InvalidRequest(runError);
@@ -2210,8 +2373,15 @@ app.MapGet("/api/runs/{runId}/compare-to-baseline", async (string runId, Baselin
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
     var result = await comparison.CompareAsync(tenantContext.TenantId, id, ct);
 
     return result.Status switch
@@ -2222,11 +2392,8 @@ app.MapGet("/api/runs/{runId}/compare-to-baseline", async (string runId, Baselin
     };
 });
 
-app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunStore store, IAiClient aiClient, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
+app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunStore store, IAiClient aiClient, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
-    if (!entitlements.CanUseAi)
-        return FeatureNotAvailable("AI", entitlements);
-
     if (!RequestValidation.TryParseGuid(runId, out var id, out var runError))
         return InvalidRequest(runError);
 
@@ -2234,11 +2401,18 @@ app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunSto
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
     if (run is null)
         return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
+    var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
+    if (!aiGate.Allowed)
+        return SubscriptionProblem(aiGate);
 
     var context = AiContextFactory.BuildRunExplanationContext(run);
     var runJson = JsonSerializer.Serialize(context, jsonOptions);
@@ -2253,12 +2427,9 @@ async Task<IResult> ExplainAiEndpointAsync(
     IOpenApiSpecStore specStore,
     IOrganisationStore orgStore,
     AiExplainService aiExplainService,
-    EntitlementService entitlements,
+    SubscriptionEnforcementService subscriptions,
     CancellationToken ct)
 {
-    if (!entitlements.CanUseAi)
-        return FeatureNotAvailable("AI", entitlements);
-
     var payload = await httpContext.Request.ReadFromJsonAsync<AiExplainRequest>(cancellationToken: ct);
     if (payload is null)
         return InvalidRequest("Request body is required.");
@@ -2273,8 +2444,12 @@ async Task<IResult> ExplainAiEndpointAsync(
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
+    if (!aiGate.Allowed)
+        return SubscriptionProblem(aiGate);
+
+    var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, tenantContext, projectId, ct);
@@ -2326,12 +2501,9 @@ async Task<IResult> SuggestAiTestsEndpointAsync(
     IOpenApiSpecStore specStore,
     IOrganisationStore orgStore,
     AiSuggestTestsService aiSuggestTestsService,
-    EntitlementService entitlements,
+    SubscriptionEnforcementService subscriptions,
     CancellationToken ct)
 {
-    if (!entitlements.CanUseAi)
-        return FeatureNotAvailable("AI", entitlements);
-
     var payload = await httpContext.Request.ReadFromJsonAsync<AiSuggestTestsRequest>(cancellationToken: ct);
     if (payload is null)
         return InvalidRequest("Request body is required.");
@@ -2346,8 +2518,12 @@ async Task<IResult> SuggestAiTestsEndpointAsync(
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
+    if (!aiGate.Allowed)
+        return SubscriptionProblem(aiGate);
+
+    var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, tenantContext, projectId, ct);
@@ -2402,12 +2578,9 @@ async Task<IResult> SummariseRunAiEndpointAsync(
     IProjectStore projectStore,
     IOrganisationStore orgStore,
     AiRunSummaryService summaryService,
-    EntitlementService entitlements,
+    SubscriptionEnforcementService subscriptions,
     CancellationToken ct)
 {
-    if (!entitlements.CanUseAi)
-        return FeatureNotAvailable("AI", entitlements);
-
     var payload = await httpContext.Request.ReadFromJsonAsync<AiSummariseRunRequest>(cancellationToken: ct);
     if (payload is null)
         return InvalidRequest("Request body is required.");
@@ -2419,12 +2592,20 @@ async Task<IResult> SummariseRunAiEndpointAsync(
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
     var run = await runStore.GetAsync(tenantContext.TenantId, runId);
     if (run is null)
         return Results.NotFound();
 
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
+    var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
+    if (!aiGate.Allowed)
+        return SubscriptionProblem(aiGate);
+
+    var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetByKeyAsync(tenantContext.TenantId, run.ProjectKey, ct);
     if (project is null)
         return Results.NotFound();
@@ -2474,12 +2655,9 @@ async Task<IResult> ComplianceReportAiEndpointAsync(
     IAuditEventStore auditStore,
     RedactionService redactionService,
     IAiClient aiClient,
-    EntitlementService entitlements,
+    SubscriptionEnforcementService subscriptions,
     CancellationToken ct)
 {
-    if (!entitlements.CanUseAi)
-        return FeatureNotAvailable("AI", entitlements);
-
     var payload = await httpContext.Request.ReadFromJsonAsync<AiComplianceReportRequest>(cancellationToken: ct);
     if (payload is null)
         return InvalidRequest("Request body is required.");
@@ -2491,12 +2669,20 @@ async Task<IResult> ComplianceReportAiEndpointAsync(
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
     var run = await runStore.GetAsync(tenantContext.TenantId, runId);
     if (run is null)
         return Results.NotFound();
 
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
+    var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
+    if (!aiGate.Allowed)
+        return SubscriptionProblem(aiGate);
+
+    var orgContext = httpContext.GetOrgContext();
     var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     if (org is null)
         return Results.NotFound();
@@ -2524,12 +2710,9 @@ async Task<IResult> GenerateDocsAiEndpointAsync(
     IOrganisationStore orgStore,
     IGeneratedDocsStore docsStore,
     AiDocsGenerationService docsService,
-    EntitlementService entitlements,
+    SubscriptionEnforcementService subscriptions,
     CancellationToken ct)
 {
-    if (!entitlements.CanUseAi)
-        return FeatureNotAvailable("AI", entitlements);
-
     var payload = await httpContext.Request.ReadFromJsonAsync<AiGenerateDocsRequest>(cancellationToken: ct);
     if (payload is null)
         return InvalidRequest("Request body is required.");
@@ -2545,8 +2728,12 @@ async Task<IResult> GenerateDocsAiEndpointAsync(
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
+    if (!aiGate.Allowed)
+        return SubscriptionProblem(aiGate);
+
+    var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, projectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, tenantContext, projectId, ct);
@@ -2572,12 +2759,15 @@ async Task<IResult> GenerateDocsAiEndpointAsync(
 
     try
     {
+        var retention = await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct);
         var runs = await runStore.ListAsync(
             tenantContext.TenantId,
             project.ProjectKey,
             new PageRequest(100, 0),
             SortField.StartedUtc,
-            SortDirection.Desc);
+            SortDirection.Desc,
+            null,
+            retention.CutoffUtc);
 
         var runDetails = new List<TestRunRecord>();
         foreach (var run in runs.Items)
@@ -2657,6 +2847,7 @@ async Task<IResult> RunDraftPlanFromAiAsync(
     IProjectStore projectStore,
     IOpenApiSpecStore specStore,
     IEnvironmentStore environmentStore,
+    SubscriptionEnforcementService subscriptions,
     TestPlanRunner runner,
     ApiRuntimeConfig runtime,
     IAuditEventStore auditStore,
@@ -2680,6 +2871,10 @@ async Task<IResult> RunDraftPlanFromAiAsync(
     var project = await projectStore.GetAsync(tenantContext.TenantId, draft.ProjectId, ct);
     if (project is null)
         return await NotFoundOrForbiddenAsync(projectStore, tenantContext, draft.ProjectId, ct);
+
+    var runGate = await subscriptions.TryConsumeRunAsync(tenantContext.TenantId, ct);
+    if (!runGate.Allowed)
+        return SubscriptionProblem(runGate);
 
     var spec = await specStore.GetAsync(tenantContext.TenantId, draft.ProjectId, ct);
     if (spec is null)
@@ -2755,11 +2950,8 @@ app.MapPost("/ai/generate-docs", GenerateDocsAiEndpointAsync);
 app.MapGet("/api/projects/{projectId}/docs/generated", GetGeneratedDocsAsync);
 app.MapGet("/projects/{projectId}/docs/generated", GetGeneratedDocsAsync);
 
-app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, IAiClient aiClient, EntitlementService entitlements, HttpContext httpContext, CancellationToken ct) =>
+app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, IAiClient aiClient, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
-    if (!entitlements.CanUseAi)
-        return FeatureNotAvailable("AI", entitlements);
-
     if (!RequestValidation.TryParseGuid(specId, out var id, out var error))
         return InvalidRequest(error);
 
@@ -2767,8 +2959,12 @@ app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpec
     if (scopeCheck is not null)
         return scopeCheck;
 
-    var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
+    var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
+    if (!aiGate.Allowed)
+        return SubscriptionProblem(aiGate);
+
+    var orgContext = httpContext.GetOrgContext();
     var record = await specStore.GetByIdAsync(tenantContext.TenantId, id, ct);
     if (record is null)
         return Results.NotFound();
@@ -2797,11 +2993,35 @@ static void AddZipEntry(ZipArchive archive, string name, string content)
     writer.Write(content);
 }
 
-static IResult FeatureNotAvailable(string feature, EntitlementService entitlements)
-    => Results.Problem(
-        title: "Feature not available",
-        detail: $"{feature} features require a Pro subscription. Current tier: {entitlements.Tier}.",
-        statusCode: StatusCodes.Status403Forbidden);
+static IResult SubscriptionProblem(SubscriptionGateResult result)
+    => Results.Problem(title: result.Title, detail: result.Detail, statusCode: result.StatusCode);
+
+static IResult? ValidateRetention(TestRunRecord run, RetentionWindow retention)
+{
+    if (run.StartedUtc < retention.CutoffUtc)
+    {
+        return Results.Problem(
+            title: "Retention window exceeded",
+            detail: $"Runs older than {retention.RetentionDays} days are not available on this plan.",
+            statusCode: StatusCodes.Status410Gone);
+    }
+
+    return null;
+}
+
+static IResult ValidateRetentionOrResult(TestRunRecord run, RetentionWindow retention, object response)
+    => ValidateRetention(run, retention) ?? Results.Ok(response);
+
+static async Task<int> GetProjectCountAsync(IProjectStore store, Guid tenantId, CancellationToken ct)
+{
+    var result = await store.ListAsync(
+        tenantId,
+        new PageRequest(1, 0),
+        SortField.CreatedUtc,
+        SortDirection.Desc,
+        ct);
+    return result.Total;
+}
 
 static IResult? RequireScope(HttpContext context, string scope)
 {
