@@ -135,6 +135,7 @@ var jsonOptions = new JsonSerializerOptions
 
 var app = builder.Build();
 var appVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";
+var isDevelopment = app.Environment.IsDevelopment();
 
 var exceptionLogger = app.Services.GetRequiredService<ILoggerFactory>()
     .CreateLogger("ApiTester.Web.Exceptions");
@@ -156,12 +157,14 @@ app.UseExceptionHandler(config =>
 });
 
 app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<ApiKeyRedactionMiddleware>();
 
 app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseWhen(
-    context => !context.Request.Path.StartsWithSegments("/health"),
+    context => !context.Request.Path.StartsWithSegments("/health")
+        && !(isDevelopment && context.Request.Path.StartsWithSegments("/api/v1/admin")),
     builder =>
     {
         builder.UseMiddleware<ApiKeyAuthMiddleware>();
@@ -207,6 +210,89 @@ app.MapGet("/health", (IHostEnvironment env, IOptions<PersistenceOptions> option
 app.MapGet("/api/version", () => Results.Ok(new VersionResponse(appVersion)));
 
 var v1 = app.MapGroup("/api/v1");
+
+v1.MapPost("/admin/tenants", async (AdminTenantCreateRequest request, IOrganisationStore orgStore, IUserStore userStore, IMembershipStore membershipStore, IHostEnvironment env, CancellationToken ct) =>
+{
+    if (!env.IsDevelopment())
+        return Results.NotFound();
+
+    if (!RequestValidation.TryValidateRequiredName(request?.Name, out var nameError))
+        return InvalidRequest(nameError);
+
+    if (!RequestValidation.TryValidateRequiredKey(request?.Slug, "Slug", out var slugError))
+        return InvalidRequest(slugError);
+
+    if (!RequestValidation.TryValidateRequiredKey(request?.OwnerExternalId, "OwnerExternalId", out var ownerError))
+        return InvalidRequest(ownerError);
+
+    var displayName = string.IsNullOrWhiteSpace(request?.OwnerDisplayName)
+        ? request.OwnerExternalId
+        : request.OwnerDisplayName.Trim();
+
+    if (!RequestValidation.TryValidateRequiredKey(displayName, "OwnerDisplayName", out var displayError))
+        return InvalidRequest(displayError);
+
+    if (!RequestValidation.TryNormalizeOptionalValue(request?.OwnerEmail, out var email, out var emailError))
+        return InvalidRequest(emailError);
+
+    var org = await orgStore.CreateAsync(request!.Name, request.Slug, ct);
+    var user = await userStore.CreateAsync(request.OwnerExternalId, displayName, email, ct);
+    await membershipStore.CreateAsync(org.OrganisationId, user.UserId, OrgRole.Owner, ct);
+
+    return Results.Ok(new AdminTenantCreateResponse(
+        OrgMapping.ToDto(org),
+        new AdminUserDto(user.UserId, user.ExternalId, user.DisplayName, user.Email)));
+});
+
+v1.MapPost("/admin/apikeys", async (AdminApiKeyCreateRequest request, IApiKeyStore apiKeyStore, IOrganisationStore orgStore, IUserStore userStore, IMembershipStore membershipStore, IHostEnvironment env, CancellationToken ct) =>
+{
+    if (!env.IsDevelopment())
+        return Results.NotFound();
+
+    if (request is null)
+        return InvalidRequest("Request body is required.");
+
+    if (!RequestValidation.TryValidateRequiredName(request.Name, out var nameError))
+        return InvalidRequest(nameError);
+
+    if (!ApiKeyScopes.TryNormalize(request.Scopes, out var normalizedScopes, out var scopeError))
+        return InvalidRequest(scopeError);
+
+    if (request.ExpiresUtc is { } expiresUtc && expiresUtc <= DateTime.UtcNow)
+        return InvalidRequest("ExpiresUtc must be in the future.");
+
+    if (request.OrganisationId == Guid.Empty)
+        return InvalidRequest("OrganisationId is required.");
+
+    if (request.UserId == Guid.Empty)
+        return InvalidRequest("UserId is required.");
+
+    var org = await orgStore.GetAsync(request.OrganisationId, ct);
+    if (org is null)
+        return Results.NotFound();
+
+    var user = await userStore.GetAsync(request.UserId, ct);
+    if (user is null)
+        return Results.NotFound();
+
+    var membership = await membershipStore.GetAsync(org.OrganisationId, user.UserId, ct);
+    if (membership is null)
+        return InvalidRequest("User is not a member of the organisation.");
+
+    var token = ApiKeyToken.Generate();
+    var hash = ApiKeyHasher.Hash(token.Token);
+    var record = await apiKeyStore.CreateAsync(
+        org.OrganisationId,
+        user.UserId,
+        request.Name,
+        ApiKeyScopes.Serialize(normalizedScopes),
+        request.ExpiresUtc,
+        hash,
+        token.Prefix,
+        ct);
+
+    return Results.Ok(new ApiKeyCreateResponse(ApiKeyMapping.ToDto(record), token.Token));
+});
 
 v1.MapGet("/projects", async (int? pageSize, string? pageToken, int? skip, string? sort, string? order, int? take, IProjectStore store, HttpContext httpContext, CancellationToken ct) =>
 {

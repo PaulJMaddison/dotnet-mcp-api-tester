@@ -20,7 +20,9 @@ public sealed class ApiKeyAuthMiddleware
             return;
         }
 
-        var apiKey = apiKeyHeader.ToString();
+        var apiKey = context.Items.TryGetValue(ApiKeyAuthDefaults.RawApiKeyItemName, out var rawKey) && rawKey is string rawValue
+            ? rawValue
+            : apiKeyHeader.ToString();
         if (!ApiKeyToken.TryGetPrefix(apiKey, out var prefix))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;

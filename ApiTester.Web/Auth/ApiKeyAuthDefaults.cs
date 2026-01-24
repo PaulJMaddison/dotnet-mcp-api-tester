@@ -4,4 +4,6 @@ public static class ApiKeyAuthDefaults
 {
     public const string HeaderName = "X-Api-Key";
     public const string ApiKeyContextItemName = "ApiKeyContext";
+    public const string RawApiKeyItemName = "RawApiKey";
+    public const string RedactedValue = "[redacted]";
 }
