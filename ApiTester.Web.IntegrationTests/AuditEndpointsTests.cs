@@ -27,12 +27,13 @@ public class AuditEndpointsTests
             {
                 var settings = new Dictionary<string, string?>
                 {
-                    ["Entitlements:Tier"] = "Pro"
+                    ["Entitlements:Tier"] = "Team"
                 };
                 config.AddInMemoryCollection(settings);
             });
         });
 
+        await UpdateSubscriptionAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, SubscriptionPlan.Team);
         var project = await SeedProjectAsync(factory, "Audit", "audit");
         await SeedSpecAsync(factory, project, BuildSpecJson("getUuid", "https://httpbin.org", "/uuid"));
 
@@ -143,6 +144,50 @@ public class AuditEndpointsTests
         db.Projects.Add(project);
         await db.SaveChangesAsync();
         return project;
+    }
+
+    private static async Task UpdateSubscriptionAsync(
+        WebApplicationFactory<Program> factory,
+        Guid organisationId,
+        SubscriptionPlan plan)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var entity = await db.Subscriptions.FirstOrDefaultAsync(s => s.OrganisationId == organisationId);
+        var now = DateTime.UtcNow;
+        var periodStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var periodEnd = periodStart.AddMonths(1);
+
+        if (entity is null)
+        {
+            entity = new SubscriptionEntity
+            {
+                OrganisationId = organisationId,
+                Plan = plan,
+                Status = SubscriptionStatus.Active,
+                Renews = true,
+                PeriodStartUtc = periodStart,
+                PeriodEndUtc = periodEnd,
+                ProjectsUsed = 0,
+                RunsUsed = 0,
+                AiCallsUsed = 0,
+                UpdatedUtc = now
+            };
+            db.Subscriptions.Add(entity);
+        }
+        else
+        {
+            entity.Plan = plan;
+            entity.Status = SubscriptionStatus.Active;
+            entity.Renews = true;
+            entity.PeriodStartUtc = periodStart;
+            entity.PeriodEndUtc = periodEnd;
+            entity.UpdatedUtc = now;
+        }
+
+        await db.SaveChangesAsync();
     }
 
     private static async Task<OpenApiSpecEntity> SeedSpecAsync(WebApplicationFactory<Program> factory, ProjectEntity project, string specJson)
