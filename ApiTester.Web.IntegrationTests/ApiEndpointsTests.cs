@@ -645,6 +645,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
         var project = await SeedProjectAsync(factory, "SummaryEvidence", "summary-evidence");
         var run = await SeedFailingRunAsync(factory, project, "op-summary");
 
@@ -810,14 +811,14 @@ public class ApiEndpointsTests
               "path": "/pets",
               "title": "List pets",
               "summary": "Retrieve pets.",
-              "markdown": "### GET /pets\nExample token: {secretToken}",
+              "markdown": "### GET /pets\nExample token: {{secretToken}}",
               "examples": [
                 {
                   "title": "Success response",
-                  "runId": "{runId}",
+                  "runId": "{{runId}}",
                   "caseName": "Case",
                   "statusCode": 200,
-                  "responseSnippet": "token={secretToken}"
+                  "responseSnippet": "token={{secretToken}}"
                 }
               ]
             }
