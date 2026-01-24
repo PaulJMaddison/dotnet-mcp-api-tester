@@ -1,0 +1,76 @@
+@page "/app/projects/new"
+
+<PageTitle>New project</PageTitle>
+
+<div class="app-page">
+    <SectionContent Name="AppBreadcrumbs">
+        <AppBreadcrumbs Items="@Breadcrumbs" />
+    </SectionContent>
+
+    <div class="app-page-header">
+        <div>
+            <h1 class="h3 mb-1">New project</h1>
+            <p class="text-secondary mb-0">Draft project details before creating them in ApiTester Web.</p>
+        </div>
+        <div>
+            <NavLink class="btn btn-outline-secondary" href="/app/projects">Back to projects</NavLink>
+        </div>
+    </div>
+
+    <div class="app-card mb-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+            <div>
+                <h2 class="h6 mb-1">Creation happens in ApiTester Web</h2>
+                <p class="text-secondary mb-0">Use this space to stage the project info you want to capture. When ready, create it in the main dashboard.</p>
+            </div>
+            <div class="align-self-start">
+                <NavLink class="btn btn-primary" href="/app/projects">Open projects list</NavLink>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-12 col-lg-7">
+            <div class="app-card">
+                <h2 class="h5">Project details</h2>
+                <p class="text-secondary small">Fields below are read-only in this preview UI.</p>
+                <div class="mb-3">
+                    <label class="form-label">Project name</label>
+                    <input class="form-control" placeholder="e.g. Payment API regression suite" disabled />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Project key</label>
+                    <input class="form-control" placeholder="e.g. payment-regression" disabled />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" rows="4" placeholder="Summarize the scope, env, and owners." disabled></textarea>
+                </div>
+                <button class="btn btn-primary" disabled>Create project</button>
+            </div>
+        </div>
+        <div class="col-12 col-lg-5">
+            <div class="app-card">
+                <h2 class="h5">What happens next</h2>
+                <ul class="text-secondary mb-0">
+                    <li>Generate a project key that matches your API surface.</li>
+                    <li>Configure the run pipeline and environment secrets.</li>
+                    <li>Invite teammates and connect run notifications.</li>
+                </ul>
+            </div>
+            <div class="app-card mt-4">
+                <h2 class="h6">Need to see existing projects?</h2>
+                <p class="text-secondary mb-3">Return to the project list to review recent activity.</p>
+                <NavLink class="btn btn-outline-primary" href="/app/projects">View projects</NavLink>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly IReadOnlyList<BreadcrumbItem> Breadcrumbs = new List<BreadcrumbItem>
+    {
+        new("Projects", "/app/projects"),
+        new("New project", "/app/projects/new")
+    };
+}

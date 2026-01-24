@@ -1,0 +1,155 @@
+@page "/app/projects/{projectId}"
+@inject IApiTesterWebClient ApiClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>Project details</PageTitle>
+
+<div class="app-page">
+    <SectionContent Name="AppBreadcrumbs">
+        <AppBreadcrumbs Items="@Breadcrumbs" />
+    </SectionContent>
+
+    <div class="app-page-header">
+        <div>
+            <h1 class="h3 mb-1">@(_project?.Name ?? "Project details")</h1>
+            <p class="text-secondary mb-0">Review project metadata and related actions.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <NavLink class="btn btn-outline-secondary" href="/app/projects">Back to projects</NavLink>
+            @if (_project is not null)
+            {
+                <NavLink class="btn btn-primary" href="@($"/app/projects/{_project.ProjectKey}/runs")">View runs</NavLink>
+            }
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="app-card app-state">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span class="ms-2">Loading project...</span>
+        </div>
+    }
+    else if (_response?.Error is not null)
+    {
+        <div class="app-card app-state app-state-error">
+            <h2 class="h6">Unable to load project</h2>
+            <p class="text-secondary">@_response.Error.Message</p>
+            @if (!string.IsNullOrWhiteSpace(_response.Error.Details))
+            {
+                <details>
+                    <summary>View error details</summary>
+                    <pre class="mb-0">@_response.Error.Details</pre>
+                </details>
+            }
+        </div>
+    }
+    else if (_project is null)
+    {
+        <div class="app-card app-state">
+            <h2 class="h6">Project not found</h2>
+            <p class="text-secondary mb-0">We couldn't match "@ProjectId" to a project in this workspace.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <div class="col-12 col-lg-7">
+                <div class="app-card">
+                    <h2 class="h5">Project overview</h2>
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4 text-secondary">Project key</dt>
+                        <dd class="col-sm-8">@_project.ProjectKey</dd>
+                        <dt class="col-sm-4 text-secondary">Project ID</dt>
+                        <dd class="col-sm-8">@_project.ProjectId</dd>
+                        <dt class="col-sm-4 text-secondary">Created</dt>
+                        <dd class="col-sm-8">@_project.CreatedUtc.ToString("MMMM dd, yyyy")</dd>
+                    </dl>
+                </div>
+                <div class="app-card mt-4">
+                    <h2 class="h6">Next steps</h2>
+                    <ul class="text-secondary mb-0">
+                        <li>Configure integrations and test run schedules.</li>
+                        <li>Review recent runs for anomalies.</li>
+                        <li>Share the project key with collaborators.</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-12 col-lg-5">
+                <div class="app-card">
+                    <h2 class="h6">Activity snapshot</h2>
+                    <p class="text-secondary mb-2">Recent activity will appear here once runs are executed.</p>
+                    <div class="d-flex flex-column gap-2">
+                        <div class="p-3 border rounded bg-light">No runs recorded yet.</div>
+                        <div class="p-3 border rounded bg-light">Invite teammates to start tracking runs.</div>
+                    </div>
+                </div>
+                <div class="app-card mt-4">
+                    <h2 class="h6">Quick actions</h2>
+                    <div class="d-grid gap-2">
+                        <NavLink class="btn btn-outline-primary" href="@($"/app/projects/{_project.ProjectKey}/runs")">View runs</NavLink>
+                        <NavLink class="btn btn-outline-secondary" href="/app/projects/new">Draft a new project</NavLink>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string ProjectId { get; set; } = string.Empty;
+
+    private ApiResult<ProjectListResponse>? _response;
+    private ProjectDto? _project;
+    private bool _isLoading = true;
+
+    private IReadOnlyList<BreadcrumbItem> Breadcrumbs => new List<BreadcrumbItem>
+    {
+        new("Projects", "/app/projects"),
+        new(_project?.Name ?? "Project details", $"/app/projects/{ProjectId}")
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _isLoading = true;
+        _project = null;
+        _response = null;
+
+        if (string.IsNullOrWhiteSpace(ProjectId))
+        {
+            _response = ApiResult<ProjectListResponse>.Failure("Project id is required.", null);
+            _isLoading = false;
+            return;
+        }
+
+        _response = await ApiClient.GetProjectsAsync(CancellationToken.None);
+        if (_response?.Error?.StatusCode == 401)
+        {
+            NavigationManager.NavigateTo("/app/sign-in");
+            return;
+        }
+
+        if (_response?.Data is not null)
+        {
+            _project = FindProject(_response.Data.Projects, ProjectId);
+        }
+
+        _isLoading = false;
+    }
+
+    private static ProjectDto? FindProject(IReadOnlyList<ProjectDto> projects, string projectId)
+    {
+        var trimmed = projectId.Trim();
+        var match = projects.FirstOrDefault(project => project.ProjectKey.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
+        if (match is not null)
+        {
+            return match;
+        }
+
+        return Guid.TryParse(trimmed, out var parsedId)
+            ? projects.FirstOrDefault(project => project.ProjectId == parsedId)
+            : null;
+    }
+}
