@@ -57,10 +57,16 @@
                 <div class="col-12 col-lg-6">
                     <div class="app-card">
                         <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <h2 class="h5 mb-1">@project.Name</h2>
-                                <div class="text-secondary small">Key: @project.ProjectKey</div>
-                                <div class="text-secondary small">Created @project.CreatedUtc.ToString("MMM dd, yyyy")</div>
+                            <div class="d-flex align-items-start gap-3">
+                                <img src="/assets/projects/project-folder.svg"
+                                     alt="Project folder icon"
+                                     width="32"
+                                     height="32" />
+                                <div>
+                                    <h2 class="h5 mb-1">@project.Name</h2>
+                                    <div class="text-secondary small">Key: @project.ProjectKey</div>
+                                    <div class="text-secondary small">Created @project.CreatedUtc.ToString("MMM dd, yyyy")</div>
+                                </div>
                             </div>
                             <span class="badge text-bg-light">@project.ProjectId.ToString("N").Substring(0, 8)</span>
                         </div>
