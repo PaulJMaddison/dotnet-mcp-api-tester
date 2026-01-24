@@ -9,6 +9,7 @@ using ApiTester.Web;
 using ApiTester.Web.Auth;
 using ApiTester.Web.Contracts;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
