@@ -85,6 +85,7 @@ public sealed class E2eFixture : IAsyncLifetime
         await StopProcessAsync(_uiProcess);
         await StopProcessAsync(_apiProcess);
 
+        await WaitForFileReleaseAsync(_dbPath);
         await DeleteWorkingDirectoryAsync();
     }
 
@@ -274,14 +275,41 @@ public sealed class E2eFixture : IAsyncLifetime
                 Directory.Delete(_workingDirectory, true);
                 return;
             }
-            catch (IOException) when (attempts < 5)
+            catch (IOException) when (attempts < 10)
             {
                 attempts++;
                 await Task.Delay(250);
             }
-            catch (UnauthorizedAccessException) when (attempts < 5)
+            catch (UnauthorizedAccessException) when (attempts < 10)
             {
                 attempts++;
+                await Task.Delay(250);
+            }
+        }
+    }
+
+    private static async Task WaitForFileReleaseAsync(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return;
+        }
+
+        const int maxAttempts = 20;
+
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            try
+            {
+                using var _ = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                return;
+            }
+            catch (IOException) when (attempt < maxAttempts - 1)
+            {
+                await Task.Delay(250);
+            }
+            catch (UnauthorizedAccessException) when (attempt < maxAttempts - 1)
+            {
                 await Task.Delay(250);
             }
         }
