@@ -330,6 +330,33 @@ public sealed class E2eFixture : IAsyncLifetime
         }
     }
 
+    private static async Task WaitForFileReleaseAsync(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return;
+        }
+
+        const int maxAttempts = 20;
+
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            try
+            {
+                using var _ = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                return;
+            }
+            catch (IOException) when (attempt < maxAttempts - 1)
+            {
+                await Task.Delay(250);
+            }
+            catch (UnauthorizedAccessException) when (attempt < maxAttempts - 1)
+            {
+                await Task.Delay(250);
+            }
+        }
+    }
+
     private static string ResolveAppDllPath(string projectName, string dllName)
     {
         var repoRoot = GetRepoRoot();
