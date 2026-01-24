@@ -1,10 +1,11 @@
 @page "/app/onboarding"
-@layout ApiTester.Site.Components.Layout.AppLayout
 
 <PageTitle>Onboarding</PageTitle>
 
 <div class="app-page">
-    <AppBreadcrumbs Items="@Breadcrumbs" />
+    <SectionContent Name="AppBreadcrumbs">
+        <AppBreadcrumbs Items="@Breadcrumbs" />
+    </SectionContent>
 
     <div class="app-page-header">
         <div>
