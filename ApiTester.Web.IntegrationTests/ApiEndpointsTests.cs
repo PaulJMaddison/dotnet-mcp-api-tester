@@ -956,7 +956,7 @@ public class ApiEndpointsTests
     }
 
     [Fact]
-    public async Task RunReport_ReturnsReport_ForProTier()
+    public async Task RunReport_ReturnsReport_ForTeamTier()
     {
         using var baseFactory = new ApiTesterWebFactory();
         using var factory = baseFactory.WithWebHostBuilder(builder =>
@@ -965,13 +965,13 @@ public class ApiEndpointsTests
             {
                 var settings = new Dictionary<string, string?>
                 {
-                    ["Entitlements:Tier"] = "Pro"
+                    ["Entitlements:Tier"] = "Team"
                 };
                 config.AddInMemoryCollection(settings);
             });
         });
 
-        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Team));
         var project = await SeedProjectAsync(factory, "ProReport", "pro-report");
         var run = await SeedRunAsync(factory, project, "op-pro-report");
 
@@ -993,13 +993,13 @@ public class ApiEndpointsTests
             {
                 var settings = new Dictionary<string, string?>
                 {
-                    ["Entitlements:Tier"] = "Pro"
+                    ["Entitlements:Tier"] = "Team"
                 };
                 config.AddInMemoryCollection(settings);
             });
         });
 
-        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Team));
         var project = await SeedProjectAsync(factory, "HtmlReport", "html-report");
         var run = await SeedRunAsync(factory, project, "op-html");
 
@@ -1022,13 +1022,13 @@ public class ApiEndpointsTests
             {
                 var settings = new Dictionary<string, string?>
                 {
-                    ["Entitlements:Tier"] = "Pro"
+                    ["Entitlements:Tier"] = "Team"
                 };
                 config.AddInMemoryCollection(settings);
             });
         });
 
-        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Team));
         var project = await SeedProjectAsync(factory, "BadReport", "bad-report");
         var run = await SeedRunAsync(factory, project, "op-bad");
 
@@ -1048,13 +1048,13 @@ public class ApiEndpointsTests
             {
                 var settings = new Dictionary<string, string?>
                 {
-                    ["Entitlements:Tier"] = "Pro"
+                    ["Entitlements:Tier"] = "Team"
                 };
                 config.AddInMemoryCollection(settings);
             });
         });
 
-        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Team));
         var project = await SeedProjectAsync(factory, "Exports", "exports");
         var run = await SeedRunAsync(factory, project, "op-export");
 
@@ -1107,7 +1107,7 @@ public class ApiEndpointsTests
             {
                 var settings = new Dictionary<string, string?>
                 {
-                    ["Entitlements:Tier"] = "Pro"
+                    ["Entitlements:Tier"] = "Team"
                 };
                 config.AddInMemoryCollection(settings);
             });
@@ -1116,7 +1116,7 @@ public class ApiEndpointsTests
         await UpdateOrgSettingsAsync(
             factory,
             ApiTesterWebFactory.OrganisationAlphaId,
-            new OrgSettings(OrgPlan.Pro),
+            new OrgSettings(OrgPlan.Team),
             new[] { secretToken });
 
         var project = await SeedProjectAsync(factory, "EvidenceRedaction", "evidence-redaction");
@@ -1331,6 +1331,57 @@ public class ApiEndpointsTests
         entity.OrgSettingsJson = JsonSerializer.Serialize(settings);
         if (redactionRules is not null)
             entity.RedactionRulesJson = JsonSerializer.Serialize(redactionRules);
+
+        await db.SaveChangesAsync();
+        await UpdateSubscriptionAsync(factory, organisationId, settings.Plan);
+    }
+
+    private static async Task UpdateSubscriptionAsync(
+        WebApplicationFactory<Program> factory,
+        Guid organisationId,
+        OrgPlan plan)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var entity = await db.Subscriptions.FirstOrDefaultAsync(s => s.OrganisationId == organisationId);
+        var now = DateTime.UtcNow;
+        var periodStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var periodEnd = periodStart.AddMonths(1);
+        var subscriptionPlan = plan switch
+        {
+            OrgPlan.Pro => SubscriptionPlan.Pro,
+            OrgPlan.Team => SubscriptionPlan.Team,
+            _ => SubscriptionPlan.Free
+        };
+
+        if (entity is null)
+        {
+            entity = new SubscriptionEntity
+            {
+                OrganisationId = organisationId,
+                Plan = subscriptionPlan,
+                Status = SubscriptionStatus.Active,
+                Renews = true,
+                PeriodStartUtc = periodStart,
+                PeriodEndUtc = periodEnd,
+                ProjectsUsed = 0,
+                RunsUsed = 0,
+                AiCallsUsed = 0,
+                UpdatedUtc = now
+            };
+            db.Subscriptions.Add(entity);
+        }
+        else
+        {
+            entity.Plan = subscriptionPlan;
+            entity.Status = SubscriptionStatus.Active;
+            entity.Renews = true;
+            entity.PeriodStartUtc = periodStart;
+            entity.PeriodEndUtc = periodEnd;
+            entity.UpdatedUtc = now;
+        }
 
         await db.SaveChangesAsync();
     }
