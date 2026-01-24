@@ -1,11 +1,12 @@
 @page "/app/projects"
-@layout ApiTester.Site.Components.Layout.AppLayout
 @inject IApiTesterWebClient ApiClient
 
 <PageTitle>Projects</PageTitle>
 
 <div class="app-page">
-    <AppBreadcrumbs Items="@Breadcrumbs" />
+    <SectionContent Name="AppBreadcrumbs">
+        <AppBreadcrumbs Items="@Breadcrumbs" />
+    </SectionContent>
 
     <div class="app-page-header">
         <div>

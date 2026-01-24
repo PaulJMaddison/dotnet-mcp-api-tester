@@ -1,11 +1,12 @@
 @page "/app/leads"
-@layout ApiTester.Site.Components.Layout.AppLayout
 @inject ApiTester.Site.Services.ILeadCaptureStore LeadCaptureStore
 
 <PageTitle>Leads</PageTitle>
 
 <div class="app-page">
-    <AppBreadcrumbs Items="@Breadcrumbs" />
+    <SectionContent Name="AppBreadcrumbs">
+        <AppBreadcrumbs Items="@Breadcrumbs" />
+    </SectionContent>
 
     <div class="app-page-header">
         <div>
