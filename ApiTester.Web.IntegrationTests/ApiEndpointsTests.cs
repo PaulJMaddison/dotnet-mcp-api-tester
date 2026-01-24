@@ -515,6 +515,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
         var project = await SeedProjectAsync(factory, "ProAi", "pro-ai");
         var run = await SeedRunAsync(factory, project, "op-pro");
 
@@ -593,6 +594,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
         var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
         var response = await client.PostAsJsonAsync("/api/ai/summarise-run", new AiSummariseRunRequest(Guid.NewGuid().ToString()));
 
@@ -682,6 +684,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
         var project = await SeedProjectAsync(factory, "ComplianceReport", "compliance-report");
         var run = await SeedRunAsync(factory, project, "op-compliance");
 
@@ -886,6 +889,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
         var project = await SeedProjectAsync(factory, "MissingExplainOp", "missing-explain-op");
         await SeedSpecAsync(factory, project, BuildExplainSpecJson());
 
@@ -916,6 +920,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
         var project = await SeedProjectAsync(factory, "ExplainSchema", "explain-schema");
         await SeedSpecAsync(factory, project, BuildExplainSpecJson());
 
@@ -966,6 +971,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
         var project = await SeedProjectAsync(factory, "ProReport", "pro-report");
         var run = await SeedRunAsync(factory, project, "op-pro-report");
 
@@ -993,6 +999,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
         var project = await SeedProjectAsync(factory, "HtmlReport", "html-report");
         var run = await SeedRunAsync(factory, project, "op-html");
 
@@ -1021,6 +1028,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
         var project = await SeedProjectAsync(factory, "BadReport", "bad-report");
         var run = await SeedRunAsync(factory, project, "op-bad");
 
@@ -1046,6 +1054,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Pro));
         var project = await SeedProjectAsync(factory, "Exports", "exports");
         var run = await SeedRunAsync(factory, project, "op-export");
 
