@@ -34,9 +34,15 @@ public sealed class ApiKeyAuthMiddleware
             return;
         }
 
-        if (!ApiKeyHasher.Verify(apiKey, record.Hash) || !ApiKeyAccessEvaluator.IsActive(record, DateTime.UtcNow))
+        if (!ApiKeyHasher.Verify(apiKey, record.Hash))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        if (!ApiKeyAccessEvaluator.IsActive(record, DateTime.UtcNow))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;
         }
 

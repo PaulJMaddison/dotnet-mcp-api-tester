@@ -2493,7 +2493,15 @@ async Task<IResult> GenerateDocsAiEndpointAsync(
             SortField.StartedUtc,
             SortDirection.Desc);
 
-        var input = new AiDocsGenerationInput(org, project, spec, doc, runs.Items);
+        var runDetails = new List<TestRunRecord>();
+        foreach (var run in runs.Items)
+        {
+            var detailed = await runStore.GetAsync(tenantContext.TenantId, run.RunId);
+            if (detailed is not null)
+                runDetails.Add(detailed);
+        }
+
+        var input = new AiDocsGenerationInput(org, project, spec, doc, runDetails);
         var result = await docsService.GenerateAsync(input, ct);
         var record = await docsStore.UpsertAsync(
             tenantContext.TenantId,
