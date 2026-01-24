@@ -483,6 +483,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Free));
         var project = await SeedProjectAsync(factory, "FreeAi", "free-ai");
         var run = await SeedRunAsync(factory, project, "op-free");
 
@@ -544,6 +545,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Free));
         var project = await SeedProjectAsync(factory, "FreeSummary", "free-summary");
         var run = await SeedRunAsync(factory, project, "op-free-summary");
 
@@ -569,6 +571,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Free));
         var project = await SeedProjectAsync(factory, "FreeCompliance", "free-compliance");
         var run = await SeedRunAsync(factory, project, "op-free-compliance");
 
@@ -715,6 +718,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Free));
         var project = await SeedProjectAsync(factory, "FreeExplain", "free-explain");
         await SeedSpecAsync(factory, project, BuildExplainSpecJson());
 
@@ -740,6 +744,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Free));
         var project = await SeedProjectAsync(factory, "FreeSuggest", "free-suggest");
         await SeedSpecAsync(factory, project, BuildExplainSpecJson());
 
@@ -765,6 +770,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Free));
         var project = await SeedProjectAsync(factory, "FreeDocs", "free-docs");
         var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
@@ -946,6 +952,7 @@ public class ApiEndpointsTests
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Free));
         var project = await SeedProjectAsync(factory, "FreeReport", "free-report");
         var run = await SeedRunAsync(factory, project, "op-free-report");
 
