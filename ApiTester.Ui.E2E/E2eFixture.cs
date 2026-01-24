@@ -85,6 +85,17 @@ public sealed class E2eFixture : IAsyncLifetime
         await StopProcessAsync(_uiProcess);
         await StopProcessAsync(_apiProcess);
 
+        try
+        {
+            await WaitForFileReleaseAsync(_dbPath);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
         await DeleteWorkingDirectoryAsync();
     }
 
@@ -266,25 +277,69 @@ public sealed class E2eFixture : IAsyncLifetime
             return;
         }
 
-        var attempts = 0;
-        while (true)
+        const int maxAttempts = 10;
+
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
             try
             {
                 Directory.Delete(_workingDirectory, true);
                 return;
             }
-            catch (IOException) when (attempts < 5)
+            catch (IOException) when (attempt < maxAttempts - 1)
             {
-                attempts++;
                 await Task.Delay(250);
             }
-            catch (UnauthorizedAccessException) when (attempts < 5)
+            catch (UnauthorizedAccessException) when (attempt < maxAttempts - 1)
             {
-                attempts++;
                 await Task.Delay(250);
+            }
+            catch (IOException)
+            {
+                return;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return;
             }
         }
+    }
+
+    private static async Task<bool> WaitForFileReleaseAsync(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return true;
+        }
+
+        const int maxAttempts = 40;
+
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            try
+            {
+                using var _ = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                return true;
+            }
+            catch (IOException) when (attempt < maxAttempts - 1)
+            {
+                await Task.Delay(250);
+            }
+            catch (UnauthorizedAccessException) when (attempt < maxAttempts - 1)
+            {
+                await Task.Delay(250);
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        return false;
     }
 
     private static string ResolveAppDllPath(string projectName, string dllName)
