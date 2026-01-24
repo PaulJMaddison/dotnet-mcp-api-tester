@@ -9,6 +9,7 @@ using ApiTester.Web;
 using ApiTester.Web.Auth;
 using ApiTester.Web.Contracts;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -27,12 +28,13 @@ public class AuditEndpointsTests
             {
                 var settings = new Dictionary<string, string?>
                 {
-                    ["Entitlements:Tier"] = "Pro"
+                    ["Entitlements:Tier"] = "Team"
                 };
                 config.AddInMemoryCollection(settings);
             });
         });
 
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Team));
         var project = await SeedProjectAsync(factory, "Audit", "audit");
         await SeedSpecAsync(factory, project, BuildSpecJson("getUuid", "https://httpbin.org", "/uuid"));
 
@@ -143,6 +145,32 @@ public class AuditEndpointsTests
         db.Projects.Add(project);
         await db.SaveChangesAsync();
         return project;
+    }
+
+    private static async Task UpdateOrgSettingsAsync(
+        WebApplicationFactory<Program> factory,
+        Guid organisationId,
+        OrgSettings settings)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var entity = await db.Organisations.FirstOrDefaultAsync(o => o.OrganisationId == organisationId);
+        if (entity is null)
+        {
+            entity = new OrganisationEntity
+            {
+                OrganisationId = organisationId,
+                Name = "Test Org",
+                Slug = $"test-org-{organisationId:N}",
+                CreatedUtc = DateTime.UtcNow
+            };
+            db.Organisations.Add(entity);
+        }
+
+        entity.OrgSettingsJson = JsonSerializer.Serialize(settings);
+        await db.SaveChangesAsync();
     }
 
     private static async Task<OpenApiSpecEntity> SeedSpecAsync(WebApplicationFactory<Program> factory, ProjectEntity project, string specJson)
