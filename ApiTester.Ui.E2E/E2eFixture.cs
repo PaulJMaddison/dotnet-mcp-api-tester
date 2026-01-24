@@ -267,23 +267,65 @@ public sealed class E2eFixture : IAsyncLifetime
             return;
         }
 
-        var attempts = 0;
-        while (true)
+        const int maxAttempts = 10;
+
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
             try
             {
                 Directory.Delete(_workingDirectory, true);
                 return;
             }
-            catch (IOException) when (attempts < 10)
+            catch (IOException) when (attempt < maxAttempts - 1)
             {
-                attempts++;
                 await Task.Delay(250);
             }
-            catch (UnauthorizedAccessException) when (attempts < 10)
+            catch (UnauthorizedAccessException) when (attempt < maxAttempts - 1)
             {
-                attempts++;
                 await Task.Delay(250);
+            }
+            catch (IOException)
+            {
+                return;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return;
+            }
+        }
+    }
+
+    private static async Task WaitForFileReleaseAsync(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return;
+        }
+
+        const int maxAttempts = 20;
+
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            try
+            {
+                using var _ = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                return;
+            }
+            catch (IOException) when (attempt < maxAttempts - 1)
+            {
+                await Task.Delay(250);
+            }
+            catch (UnauthorizedAccessException) when (attempt < maxAttempts - 1)
+            {
+                await Task.Delay(250);
+            }
+            catch (IOException)
+            {
+                return;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return;
             }
         }
     }
