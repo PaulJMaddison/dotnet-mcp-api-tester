@@ -12,15 +12,24 @@
     <div class="app-page-header">
         <div>
             <div>
-                <h1 class="h3 mb-1">@(_project?.Name ?? "Project details")</h1>
+                <h1 class="h3 mb-1 d-inline-flex align-items-center gap-2">
+                    <img src="/assets/projects/project-folder.svg" alt="" aria-hidden="true" width="24" height="24" />
+                    <span>@(_project?.Name ?? "Project details")</span>
+                </h1>
                 <p class="text-secondary mb-0">Review project metadata and related actions.</p>
             </div>
         </div>
         <div class="d-flex gap-2">
-            <NavLink class="btn btn-outline-secondary" href="/app/projects">Back to projects</NavLink>
+            <NavLink class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" href="/app/projects">
+                <img src="/assets/projects/project-folder.svg" alt="" aria-hidden="true" width="16" height="16" />
+                <span>Back to projects</span>
+            </NavLink>
             @if (_project is not null)
             {
-                <NavLink class="btn btn-primary" href="@($"/app/projects/{_project.ProjectKey}/runs")">View runs</NavLink>
+                <NavLink class="btn btn-primary d-inline-flex align-items-center gap-2" href="@($"/app/projects/{_project.ProjectKey}/runs")">
+                    <img src="/assets/projects/project-analytics.svg" alt="" aria-hidden="true" width="16" height="16" />
+                    <span>View runs</span>
+                </NavLink>
             }
         </div>
     </div>
@@ -60,7 +69,10 @@
         <div class="row g-4">
             <div class="col-12 col-lg-7">
                 <div class="app-card">
-                    <h2 class="h5">Project overview</h2>
+                    <h2 class="h5 d-inline-flex align-items-center gap-2">
+                    <img src="/assets/projects/project-shield.svg" alt="" aria-hidden="true" width="20" height="20" />
+                    <span>Project overview</span>
+                </h2>
                     <dl class="row mb-0">
                         <dt class="col-sm-4 text-secondary">Project key</dt>
                         <dd class="col-sm-8">@_project.ProjectKey</dd>
@@ -71,7 +83,10 @@
                     </dl>
                 </div>
                 <div class="app-card mt-4">
-                    <h2 class="h6">Next steps</h2>
+                    <h2 class="h6 d-inline-flex align-items-center gap-2">
+                    <img src="/assets/projects/project-rocket.svg" alt="" aria-hidden="true" width="16" height="16" />
+                    <span>Next steps</span>
+                </h2>
                     <ul class="text-secondary mb-0">
                         <li>Configure integrations and test run schedules.</li>
                         <li>Review recent runs for anomalies.</li>
@@ -81,7 +96,10 @@
             </div>
             <div class="col-12 col-lg-5">
                 <div class="app-card">
-                    <h2 class="h6">Activity snapshot</h2>
+                    <h2 class="h6 d-inline-flex align-items-center gap-2">
+                    <img src="/assets/projects/project-analytics.svg" alt="" aria-hidden="true" width="16" height="16" />
+                    <span>Activity snapshot</span>
+                </h2>
                     <p class="text-secondary mb-2">Recent activity will appear here once runs are executed.</p>
                     <div class="d-flex flex-column gap-2">
                         <div class="p-3 border rounded bg-light">No runs recorded yet.</div>
@@ -89,10 +107,19 @@
                     </div>
                 </div>
                 <div class="app-card mt-4">
-                    <h2 class="h6">Quick actions</h2>
+                    <h2 class="h6 d-inline-flex align-items-center gap-2">
+                    <img src="/assets/projects/icons/project-icon-settings.svg" alt="" aria-hidden="true" width="16" height="16" />
+                    <span>Quick actions</span>
+                </h2>
                     <div class="d-grid gap-2">
-                        <NavLink class="btn btn-outline-primary" href="@($"/app/projects/{_project.ProjectKey}/runs")">View runs</NavLink>
-                        <NavLink class="btn btn-outline-secondary" href="/app/projects/new">Draft a new project</NavLink>
+                        <NavLink class="btn btn-outline-primary d-inline-flex align-items-center gap-2" href="@($"/app/projects/{_project.ProjectKey}/runs")">
+                            <img src="/assets/projects/project-analytics.svg" alt="" aria-hidden="true" width="16" height="16" />
+                            <span>View runs</span>
+                        </NavLink>
+                        <NavLink class="btn btn-outline-secondary d-inline-flex align-items-center gap-2" href="/app/projects/new">
+                            <img src="/assets/projects/icons/project-icon-add.svg" alt="" aria-hidden="true" width="16" height="16" />
+                            <span>Draft a new project</span>
+                        </NavLink>
                     </div>
                 </div>
             </div>
