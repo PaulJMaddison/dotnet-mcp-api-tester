@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using ApiTester.Site.Models;
+using Microsoft.AspNetCore.Components;
 
 namespace ApiTester.Site.Services;
 
@@ -13,10 +14,12 @@ public interface IApiTesterWebClient
 public sealed class ApiTesterWebClient : IApiTesterWebClient
 {
     private readonly HttpClient _httpClient;
+    private readonly NavigationManager _navigationManager;
 
-    public ApiTesterWebClient(HttpClient httpClient)
+    public ApiTesterWebClient(HttpClient httpClient, NavigationManager navigationManager)
     {
         _httpClient = httpClient;
+        _navigationManager = navigationManager;
     }
 
     public Task<ApiResult<ProjectListResponse>> GetProjectsAsync(CancellationToken cancellationToken)
@@ -48,6 +51,11 @@ public sealed class ApiTesterWebClient : IApiTesterWebClient
         try
         {
             using var response = await _httpClient.GetAsync(requestUri, cancellationToken);
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                _navigationManager.NavigateTo("/app/sign-in", forceLoad: true);
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 var details = await response.Content.ReadAsStringAsync(cancellationToken);
