@@ -1,0 +1,88 @@
+@page "/app/policy"
+@model ApiTester.Ui.Pages.Policy.IndexModel
+
+@{
+    ViewData["Title"] = "Policy editor";
+
+    var header = new PageHeaderModel(
+        "Policy editor",
+        "Edit runtime execution policy values for allowlists, methods, and limits.",
+        new[]
+        {
+            new BreadcrumbItem("Projects", "/"),
+            new BreadcrumbItem("Policy")
+        }
+    );
+}
+
+<partial name="Shared/_PageHeader" model="header" />
+
+<section class="policy-guidance" aria-label="SSRF guidance">
+    <h2>SSRF guidance</h2>
+    <p>
+        Keep the allowlist as small as possible, avoid localhost/private-network targets, and only permit HTTP methods needed for your tests.
+        Restrict timeout and body size limits to reduce exposure from untrusted endpoints.
+    </p>
+</section>
+
+@if (Model.ValidationErrors.Count > 0)
+{
+    <section class="error-state" aria-live="polite">
+        <strong>Fix the following before saving:</strong>
+        <ul>
+            @foreach (var error in Model.ValidationErrors)
+            {
+                <li>@error</li>
+            }
+        </ul>
+    </section>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.SaveMessage))
+{
+    <p class="info-state" role="status">@Model.SaveMessage</p>
+}
+
+@if (Model.HasError)
+{
+    <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
+}
+else if (Model.IsLoading)
+{
+    <div class="loading-state" role="status">Loading policy…</div>
+}
+
+<form method="post" class="policy-form">
+    @Html.AntiForgeryToken()
+
+    <div class="form-field">
+        <label for="AllowedBaseUrlsJson">Allowlists (JSON array)</label>
+        <textarea id="AllowedBaseUrlsJson" asp-for="AllowedBaseUrlsJson" rows="5"></textarea>
+        <small>Example: ["https://api.example.com", "https://sandbox.example.com"]</small>
+    </div>
+
+    <div class="form-field">
+        <label for="AllowedMethodsJson">Methods (JSON array)</label>
+        <textarea id="AllowedMethodsJson" asp-for="AllowedMethodsJson" rows="4"></textarea>
+        <small>Example: ["GET", "POST"]</small>
+    </div>
+
+    <div class="form-grid">
+        <div class="form-field">
+            <label for="TimeoutSecondsInput">Timeout (seconds)</label>
+            <input id="TimeoutSecondsInput" asp-for="TimeoutSecondsInput" inputmode="numeric" />
+        </div>
+        <div class="form-field">
+            <label for="MaxRequestBodyBytesInput">Max request body bytes</label>
+            <input id="MaxRequestBodyBytesInput" asp-for="MaxRequestBodyBytesInput" inputmode="numeric" />
+        </div>
+        <div class="form-field">
+            <label for="MaxResponseBodyBytesInput">Max response body bytes</label>
+            <input id="MaxResponseBodyBytesInput" asp-for="MaxResponseBodyBytesInput" inputmode="numeric" />
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <button class="button" type="submit">Save policy</button>
+    </div>
+</form>
