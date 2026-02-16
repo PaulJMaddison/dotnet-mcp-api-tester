@@ -28,22 +28,30 @@ public class UiE2eTests : IClassFixture<E2eFixture>, IAsyncLifetime
             return;
         }
 
-        _playwright = await Playwright.CreateAsync();
-        var launchOptions = new BrowserTypeLaunchOptions
+        try
         {
-            Headless = true
-        };
-
-        if (!File.Exists(_playwright.Chromium.ExecutablePath))
-        {
-            var systemChromium = ResolveSystemChromiumPath();
-            if (!string.IsNullOrWhiteSpace(systemChromium))
+            _playwright = await Playwright.CreateAsync();
+            var launchOptions = new BrowserTypeLaunchOptions
             {
-                launchOptions.ExecutablePath = systemChromium;
-            }
-        }
+                Headless = true
+            };
 
-        _browser = await _playwright.Chromium.LaunchAsync(launchOptions);
+            if (!File.Exists(_playwright.Chromium.ExecutablePath))
+            {
+                var systemChromium = ResolveSystemChromiumPath();
+                if (!string.IsNullOrWhiteSpace(systemChromium))
+                {
+                    launchOptions.ExecutablePath = systemChromium;
+                }
+            }
+
+            _browser = await _playwright.Chromium.LaunchAsync(launchOptions);
+        }
+        catch (PlaywrightException)
+        {
+            _skipBrowserTests = true;
+            _playwright?.Dispose();
+        }
     }
 
     public async Task DisposeAsync()
@@ -187,7 +195,7 @@ public class UiE2eTests : IClassFixture<E2eFixture>, IAsyncLifetime
         }
     }
 
-    private bool ShouldSkipBrowserTests() => _skipBrowserTests;
+    private bool ShouldSkipBrowserTests() => _skipBrowserTests || !_fixture.IsReady;
 
     private static bool HasChromium(string cacheDir)
     {

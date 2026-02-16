@@ -17,7 +17,8 @@ internal sealed class TestSubscriptionStore : ISubscriptionStore
         int RunsUsed,
         int AiCallsUsed);
 
-    private static readonly ConcurrentDictionary<Guid, UsageState> UsageByOrg = new();
+    private static readonly ConcurrentDictionary<string, ConcurrentDictionary<Guid, UsageState>> UsageByDatabase = new();
+    private readonly ConcurrentDictionary<Guid, UsageState> _usageByOrg;
     private readonly ApiTesterDbContext _db;
     private readonly TimeProvider _timeProvider;
 
@@ -25,6 +26,9 @@ internal sealed class TestSubscriptionStore : ISubscriptionStore
     {
         _db = db;
         _timeProvider = timeProvider;
+
+        var databaseKey = _db.Database.GetConnectionString() ?? _db.Database.ProviderName ?? "in-memory";
+        _usageByOrg = UsageByDatabase.GetOrAdd(databaseKey, static _ => new ConcurrentDictionary<Guid, UsageState>());
     }
 
     public async Task<SubscriptionRecord> GetOrCreateAsync(Guid organisationId, DateTime nowUtc, CancellationToken ct)
@@ -80,7 +84,7 @@ internal sealed class TestSubscriptionStore : ISubscriptionStore
             AiCallsUsed = state.AiCallsUsed + update.AiCallsDelta
         };
 
-        UsageByOrg[organisationId] = updated;
+        _usageByOrg[organisationId] = updated;
 
         return new SubscriptionRecord(
             organisationId,
@@ -108,7 +112,7 @@ internal sealed class TestSubscriptionStore : ISubscriptionStore
         var state = NormalizeState(organisationId, nowUtc);
 
         var updated = state with { ProjectsUsed = projectsUsed };
-        UsageByOrg[organisationId] = updated;
+        _usageByOrg[organisationId] = updated;
 
         return new SubscriptionRecord(
             organisationId,
@@ -142,12 +146,12 @@ internal sealed class TestSubscriptionStore : ISubscriptionStore
 
     private UsageState NormalizeState(Guid organisationId, DateTime nowUtc)
     {
-        var current = UsageByOrg.GetOrAdd(organisationId, _ => CreateState(nowUtc));
+        var current = _usageByOrg.GetOrAdd(organisationId, _ => CreateState(nowUtc));
         if (nowUtc < current.PeriodEndUtc)
             return current;
 
         var reset = CreateState(nowUtc);
-        UsageByOrg[organisationId] = reset;
+        _usageByOrg[organisationId] = reset;
         return reset;
     }
 

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using ApiTester.Site.Services;
+using Microsoft.AspNetCore.Components;
 
 namespace ApiTester.Site.Tests;
 
@@ -14,7 +15,7 @@ public class ApiTesterWebClientTests
         {
             BaseAddress = new Uri("https://example.test")
         };
-        var client = new ApiTesterWebClient(httpClient);
+        var client = new ApiTesterWebClient(httpClient, new TestNavigationManager());
 
         await client.GetRunsAsync("project-one", "op-1", 5, CancellationToken.None);
 
@@ -30,12 +31,25 @@ public class ApiTesterWebClientTests
         {
             BaseAddress = new Uri("https://example.test")
         };
-        var client = new ApiTesterWebClient(httpClient);
+        var client = new ApiTesterWebClient(httpClient, new TestNavigationManager());
 
         await client.GetRunsAsync("project-two", null, null, CancellationToken.None);
 
         Assert.NotNull(handler.LastRequest);
         Assert.Equal("/api/runs?projectKey=project-two", handler.LastRequest!.RequestUri!.PathAndQuery);
+    }
+
+    private sealed class TestNavigationManager : NavigationManager
+    {
+        public TestNavigationManager()
+        {
+            Initialize("https://site.test/", "https://site.test/");
+        }
+
+        protected override void NavigateToCore(string uri, bool forceLoad)
+        {
+            Uri = ToAbsoluteUri(uri).ToString();
+        }
     }
 
     private sealed class RecordingHandler : HttpMessageHandler
