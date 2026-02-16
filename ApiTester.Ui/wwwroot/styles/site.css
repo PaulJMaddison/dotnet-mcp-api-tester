@@ -634,3 +634,43 @@ pre {
     gap: var(--space-3);
     align-items: center;
 }
+
+.ai-toolbar {
+    margin: 1rem 0 1.5rem;
+}
+
+.ai-gate-panel {
+    margin: 1rem 0 1.5rem;
+    padding: 1rem 1.25rem;
+    border-radius: 0.75rem;
+    border: 1px solid #f5c26b;
+    background: #fff8ec;
+}
+
+.ai-gate-panel h3 {
+    margin: 0 0 0.5rem;
+}
+
+.ai-gate-panel ul {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.ai-output-panel {
+    margin: 1rem 0 1.5rem;
+    padding: 1rem 1.25rem;
+    border-radius: 0.75rem;
+    border: 1px solid #d0d7e2;
+    background: #f8fbff;
+}
+
+.ai-output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.ai-output-header h3 {
+    margin: 0;
+}

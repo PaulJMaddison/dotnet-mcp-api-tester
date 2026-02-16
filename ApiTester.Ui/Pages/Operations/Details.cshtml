@@ -38,6 +38,37 @@ else if (Model.Operation is not null)
         </div>
     </section>
 
+    <section class="ai-toolbar" aria-label="AI actions">
+        <form method="post" asp-page-handler="Explain">
+            <input type="hidden" asp-for="ProjectId" />
+            <button class="button" type="submit">AI: Explain operation</button>
+        </form>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(Model.AiBlockedAction))
+    {
+        <section class="ai-gate-panel" role="status" aria-live="polite">
+            <h3>Upgrade required</h3>
+            <ul>
+                <li><strong>Blocked action:</strong> @Model.AiBlockedAction</li>
+                <li><strong>Why blocked:</strong> @Model.AiBlockedReason</li>
+                <li><strong>Required plan:</strong> @Model.AiRequiredPlan</li>
+                <li><strong>Remaining quota:</strong> @Model.AiRemainingQuota</li>
+            </ul>
+        </section>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.AiOutput))
+    {
+        <section class="ai-output-panel" aria-label="AI output">
+            <div class="ai-output-header">
+                <h3>AI explanation</h3>
+                <button class="button button-secondary" type="button" data-copy-target="operation-ai-output">Copy</button>
+            </div>
+            <pre id="operation-ai-output" class="code-block">@Model.AiOutput</pre>
+        </section>
+    }
+
     <h2>Parameters</h2>
     if (Model.Operation.Parameters.Count == 0)
     {
@@ -101,6 +132,29 @@ else if (Model.Operation is not null)
             </table>
         </div>
     }
+}
+
+@section Scripts {
+    <script>
+        document.querySelectorAll('[data-copy-target]').forEach(function (button) {
+            button.addEventListener('click', async function () {
+                var targetId = button.getAttribute('data-copy-target');
+                var target = document.getElementById(targetId);
+                if (!target) {
+                    return;
+                }
+
+                try {
+                    await navigator.clipboard.writeText(target.textContent || '');
+                    button.textContent = 'Copied';
+                    setTimeout(function () { button.textContent = 'Copy'; }, 1200);
+                } catch {
+                    button.textContent = 'Copy failed';
+                    setTimeout(function () { button.textContent = 'Copy'; }, 1200);
+                }
+            });
+        });
+    </script>
 }
 
 @functions {
