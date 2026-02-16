@@ -45,7 +45,7 @@ public sealed class AiAnalysisServiceTests
         var results = await service.AnalyzeAsync(input, CancellationToken.None);
 
         Assert.Single(provider.Requests);
-        Assert.DoesNotContain("secret", provider.Requests[0].UserPrompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret", provider.Requests[0], StringComparison.OrdinalIgnoreCase);
         Assert.Single(results);
         Assert.DoesNotContain("secret", results[0].JsonPayload, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("[REDACTED]", results[0].JsonPayload, StringComparison.OrdinalIgnoreCase);
@@ -148,19 +148,28 @@ public sealed class AiAnalysisServiceTests
 
     private sealed class CapturingAiProvider : IAiProvider
     {
-        private readonly Func<AiRequest, AiResult> _responder;
+        private readonly Func<string, AiResult> _responder;
 
-        public CapturingAiProvider(Func<AiRequest, AiResult> responder)
+        public CapturingAiProvider(Func<string, AiResult> responder)
         {
             _responder = responder;
         }
 
-        public List<AiRequest> Requests { get; } = new();
+        public List<string> Requests { get; } = new();
 
-        public Task<AiResult> CompleteAsync(AiRequest request, CancellationToken ct)
+        public Task<AiResult> ExplainApiAsync(string spec, string operationId, CancellationToken ct)
+            => Task.FromResult(_responder(spec));
+
+        public Task<AiResult> SuggestEdgeCasesAsync(string spec, string operationId, CancellationToken ct)
+            => Task.FromResult(_responder(spec));
+
+        public Task<AiResult> SummariseRunAsync(string runId, string runContext, CancellationToken ct)
+            => Task.FromResult(_responder(runContext));
+
+        public Task<AiResult> SuggestFixesAsync(string runId, string runContext, CancellationToken ct)
         {
-            Requests.Add(request);
-            return Task.FromResult(_responder(request));
+            Requests.Add(runContext);
+            return Task.FromResult(_responder(runContext));
         }
     }
 

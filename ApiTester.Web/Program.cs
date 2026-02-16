@@ -100,8 +100,22 @@ builder.Services.AddSingleton<RunComparisonService>();
 builder.Services.AddScoped<BaselineComparisonService>();
 builder.Services.AddSingleton<IAiClient, NullAiClient>();
 builder.Services.Configure<AiRateLimitOptions>(builder.Configuration.GetSection("AI:RateLimits"));
+builder.Services.Configure<OpenAiProviderOptions>(builder.Configuration.GetSection("AI:OpenAI"));
 builder.Services.AddSingleton<AiRateLimiter>();
-builder.Services.AddSingleton<IAiProvider, StubAiProvider>();
+builder.Services.AddHttpClient(nameof(OpenAiProvider));
+builder.Services.AddSingleton<IAiProvider>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<OpenAiProviderOptions>>().Value;
+    var configuredKey = string.IsNullOrWhiteSpace(options.ApiKey)
+        ? builder.Configuration["AI:OpenAI:ApiKey"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY")
+        : options.ApiKey;
+
+    if (string.IsNullOrWhiteSpace(configuredKey))
+        return new StubAiProvider();
+
+    options.ApiKey = configuredKey;
+    return ActivatorUtilities.CreateInstance<OpenAiProvider>(sp);
+});
 builder.Services.AddScoped<AiAnalysisService>();
 builder.Services.AddScoped<AiExplainService>();
 builder.Services.AddScoped<AiDocsGenerationService>();
@@ -2477,6 +2491,7 @@ async Task<IResult> ExplainAiEndpointAsync(
     {
         var input = new AiExplainInput(org, projectId, trimmedOperationId, method.ToString(), path, doc, op);
         var result = await aiExplainService.ExplainAsync(input, ct);
+        ApplyFreePreviewWatermarkIfNeeded(httpContext, await subscriptions.GetSnapshotAsync(tenantContext.TenantId, ct));
         var response = new AiExplainResponse(
             projectId,
             trimmedOperationId,
@@ -2551,6 +2566,7 @@ async Task<IResult> SuggestAiTestsEndpointAsync(
     {
         var input = new AiSuggestTestsInput(org, projectId, trimmedOperationId, method.ToString(), path, op);
         var result = await aiSuggestTestsService.SuggestAsync(input, ct);
+        ApplyFreePreviewWatermarkIfNeeded(httpContext, await subscriptions.GetSnapshotAsync(tenantContext.TenantId, ct));
         return Results.Ok(new ApiTester.Web.Contracts.AiSuggestTestsResponse(
             result.Draft.DraftId,
             result.Draft.ProjectId,
@@ -2618,6 +2634,7 @@ async Task<IResult> SummariseRunAiEndpointAsync(
     {
         var input = new AiRunSummaryInput(org, project.ProjectId, run);
         var result = await summaryService.SummariseAsync(input, ct);
+        ApplyFreePreviewWatermarkIfNeeded(httpContext, await subscriptions.GetSnapshotAsync(tenantContext.TenantId, ct));
         var response = new AiRunSummaryResponse(
             run.RunId,
             result.Payload.OverallSummary,
@@ -2645,6 +2662,87 @@ async Task<IResult> SummariseRunAiEndpointAsync(
     catch (AiRateLimitExceededException ex)
     {
         return Results.Problem(title: "AI rate limit exceeded", detail: ex.Message, statusCode: StatusCodes.Status429TooManyRequests);
+    }
+}
+
+async Task<IResult> SuggestImprovementsAiEndpointAsync(
+    HttpContext httpContext,
+    ITestRunStore runStore,
+    IProjectStore projectStore,
+    IOpenApiSpecStore specStore,
+    IOrganisationStore orgStore,
+    AiAnalysisService analysisService,
+    SubscriptionEnforcementService subscriptions,
+    CancellationToken ct)
+{
+    var payload = await httpContext.Request.ReadFromJsonAsync<AiSuggestImprovementsRequest>(cancellationToken: ct);
+    if (payload is null)
+        return InvalidRequest("Request body is required.");
+
+    if (!RequestValidation.TryParseGuid(payload.RunId, out var runId, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await runStore.GetAsync(tenantContext.TenantId, runId);
+    if (run is null)
+        return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
+    var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
+    if (!aiGate.Allowed)
+        return SubscriptionProblem(aiGate);
+
+    var project = await projectStore.GetByKeyAsync(tenantContext.TenantId, run.ProjectKey, ct);
+    if (project is null)
+        return Results.NotFound();
+
+    var spec = await specStore.GetAsync(tenantContext.TenantId, project.ProjectId, ct);
+    if (spec is null)
+        return Results.Problem(title: "OpenAPI spec missing", detail: "Import an OpenAPI spec before requesting AI suggestions.", statusCode: StatusCodes.Status409Conflict);
+
+    var doc = new OpenApiStringReader().Read(spec.SpecJson, out _);
+    var match = doc is null ? null : FindOperation(doc, run.OperationId);
+    if (match is null)
+        return Results.NotFound();
+
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
+    if (org is null)
+        return Results.NotFound();
+
+    try
+    {
+        var (path, method, operation) = match.Value;
+        var policy = run.PolicySnapshot ?? new ApiExecutionPolicySnapshot(
+            false,
+            [],
+            [],
+            true,
+            true,
+            30,
+            262_144,
+            262_144,
+            false,
+            false,
+            0);
+        var input = new AiAnalysisInput(org, project.ProjectId, run.OperationId, method.ToString(), path, operation, policy, run);
+        var insights = await analysisService.AnalyzeAsync(input, ct);
+
+        ApplyFreePreviewWatermarkIfNeeded(httpContext, await subscriptions.GetSnapshotAsync(tenantContext.TenantId, ct));
+
+        return Results.Ok(new AiSuggestImprovementsResponse(
+            run.RunId,
+            insights.Select(i => new AiImprovementSuggestionDto(i.Type, i.JsonPayload)).ToList()));
+    }
+    catch (AiSchemaValidationException ex)
+    {
+        return Results.Problem(title: "AI response invalid", detail: ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity);
     }
 }
 
@@ -2939,10 +3037,16 @@ async Task<IResult> RunDraftPlanFromAiAsync(
 
 app.MapPost("/api/ai/explain", ExplainAiEndpointAsync);
 app.MapPost("/ai/explain", ExplainAiEndpointAsync);
+app.MapPost("/api/v1/ai/explain-operation", ExplainAiEndpointAsync);
 app.MapPost("/api/ai/suggest-tests", SuggestAiTestsEndpointAsync);
 app.MapPost("/ai/suggest-tests", SuggestAiTestsEndpointAsync);
+app.MapPost("/api/v1/ai/suggest-tests", SuggestAiTestsEndpointAsync);
 app.MapPost("/api/ai/summarise-run", SummariseRunAiEndpointAsync);
 app.MapPost("/ai/summarise-run", SummariseRunAiEndpointAsync);
+app.MapPost("/api/v1/ai/summarise-run", SummariseRunAiEndpointAsync);
+app.MapPost("/api/ai/suggest-improvements", SuggestImprovementsAiEndpointAsync);
+app.MapPost("/ai/suggest-improvements", SuggestImprovementsAiEndpointAsync);
+app.MapPost("/api/v1/ai/suggest-improvements", SuggestImprovementsAiEndpointAsync);
 app.MapPost("/api/ai/compliance-report", ComplianceReportAiEndpointAsync);
 app.MapPost("/ai/compliance-report", ComplianceReportAiEndpointAsync);
 app.MapPost("/api/ai/generate-docs", GenerateDocsAiEndpointAsync);
@@ -2995,6 +3099,12 @@ static void AddZipEntry(ZipArchive archive, string name, string content)
 
 static IResult SubscriptionProblem(SubscriptionGateResult result)
     => Results.Problem(title: result.Title, detail: result.Detail, statusCode: result.StatusCode);
+
+static void ApplyFreePreviewWatermarkIfNeeded(HttpContext context, SubscriptionSnapshot snapshot)
+{
+    if (snapshot.Subscription.Plan == SubscriptionPlan.Free)
+        context.Response.Headers.Append("X-AI-Watermark", "Free preview");
+}
 
 static IResult? ValidateRetention(TestRunRecord run, RetentionWindow retention)
 {

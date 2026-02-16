@@ -56,7 +56,7 @@ public sealed class AiDocsGenerationService
         contextJson = _redactionService.RedactText(contextJson, org.RedactionRules) ?? contextJson;
 
         var prompt = BuildPrompt(contextJson);
-        var response = await _provider.CompleteAsync(prompt, ct);
+        var response = await _provider.ExplainApiAsync(prompt, "docs-generation", ct);
         var redactedContent = _redactionService.RedactText(response.Content, org.RedactionRules) ?? response.Content;
 
         var payload = AiDocsSchemas.ParseDocs(redactedContent);
@@ -66,7 +66,7 @@ public sealed class AiDocsGenerationService
         return new AiDocsGenerationResult(payload, redactedContent, response.ModelId, createdUtc);
     }
 
-    private static AiRequest BuildPrompt(string contextJson)
+    private static string BuildPrompt(string contextJson)
     {
         var systemPrompt = """
 You are an API documentation generator. Use only the provided context.
@@ -88,7 +88,7 @@ Examples must reference the provided runId and caseName values.
             .AppendLine("- Use only the run examples provided; do not fabricate data.")
             .ToString();
 
-        return new AiRequest(systemPrompt, userPrompt);
+        return $"{systemPrompt}\n\n{userPrompt}";
     }
 
     private static List<AiDocsOperationContext> BuildOperationContexts(OpenApiDocument document)

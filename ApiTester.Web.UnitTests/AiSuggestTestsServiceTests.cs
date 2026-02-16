@@ -110,15 +110,24 @@ public sealed class AiSuggestTestsServiceTests
 
     private sealed class CapturingAiProvider : IAiProvider
     {
-        private readonly Func<AiRequest, AiResult> _responder;
+        private readonly Func<string, AiResult> _responder;
 
-        public CapturingAiProvider(Func<AiRequest, AiResult> responder)
+        public CapturingAiProvider(Func<string, AiResult> responder)
         {
             _responder = responder;
         }
 
-        public Task<AiResult> CompleteAsync(AiRequest request, CancellationToken ct)
-            => Task.FromResult(_responder(request));
+        public Task<AiResult> ExplainApiAsync(string spec, string operationId, CancellationToken ct)
+            => Task.FromResult(_responder(spec));
+
+        public Task<AiResult> SuggestEdgeCasesAsync(string spec, string operationId, CancellationToken ct)
+            => Task.FromResult(_responder(spec));
+
+        public Task<AiResult> SummariseRunAsync(string runId, string runContext, CancellationToken ct)
+            => Task.FromResult(_responder(runContext));
+
+        public Task<AiResult> SuggestFixesAsync(string runId, string runContext, CancellationToken ct)
+            => Task.FromResult(_responder(runContext));
     }
 
     private sealed class InMemoryDraftStore : ITestPlanDraftStore

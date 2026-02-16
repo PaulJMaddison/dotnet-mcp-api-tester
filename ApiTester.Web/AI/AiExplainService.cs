@@ -38,7 +38,7 @@ public sealed class AiExplainService
 
         var org = input.Organisation ?? throw new ArgumentNullException(nameof(input.Organisation));
         var prompt = BuildPrompt(input, org.RedactionRules);
-        var response = await _provider.CompleteAsync(prompt, ct);
+        var response = await _provider.ExplainApiAsync(prompt, input.OperationId, ct);
         var redactedContent = _redactionService.RedactText(response.Content, org.RedactionRules) ?? response.Content;
 
         var payload = AiExplainSchemas.ParseExplain(redactedContent);
@@ -57,7 +57,7 @@ public sealed class AiExplainService
         return new AiExplainResult(payload, redactedContent, response.ModelId, createdUtc);
     }
 
-    private AiRequest BuildPrompt(AiExplainInput input, IReadOnlyList<string>? redactionRules)
+    private string BuildPrompt(AiExplainInput input, IReadOnlyList<string>? redactionRules)
     {
         var examples = ExtractExamples(input.Operation, redactionRules);
         var context = new AiExplainContext(
@@ -90,7 +90,7 @@ Include a markdown field that can be rendered as documentation.
             .AppendLine(contextJson)
             .ToString();
 
-        return new AiRequest(systemPrompt, userPrompt);
+        return $"{systemPrompt}\n\n{userPrompt}";
     }
 
     private static IReadOnlyList<AiExplainParameter> BuildParameters(OpenApiOperation operation)

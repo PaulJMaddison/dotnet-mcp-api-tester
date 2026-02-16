@@ -5,75 +5,67 @@ namespace ApiTester.Web.AI;
 
 public sealed class StubAiProvider : IAiProvider
 {
-    public Task<AiResult> CompleteAsync(AiRequest request, CancellationToken ct)
-    {
-        var content = request.UserPrompt.Contains(AiExplainSchemas.SchemaJson, StringComparison.Ordinal)
-            ? JsonSerializer.Serialize(new
-            {
-                summary = "Stub summary",
-                inputs = "Stub inputs",
-                outputs = "Stub outputs",
-                auth = "Stub auth",
-                gotchas = Array.Empty<string>(),
-                examples = Array.Empty<object>(),
-                markdown = "Stub markdown"
-            }, JsonDefaults.Default)
-            : request.UserPrompt.Contains(AiSuggestTestsSchemas.SchemaJson, StringComparison.Ordinal)
-                ? JsonSerializer.Serialize(new
-                {
-                    cases = new[]
-                    {
-                        new
-                        {
-                            name = "Stub case",
-                            rationale = "Stub rationale",
-                            @params = new
-                            {
-                                path = new { },
-                                query = new { },
-                                headers = new { }
-                            },
-                            expectedStatusRanges = new[] { "200-299" }
-                        }
-                }
-            }, JsonDefaults.Default)
-            : request.UserPrompt.Contains(AiRunSummarySchemas.SchemaJson, StringComparison.Ordinal)
-                ? JsonSerializer.Serialize(new
-                {
-                    overallSummary = "Stub summary with no critical risk.",
-                    topFailures = Array.Empty<object>(),
-                    flakeAssessment = "No clear flake signals in stub data.",
-                    regressionLikelihood = new
-                    {
-                        level = "low",
-                        rationale = "Stub response does not indicate persistent regression."
-                    },
-                    recommendedNextActions = new[] { "Re-run to confirm." }
-                }, JsonDefaults.Default)
-                : request.UserPrompt.Contains(AiDocsSchemas.SchemaJson, StringComparison.Ordinal)
-                    ? JsonSerializer.Serialize(new
-                    {
-                        title = "Stub API Docs",
-                        summary = "Stub summary for generated docs.",
-                        sections = new[]
-                        {
-                            new
-                            {
-                                operationId = "listPets",
-                                method = "GET",
-                                path = "/pets",
-                                title = "List pets",
-                                summary = "Stub section summary.",
-                                markdown = "### GET /pets\\nStub markdown section.",
-                                examples = Array.Empty<object>()
-                            }
-                        }
-                    }, JsonDefaults.Default)
-            : JsonSerializer.Serialize(new
-            {
-                insights = Array.Empty<object>()
-            }, JsonDefaults.Default);
+    public Task<AiResult> ExplainApiAsync(string spec, string operationId, CancellationToken ct)
+        => Task.FromResult(new AiResult(JsonSerializer.Serialize(new
+        {
+            summary = "Stub summary",
+            inputs = "Stub inputs",
+            outputs = "Stub outputs",
+            auth = "Stub auth",
+            gotchas = Array.Empty<string>(),
+            examples = Array.Empty<object>(),
+            markdown = "Stub markdown"
+        }, JsonDefaults.Default), "stub"));
 
-        return Task.FromResult(new AiResult(content, "stub"));
-    }
+    public Task<AiResult> SuggestEdgeCasesAsync(string spec, string operationId, CancellationToken ct)
+        => Task.FromResult(new AiResult(JsonSerializer.Serialize(new
+        {
+            cases = new[]
+            {
+                new
+                {
+                    name = "Stub case",
+                    rationale = "Stub rationale",
+                    @params = new
+                    {
+                        path = new { },
+                        query = new { },
+                        headers = new { }
+                    },
+                    expectedStatusRanges = new[] { "200-299" }
+                }
+            }
+        }, JsonDefaults.Default), "stub"));
+
+    public Task<AiResult> SummariseRunAsync(string runId, string runContext, CancellationToken ct)
+        => Task.FromResult(new AiResult(JsonSerializer.Serialize(new
+        {
+            overallSummary = "Stub summary with no critical risk.",
+            topFailures = Array.Empty<object>(),
+            flakeAssessment = "No clear flake signals in stub data.",
+            regressionLikelihood = new
+            {
+                level = "low",
+                rationale = "Stub response does not indicate persistent regression."
+            },
+            recommendedNextActions = new[] { "Re-run to confirm." }
+        }, JsonDefaults.Default), "stub"));
+
+    public Task<AiResult> SuggestFixesAsync(string runId, string runContext, CancellationToken ct)
+        => Task.FromResult(new AiResult(JsonSerializer.Serialize(new
+        {
+            insights = new[]
+            {
+                new
+                {
+                    type = "recommendation",
+                    payload = new
+                    {
+                        title = "Stub recommendation",
+                        detail = "Validate request body schema before calling downstream service."
+                    }
+                }
+            }
+        }, JsonDefaults.Default), "stub"));
+
 }

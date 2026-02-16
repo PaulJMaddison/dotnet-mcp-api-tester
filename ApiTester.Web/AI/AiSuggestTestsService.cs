@@ -43,7 +43,7 @@ public sealed class AiSuggestTestsService
             throw new AiRateLimitExceededException("AI rate limit exceeded for this organisation.");
 
         var prompt = BuildPrompt(input, org.RedactionRules);
-        var response = await _provider.CompleteAsync(prompt, ct);
+        var response = await _provider.SuggestEdgeCasesAsync(prompt, input.OperationId, ct);
         var redactedContent = _redactionService.RedactText(response.Content, org.RedactionRules) ?? response.Content;
 
         var suggestions = AiSuggestTestsSchemas.ParseSuggestions(redactedContent);
@@ -56,7 +56,7 @@ public sealed class AiSuggestTestsService
         return new AiSuggestTestsResult(record, redactedPlan, response.ModelId, createdUtc);
     }
 
-    private AiRequest BuildPrompt(AiSuggestTestsInput input, IReadOnlyList<string>? redactionRules)
+    private string BuildPrompt(AiSuggestTestsInput input, IReadOnlyList<string>? redactionRules)
     {
         var context = BuildOperationContext(
             input.OperationId,
@@ -80,7 +80,7 @@ Respond with JSON that matches the required schema. Do not include markdown.
             .AppendLine(contextJson)
             .ToString();
 
-        return new AiRequest(systemPrompt, userPrompt);
+        return $"{systemPrompt}\n\n{userPrompt}";
     }
 
     private static AiSuggestTestsOperationContext BuildOperationContext(
