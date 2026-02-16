@@ -50,17 +50,29 @@
         <div class="row g-4">
             <div class="col-12 col-lg-4">
                 <div class="app-card">
-                    <h2 class="h6 text-uppercase text-secondary">Run summary</h2>
+                    <h2 class="h6 text-uppercase text-secondary d-flex align-items-center gap-2">
+                        <img src="/assets/runs/run-open.svg" alt="" aria-hidden="true" width="16" height="16" />
+                        <span>Run summary</span>
+                    </h2>
                     <ul class="list-unstyled mb-0">
                         <li class="d-flex justify-content-between py-1"><span>Project</span><span>@_response.Data.ProjectKey</span></li>
                         <li class="d-flex justify-content-between py-1"><span>Operation</span><span>@_response.Data.OperationId</span></li>
                         <li class="d-flex justify-content-between py-1"><span>Started</span><span>@_response.Data.StartedUtc.ToString("g")</span></li>
                         <li class="d-flex justify-content-between py-1"><span>Completed</span><span>@_response.Data.CompletedUtc.ToString("g")</span></li>
-                        <li class="d-flex justify-content-between py-1"><span>Duration</span><span>@TimeSpan.FromMilliseconds(_response.Data.Result.TotalDurationMs).TotalSeconds.ToString("0.##")s</span></li>
+                        <li class="d-flex justify-content-between py-1">
+                            <span class="d-inline-flex align-items-center gap-2">
+                                <img src="/assets/runs/run-duration.svg" alt="" aria-hidden="true" width="16" height="16" />
+                                <span>Duration</span>
+                            </span>
+                            <span>@TimeSpan.FromMilliseconds(_response.Data.Result.TotalDurationMs).TotalSeconds.ToString("0.##")s</span>
+                        </li>
                     </ul>
                 </div>
                 <div class="app-card mt-3">
-                    <h2 class="h6 text-uppercase text-secondary">Case totals</h2>
+                    <h2 class="h6 text-uppercase text-secondary d-flex align-items-center gap-2">
+                        <img src="/assets/runs/run-cases.svg" alt="" aria-hidden="true" width="16" height="16" />
+                        <span>Case totals</span>
+                    </h2>
                     <div class="d-flex flex-wrap gap-2">
                         <span class="badge text-bg-success">@_response.Data.Result.ClassificationSummary.Pass passed</span>
                         <span class="badge text-bg-warning text-dark">@_response.Data.Result.ClassificationSummary.BlockedExpected expected blocked</span>
@@ -73,7 +85,10 @@
             <div class="col-12 col-lg-8">
                 <div class="app-card">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h2 class="h5 mb-0">Case results</h2>
+                        <h2 class="h5 mb-0 d-inline-flex align-items-center gap-2">
+                            <img src="/assets/runs/run-detail-icon-case.svg" alt="" aria-hidden="true" width="16" height="16" />
+                            <span>Case results</span>
+                        </h2>
                         <span class="text-secondary small">@_response.Data.Result.Results.Count cases</span>
                     </div>
                     <div class="table-responsive">
@@ -81,21 +96,41 @@
                             <thead>
                                 <tr>
                                     <th scope="col">Case</th>
-                                    <th scope="col">Status</th>
-                                    <th scope="col">Response</th>
-                                    <th scope="col">Duration</th>
+                                    <th scope="col">
+                                        <span class="d-inline-flex align-items-center gap-2">
+                                            <img src="/assets/runs/run-detail-icon-status.svg" alt="" aria-hidden="true" width="16" height="16" />
+                                            <span>Status</span>
+                                        </span>
+                                    </th>
+                                    <th scope="col">
+                                        <span class="d-inline-flex align-items-center gap-2">
+                                            <img src="/assets/runs/run-detail-icon-response.svg" alt="" aria-hidden="true" width="16" height="16" />
+                                            <span>Response</span>
+                                        </span>
+                                    </th>
+                                    <th scope="col">
+                                        <span class="d-inline-flex align-items-center gap-2">
+                                            <img src="/assets/runs/run-duration.svg" alt="" aria-hidden="true" width="16" height="16" />
+                                            <span>Duration</span>
+                                        </span>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach (var result in _response.Data.Result.Results)
                                 {
+                                    var caseStatus = GetCaseStatusViewModel(result);
+
                                     <tr>
                                         <td>
                                             <div class="fw-semibold">@result.Name</div>
                                             <div class="text-secondary small">@result.Method @result.Url</div>
                                         </td>
                                         <td>
-                                            <span class="badge @GetStatusBadge(result)">@GetStatusLabel(result)</span>
+                                            <span class="d-inline-flex align-items-center gap-2">
+                                                <img src="@caseStatus.IconPath" alt="@caseStatus.Label" width="16" height="16" />
+                                                <span class="badge @caseStatus.BadgeClass">@caseStatus.Label</span>
+                                            </span>
                                             @if (!string.IsNullOrWhiteSpace(result.FailureReason))
                                             {
                                                 <div class="text-secondary small">@result.FailureReason</div>
@@ -105,7 +140,13 @@
                                                 <div class="text-secondary small">@result.BlockReason</div>
                                             }
                                         </td>
-                                        <td>@(result.StatusCode?.ToString() ?? "-")</td>
+                                        <td>
+                                            <span class="d-inline-flex align-items-center gap-2">
+                                                <img src="@(result.StatusCode is null ? "/assets/runs/run-detail-state-blocked.svg" : "/assets/runs/run-detail-state-response.svg")"
+                                                     alt="" aria-hidden="true" width="16" height="16" />
+                                                <span>@(result.StatusCode?.ToString() ?? "-")</span>
+                                            </span>
+                                        </td>
                                         <td>@TimeSpan.FromMilliseconds(result.DurationMs).TotalSeconds.ToString("0.##")s</td>
                                     </tr>
                                 }
@@ -144,25 +185,18 @@
         _isLoading = false;
     }
 
-    private static string GetStatusLabel(TestCaseResult result)
+    private static CaseStatusViewModel GetCaseStatusViewModel(TestCaseResult result)
     {
         if (result.IsFlaky || result.Classification == ResultClassification.FlakyExternal)
-            return "Flaky";
+            return new CaseStatusViewModel("Flaky", "text-bg-info", "/assets/runs/run-status-running.svg");
 
         if (result.Blocked)
-            return "Blocked";
+            return new CaseStatusViewModel("Blocked", "text-bg-warning text-dark", "/assets/runs/run-detail-state-blocked.svg");
 
-        return result.Pass ? "Passed" : "Failed";
+        return result.Pass
+            ? new CaseStatusViewModel("Passed", "text-bg-success", "/assets/runs/run-status-success.svg")
+            : new CaseStatusViewModel("Failed", "text-bg-danger", "/assets/runs/run-detail-state-failure.svg");
     }
 
-    private static string GetStatusBadge(TestCaseResult result)
-    {
-        if (result.IsFlaky || result.Classification == ResultClassification.FlakyExternal)
-            return "text-bg-info";
-
-        if (result.Blocked)
-            return "text-bg-warning text-dark";
-
-        return result.Pass ? "text-bg-success" : "text-bg-danger";
-    }
+    private sealed record CaseStatusViewModel(string Label, string BadgeClass, string IconPath);
 }
