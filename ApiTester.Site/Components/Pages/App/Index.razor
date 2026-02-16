@@ -1,0 +1,11 @@
+@page "/app"
+@inject NavigationManager NavigationManager
+
+<PageTitle>App</PageTitle>
+
+@code {
+    protected override void OnInitialized()
+    {
+        NavigationManager.NavigateTo("/app/onboarding");
+    }
+}
