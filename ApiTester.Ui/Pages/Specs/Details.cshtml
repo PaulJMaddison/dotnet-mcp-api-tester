@@ -1,0 +1,75 @@
+@page "/app/specs/{id:guid}"
+@model ApiTester.Ui.Pages.Specs.DetailsModel
+
+@{
+    ViewData["Title"] = "Spec Operations";
+
+    var specTitle = Model.Spec?.Title ?? "Spec";
+    var header = new PageHeaderModel(
+        "Spec Operations",
+        "Browse operations available in this imported OpenAPI spec.",
+        new[]
+        {
+            new BreadcrumbItem("Projects", "/"),
+            new BreadcrumbItem("Specs", "/app/specs"),
+            new BreadcrumbItem(specTitle)
+        }
+    );
+}
+
+<partial name="Shared/_PageHeader" model="header" />
+
+@if (Model.HasError)
+{
+    <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
+}
+else if (Model.NotFound)
+{
+    <partial name="Shared/_EmptyState" model='new EmptyStateModel("Spec not found.")' />
+}
+else if (Model.Spec is not null)
+{
+    <section class="toolbar" aria-label="Spec metadata">
+        <div class="toolbar-grid">
+            <div class="toolbar-item"><span>Title</span><strong>@Model.Spec.Title</strong></div>
+            <div class="toolbar-item"><span>Version</span><strong>@Model.Spec.Version</strong></div>
+            <div class="toolbar-item"><span>Spec Hash</span><strong>@Model.Spec.SpecHash</strong></div>
+            <div class="toolbar-item"><span>Uploaded UTC</span><strong>@DisplayFormatters.FormatUtc(Model.Spec.UploadedUtc)</strong></div>
+        </div>
+    </section>
+
+    if (Model.Operations.Count == 0)
+    {
+        <partial name="Shared/_EmptyState" model='new EmptyStateModel("No operations were found for this project yet.")' />
+    }
+    else
+    {
+        <div class="table-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Operation ID</th>
+                        <th scope="col">Method</th>
+                        <th scope="col">Path</th>
+                        <th scope="col">Summary</th>
+                        <th scope="col">Auth</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var operation in Model.Operations)
+                    {
+                        <tr>
+                            <td>
+                                <a href="/app/operations/@Uri.EscapeDataString(operation.OperationId)?projectId=@Model.ProjectId">@operation.OperationId</a>
+                            </td>
+                            <td>@operation.Method</td>
+                            <td>@operation.Path</td>
+                            <td>@operation.Summary</td>
+                            <td>@(operation.RequiresAuth ? "Required" : "None")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
