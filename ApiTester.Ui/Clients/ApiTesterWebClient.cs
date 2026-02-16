@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 
 namespace ApiTester.Ui.Clients;
@@ -260,7 +261,54 @@ public sealed class ApiTesterWebClient
 
         return payload;
     }
+
+    public async Task<AiActionResult<AiExplainResponse>> ExplainOperationAsync(Guid projectId, string operationId, CancellationToken ct = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("/api/ai/explain", new AiExplainRequest(projectId.ToString(), operationId), ct);
+        return await ReadAiActionResultAsync<AiExplainResponse>(response, ct);
+    }
+
+    public async Task<AiActionResult<AiRunSummaryResponse>> SummariseRunAsync(Guid runId, CancellationToken ct = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("/api/ai/summarise-run", new AiSummariseRunRequest(runId.ToString()), ct);
+        return await ReadAiActionResultAsync<AiRunSummaryResponse>(response, ct);
+    }
+
+    private static async Task<AiActionResult<T>> ReadAiActionResultAsync<T>(HttpResponseMessage response, CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            var payload = await response.Content.ReadFromJsonAsync<T>(cancellationToken: ct);
+            if (payload is null)
+            {
+                throw new InvalidOperationException("Empty AI response payload.");
+            }
+
+            return new AiActionResult<T>(payload, null);
+        }
+
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>(cancellationToken: ct);
+        if (problem is null)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            throw new HttpRequestException($"AI request failed with {(int)response.StatusCode}: {body}", null, response.StatusCode);
+        }
+
+        var gate = new AiGateFailure(
+            (int)response.StatusCode,
+            problem.Title ?? "AI request blocked",
+            problem.Detail ?? "The request was blocked by server-side plan or quota checks.");
+
+        return new AiActionResult<T>(default, gate);
+    }
 }
+
+public sealed record AiActionResult<T>(T? Payload, AiGateFailure? Gate)
+{
+    public bool IsSuccess => Payload is not null;
+}
+
+public sealed record AiGateFailure(int StatusCode, string Title, string Detail);
 
 public sealed record ProjectDto(Guid ProjectId, string Name, string ProjectKey, DateTime CreatedUtc);
 
@@ -431,3 +479,34 @@ public sealed record ApiPolicyUpdateRequest(
     bool? BlockPrivateNetworks,
     bool? RetryOnFlake,
     int? MaxRetries);
+
+public sealed record AiExplainRequest(string ProjectId, string OperationId);
+
+public sealed record AiSummariseRunRequest(string RunId);
+
+public sealed record AiExplainExampleDto(string Title, string Content);
+
+public sealed record AiExplainResponse(
+    Guid ProjectId,
+    string OperationId,
+    string Summary,
+    string Inputs,
+    string Outputs,
+    string Auth,
+    IReadOnlyList<string> Gotchas,
+    IReadOnlyList<AiExplainExampleDto> Examples,
+    string Markdown);
+
+public sealed record AiRunSummaryEvidenceRefDto(string CaseName, string? FailureReason);
+
+public sealed record AiRunSummaryFailureDto(string Title, IReadOnlyList<AiRunSummaryEvidenceRefDto> EvidenceRefs);
+
+public sealed record AiRunSummaryRegressionLikelihoodDto(string Level, string Rationale);
+
+public sealed record AiRunSummaryResponse(
+    Guid RunId,
+    string OverallSummary,
+    IReadOnlyList<AiRunSummaryFailureDto> TopFailures,
+    string FlakeAssessment,
+    AiRunSummaryRegressionLikelihoodDto RegressionLikelihood,
+    IReadOnlyList<string> RecommendedNextActions);
