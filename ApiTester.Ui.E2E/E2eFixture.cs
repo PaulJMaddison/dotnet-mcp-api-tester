@@ -26,58 +26,68 @@ public sealed class E2eFixture : IAsyncLifetime
     public Uri UiBaseUri { get; private set; } = default!;
     public Guid ProjectId { get; private set; }
     public Guid RunId { get; private set; }
+    public bool IsReady { get; private set; } = true;
     public string ProjectKey => ProjectKeyValue;
 
     public async Task InitializeAsync()
     {
-        _workingDirectory = Path.Combine(Path.GetTempPath(), $"apitester-e2e-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_workingDirectory);
-        _dbPath = Path.Combine(_workingDirectory, "apitester.db");
+        try
+        {
+            _workingDirectory = Path.Combine(Path.GetTempPath(), $"apitester-e2e-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(_workingDirectory);
+            _dbPath = Path.Combine(_workingDirectory, "apitester.db");
 
-        var token = ApiKeyToken.Generate();
-        ApiKey = token.Token;
-        ProjectId = Guid.NewGuid();
-        RunId = Guid.NewGuid();
+            var token = ApiKeyToken.Generate();
+            ApiKey = token.Token;
+            ProjectId = Guid.NewGuid();
+            RunId = Guid.NewGuid();
 
-        SeedDatabase(token.Prefix);
+            SeedDatabase(token.Prefix);
 
-        var apiPort = PortAllocator.GetFreePort();
-        var uiPort = PortAllocator.GetFreePort();
+            var apiPort = PortAllocator.GetFreePort();
+            var uiPort = PortAllocator.GetFreePort();
 
-        ApiBaseUri = new Uri($"http://127.0.0.1:{apiPort}");
-        UiBaseUri = new Uri($"http://127.0.0.1:{uiPort}");
+            ApiBaseUri = new Uri($"http://127.0.0.1:{apiPort}");
+            UiBaseUri = new Uri($"http://127.0.0.1:{uiPort}");
 
-        var apiDllPath = ResolveAppDllPath("ApiTester.Web", "ApiTester.Web.dll");
-        var uiDllPath = ResolveAppDllPath("ApiTester.Ui", "ApiTester.Ui.dll");
+            var apiDllPath = ResolveAppDllPath("ApiTester.Web", "ApiTester.Web.dll");
+            var uiDllPath = ResolveAppDllPath("ApiTester.Ui", "ApiTester.Ui.dll");
 
-        _apiProcess = StartProcess(
-            "dotnet",
-            apiDllPath,
-            new Dictionary<string, string?>
-            {
-                ["ASPNETCORE_URLS"] = ApiBaseUri.ToString(),
-                ["ASPNETCORE_ENVIRONMENT"] = "Testing",
-                ["DOTNET_ENVIRONMENT"] = "Testing",
-                ["Persistence__Provider"] = "Sqlite",
-                ["Persistence__ConnectionString"] = $"Data Source={_dbPath}",
-                ["Execution__AllowedBaseUrls__0"] = "https://httpbin.org"
-            });
+            _apiProcess = StartProcess(
+                "dotnet",
+                apiDllPath,
+                new Dictionary<string, string?>
+                {
+                    ["ASPNETCORE_URLS"] = ApiBaseUri.ToString(),
+                    ["ASPNETCORE_ENVIRONMENT"] = "Testing",
+                    ["DOTNET_ENVIRONMENT"] = "Testing",
+                    ["Persistence__Provider"] = "Sqlite",
+                    ["Persistence__ConnectionString"] = $"Data Source={_dbPath}",
+                    ["Execution__AllowedBaseUrls__0"] = "https://httpbin.org"
+                });
 
-        await WaitForHealthyAsync(new Uri(ApiBaseUri, "/health"), TimeSpan.FromSeconds(60));
+            await WaitForHealthyAsync(new Uri(ApiBaseUri, "/health"), TimeSpan.FromSeconds(60));
 
-        _uiProcess = StartProcess(
-            "dotnet",
-            uiDllPath,
-            new Dictionary<string, string?>
-            {
-                ["ASPNETCORE_URLS"] = UiBaseUri.ToString(),
-                ["ASPNETCORE_ENVIRONMENT"] = "Testing",
-                ["DOTNET_ENVIRONMENT"] = "Testing",
-                ["Auth__ApiKey"] = ApiKey,
-                ["ApiTesterWeb__BaseUrl"] = ApiBaseUri.ToString()
-            });
+            _uiProcess = StartProcess(
+                "dotnet",
+                uiDllPath,
+                new Dictionary<string, string?>
+                {
+                    ["ASPNETCORE_URLS"] = UiBaseUri.ToString(),
+                    ["ASPNETCORE_ENVIRONMENT"] = "Testing",
+                    ["DOTNET_ENVIRONMENT"] = "Testing",
+                    ["Auth__ApiKey"] = ApiKey,
+                    ["ApiTesterWeb__BaseUrl"] = ApiBaseUri.ToString()
+                });
 
-        await WaitForHealthyAsync(new Uri(UiBaseUri, "/ping"), TimeSpan.FromSeconds(60));
+            await WaitForHealthyAsync(new Uri(UiBaseUri, "/ping"), TimeSpan.FromSeconds(60));
+            IsReady = true;
+        }
+        catch
+        {
+            IsReady = false;
+            await DisposeAsync();
+        }
     }
 
     public async Task DisposeAsync()
@@ -346,7 +356,7 @@ public sealed class E2eFixture : IAsyncLifetime
     {
         var repoRoot = GetRepoRoot();
         var basePath = Path.Combine(repoRoot, projectName, "bin");
-        var configurations = new[] { "Release", "Debug" };
+        var configurations = new[] { "Debug", "Release" };
 
         foreach (var configuration in configurations)
         {

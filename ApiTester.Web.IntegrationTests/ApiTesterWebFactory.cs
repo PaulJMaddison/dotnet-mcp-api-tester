@@ -15,7 +15,13 @@ namespace ApiTester.Web.IntegrationTests;
 
 public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
 {
-    private readonly SqliteConnection _connection = new("Data Source=:memory:;Cache=Shared");
+    private readonly string _connectionString = $"Data Source=file:apitester-tests-{Guid.NewGuid():N}?mode=memory&cache=shared";
+    private readonly SqliteConnection _connection;
+
+    public ApiTesterWebFactory()
+    {
+        _connection = new SqliteConnection(_connectionString);
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -27,7 +33,7 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
             var settings = new Dictionary<string, string?>
             {
                 ["Persistence:Provider"] = "Sqlite",
-                ["Persistence:ConnectionString"] = "Data Source=:memory:;Cache=Shared",
+                ["Persistence:ConnectionString"] = _connectionString,
                 ["Execution:AllowedBaseUrls:0"] = "https://httpbin.org",
                 ["Execution:DryRun"] = "false"
             };
