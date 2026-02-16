@@ -37,3 +37,9 @@ public sealed record AiSuggestTestsResponse(
     string OperationId,
     string PlanJson,
     DateTime CreatedUtc);
+
+public sealed record AiImprovementSuggestionDto(string Type, string PayloadJson);
+
+public sealed record AiSuggestImprovementsResponse(
+    Guid RunId,
+    IReadOnlyList<AiImprovementSuggestionDto> Suggestions);

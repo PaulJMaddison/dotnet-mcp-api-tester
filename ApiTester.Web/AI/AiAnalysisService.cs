@@ -43,7 +43,7 @@ public sealed class AiAnalysisService
             throw new AiRateLimitExceededException("AI rate limit exceeded for this organisation.");
 
         var prompt = BuildPrompt(input, org.RedactionRules);
-        var response = await _provider.CompleteAsync(prompt, ct);
+        var response = await _provider.SuggestFixesAsync(input.Run.RunId.ToString(), prompt, ct);
         var redactedContent = _redactionService.RedactText(response.Content, org.RedactionRules) ?? response.Content;
 
         var insights = AiJsonSchemas.ParseInsights(redactedContent);
@@ -61,7 +61,7 @@ public sealed class AiAnalysisService
         return records;
     }
 
-    private AiRequest BuildPrompt(AiAnalysisInput input, IReadOnlyList<string>? redactionRules)
+    private string BuildPrompt(AiAnalysisInput input, IReadOnlyList<string>? redactionRules)
     {
         var redactedRun = CreateRedactedRun(input.Run, redactionRules);
         var runContext = AiContextFactory.BuildRunExplanationContext(redactedRun);
@@ -99,7 +99,7 @@ Respond with JSON that matches the required schema. Do not include markdown.
             .AppendLine(runJson)
             .ToString();
 
-        return new AiRequest(systemPrompt, userPrompt);
+        return $"{systemPrompt}\n\n{userPrompt}";
     }
 
     private TestRunRecord CreateRedactedRun(TestRunRecord run, IReadOnlyList<string>? redactionRules)

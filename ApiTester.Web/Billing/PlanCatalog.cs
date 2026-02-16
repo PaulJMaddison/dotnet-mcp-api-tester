@@ -13,7 +13,7 @@ public sealed record PlanLimits(
 public static class PlanCatalog
 {
     // Commercial plan limits:
-    // Free: 3 projects, 50 runs/month, 0 AI calls/month, 7-day retention window.
+    // Free: 3 projects, 50 runs/month, 2 AI calls/month, 7-day retention window.
     // Pro: 20 projects, 500 runs/month, 200 AI calls/month, 30-day retention window (AI enabled).
     // Team: 100 projects, 2000 runs/month, 1000 AI calls/month, 90-day retention window (AI + audit export enabled).
     public static PlanLimits GetLimits(SubscriptionPlan plan)
@@ -22,9 +22,9 @@ public static class PlanCatalog
             SubscriptionPlan.Free => new PlanLimits(
                 MaxProjects: 3,
                 MaxRunsPerPeriod: 50,
-                MaxAiCallsPerPeriod: 0,
+                MaxAiCallsPerPeriod: 2,
                 RetentionDays: 7,
-                AiEnabled: false,
+                AiEnabled: true,
                 AuditExportEnabled: false),
             SubscriptionPlan.Pro => new PlanLimits(
                 MaxProjects: 20,
@@ -43,9 +43,9 @@ public static class PlanCatalog
             _ => new PlanLimits(
                 MaxProjects: 3,
                 MaxRunsPerPeriod: 50,
-                MaxAiCallsPerPeriod: 0,
+                MaxAiCallsPerPeriod: 2,
                 RetentionDays: 7,
-                AiEnabled: false,
+                AiEnabled: true,
                 AuditExportEnabled: false)
         };
 }

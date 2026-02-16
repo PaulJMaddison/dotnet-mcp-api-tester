@@ -496,7 +496,7 @@ public class ApiEndpointsTests
     }
 
     [Fact]
-    public async Task AiEndpoint_ReturnsForbidden_ForFreeTier()
+    public async Task AiEndpoint_ReturnsOk_ForFreeTier()
     {
         using var baseFactory = new ApiTesterWebFactory();
         using var factory = baseFactory.WithWebHostBuilder(builder =>
@@ -518,7 +518,7 @@ public class ApiEndpointsTests
         var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
         var response = await client.PostAsync($"/api/ai/runs/{run.RunId}/explanation", null);
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -558,7 +558,7 @@ public class ApiEndpointsTests
     }
 
     [Fact]
-    public async Task AiSummariseRunEndpoint_ReturnsForbidden_ForFreeTier()
+    public async Task AiSummariseRunEndpoint_ReturnsOk_ForFreeTier()
     {
         using var baseFactory = new ApiTesterWebFactory();
         using var factory = baseFactory.WithWebHostBuilder(builder =>
@@ -580,11 +580,12 @@ public class ApiEndpointsTests
         var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
         var response = await client.PostAsJsonAsync("/api/ai/summarise-run", new AiSummariseRunRequest(run.RunId.ToString()));
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Free preview", response.Headers.GetValues("X-AI-Watermark").Single());
     }
 
     [Fact]
-    public async Task AiComplianceReportEndpoint_ReturnsForbidden_ForFreeTier()
+    public async Task AiComplianceReportEndpoint_ReturnsOk_ForFreeTier()
     {
         using var baseFactory = new ApiTesterWebFactory();
         using var factory = baseFactory.WithWebHostBuilder(builder =>
@@ -606,7 +607,7 @@ public class ApiEndpointsTests
         var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
         var response = await client.PostAsJsonAsync("/api/ai/compliance-report", new AiComplianceReportRequest(run.RunId.ToString()));
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -731,7 +732,7 @@ public class ApiEndpointsTests
     }
 
     [Fact]
-    public async Task AiExplainEndpoint_ReturnsForbidden_ForFreeTier()
+    public async Task AiExplainEndpoint_ReturnsWatermark_ForFreeTier()
     {
         using var baseFactory = new ApiTesterWebFactory();
         using var factory = baseFactory.WithWebHostBuilder(builder =>
@@ -751,13 +752,14 @@ public class ApiEndpointsTests
         await SeedSpecAsync(factory, project, BuildExplainSpecJson());
 
         var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
-        var response = await client.PostAsJsonAsync("/api/ai/explain", new AiExplainRequest(project.ProjectId.ToString(), "listPets"));
+        var response = await client.PostAsJsonAsync("/api/v1/ai/explain-operation", new AiExplainRequest(project.ProjectId.ToString(), "listPets"));
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Free preview", response.Headers.GetValues("X-AI-Watermark").Single());
     }
 
     [Fact]
-    public async Task AiSuggestTestsEndpoint_ReturnsForbidden_ForFreeTier()
+    public async Task AiSuggestTestsEndpoint_ReturnsWatermark_ForFreeTier()
     {
         using var baseFactory = new ApiTesterWebFactory();
         using var factory = baseFactory.WithWebHostBuilder(builder =>
@@ -777,13 +779,14 @@ public class ApiEndpointsTests
         await SeedSpecAsync(factory, project, BuildExplainSpecJson());
 
         var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
-        var response = await client.PostAsJsonAsync("/api/ai/suggest-tests", new AiSuggestTestsRequest(project.ProjectId.ToString(), "listPets"));
+        var response = await client.PostAsJsonAsync("/api/v1/ai/suggest-tests", new AiSuggestTestsRequest(project.ProjectId.ToString(), "listPets"));
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Free preview", response.Headers.GetValues("X-AI-Watermark").Single());
     }
 
     [Fact]
-    public async Task AiGenerateDocsEndpoint_ReturnsForbidden_ForFreeTier()
+    public async Task AiGenerateDocsEndpoint_ReturnsConflict_ForFreeTier_WhenSpecMissing()
     {
         using var baseFactory = new ApiTesterWebFactory();
         using var factory = baseFactory.WithWebHostBuilder(builder =>
@@ -804,7 +807,7 @@ public class ApiEndpointsTests
 
         var response = await client.PostAsJsonAsync("/api/ai/generate-docs", new AiGenerateDocsRequest(project.ProjectId.ToString()));
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
     [Fact]
@@ -1630,7 +1633,16 @@ public class ApiEndpointsTests
             _payload = payload;
         }
 
-        public Task<AiResult> CompleteAsync(AiRequest request, CancellationToken ct)
+        public Task<AiResult> ExplainApiAsync(string spec, string operationId, CancellationToken ct)
+            => Task.FromResult(new AiResult(_payload, "test-model"));
+
+        public Task<AiResult> SuggestEdgeCasesAsync(string spec, string operationId, CancellationToken ct)
+            => Task.FromResult(new AiResult(_payload, "test-model"));
+
+        public Task<AiResult> SummariseRunAsync(string runId, string runContext, CancellationToken ct)
+            => Task.FromResult(new AiResult(_payload, "test-model"));
+
+        public Task<AiResult> SuggestFixesAsync(string runId, string runContext, CancellationToken ct)
             => Task.FromResult(new AiResult(_payload, "test-model"));
     }
 

@@ -130,7 +130,7 @@ public sealed class SubscriptionEnforcementService
             return new SubscriptionGateResult(
                 false,
                 "AI not available",
-                $"AI features require a Pro or Team subscription. Current plan: {snapshot.Subscription.Plan}.",
+                $"AI features are unavailable for the current plan: {snapshot.Subscription.Plan}.",
                 StatusCodes.Status403Forbidden);
         }
 

@@ -42,7 +42,7 @@ public sealed class AiRunSummaryService
             throw new AiRateLimitExceededException("AI rate limit exceeded for this organisation.");
 
         var prompt = BuildPrompt(input, org.RedactionRules);
-        var response = await _provider.CompleteAsync(prompt, ct);
+        var response = await _provider.SummariseRunAsync(input.Run.RunId.ToString(), prompt, ct);
         var redactedContent = _redactionService.RedactText(response.Content, org.RedactionRules) ?? response.Content;
 
         var payload = AiRunSummarySchemas.ParseSummary(redactedContent);
@@ -62,7 +62,7 @@ public sealed class AiRunSummaryService
         return new AiRunSummaryResult(payload, redactedContent, response.ModelId, createdUtc);
     }
 
-    private AiRequest BuildPrompt(AiRunSummaryInput input, IReadOnlyList<string>? redactionRules)
+    private string BuildPrompt(AiRunSummaryInput input, IReadOnlyList<string>? redactionRules)
     {
         var redactedRun = CreateRedactedRun(input.Run, redactionRules);
         var runContext = AiContextFactory.BuildRunExplanationContext(redactedRun);
@@ -89,7 +89,7 @@ Evidence refs must cite caseName values from the run results. Separate flake ver
             .AppendLine("- Recommend next actions as a short list.")
             .ToString();
 
-        return new AiRequest(systemPrompt, userPrompt);
+        return $"{systemPrompt}\n\n{userPrompt}";
     }
 
     private TestRunRecord CreateRedactedRun(TestRunRecord run, IReadOnlyList<string>? redactionRules)

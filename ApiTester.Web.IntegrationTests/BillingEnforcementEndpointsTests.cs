@@ -32,7 +32,7 @@ public sealed class BillingEnforcementEndpointsTests
         Assert.Equal("Free", plan!.Plan);
         Assert.Equal(3, plan.Limits.MaxProjects);
         Assert.Equal(50, plan.Limits.MaxRunsPerPeriod);
-        Assert.Equal(0, plan.Limits.MaxAiCallsPerPeriod);
+        Assert.Equal(2, plan.Limits.MaxAiCallsPerPeriod);
         Assert.Equal(7, plan.RetentionDays);
 
         Assert.Equal(HttpStatusCode.OK, usageResponse.StatusCode);
