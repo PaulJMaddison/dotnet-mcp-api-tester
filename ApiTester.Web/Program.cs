@@ -163,7 +163,7 @@ app.UseSwaggerUI();
 
 app.UseWhen(
     context => !context.Request.Path.StartsWithSegments("/health")
-        && !(isDevelopment && context.Request.Path.StartsWithSegments("/api/v1/admin")),
+        && !context.Request.Path.StartsWithSegments("/api/v1/admin"),
     builder =>
     {
         builder.UseMiddleware<ApiKeyAuthMiddleware>();

@@ -35,6 +35,34 @@ public class ApiEndpointsTests
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+
+    [Fact]
+    public async Task AdminBootstrapEndpoints_ReturnNotFound_OutsideDevelopment()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var client = factory.CreateClient();
+
+        var tenantResponse = await client.PostAsJsonAsync("/api/v1/admin/tenants", new
+        {
+            name = "Day 93 Tenant",
+            slug = "day93",
+            ownerExternalId = "day93-owner",
+            ownerDisplayName = "Day 93 Owner",
+            ownerEmail = "day93@example.test"
+        });
+
+        var apiKeyResponse = await client.PostAsJsonAsync("/api/v1/admin/apikeys", new
+        {
+            organisationId = ApiTesterWebFactory.OrganisationAlphaId,
+            userId = ApiTesterWebFactory.UserAlphaId,
+            name = "Day 93 Key",
+            scopes = new[] { ApiKeyScopes.ProjectsRead }
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, tenantResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, apiKeyResponse.StatusCode);
+    }
+
     [Fact]
     public async Task GetProject_ReturnsForbidden_WhenOwnerMismatch()
     {
