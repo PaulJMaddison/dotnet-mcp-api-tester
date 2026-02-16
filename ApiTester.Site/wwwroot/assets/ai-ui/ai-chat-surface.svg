@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640" role="img" aria-label="AI chat UI surface mock illustration">
+  <defs>
+    <linearGradient id="canvas" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7faff" />
+      <stop offset="1" stop-color="#eef4ff" />
+    </linearGradient>
+    <linearGradient id="assistant" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1d79ff" />
+      <stop offset="1" stop-color="#0f63db" />
+    </linearGradient>
+    <style>
+      .bg { fill: url(#canvas); }
+      .shell { fill: #ffffff; stroke: #d7e1ef; stroke-width: 2; }
+      .rail { fill: #f3f7fe; stroke: #d7e1ef; stroke-width: 1.5; }
+      .head { font: 700 24px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #102846; }
+      .muted { font: 500 14px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #5a728d; }
+      .userBubble { fill: #eaf2ff; }
+      .assistantBubble { fill: url(#assistant); }
+      .userText { font: 600 14px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #1e4168; }
+      .assistantText { font: 600 14px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #ffffff; }
+      .chip { fill: #edf4ff; stroke: #c8daf4; stroke-width: 1.3; }
+      .chipText { font: 600 12px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #305987; }
+      .input { fill: #fff; stroke: #d0dced; stroke-width: 1.6; }
+      .btn { fill: #0d6efd; }
+      .btnText { font: 700 13px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #fff; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="960" height="640" rx="26" />
+  <rect class="shell" x="42" y="34" width="876" height="572" rx="20" />
+
+  <rect class="rail" x="42" y="34" width="220" height="572" rx="20" />
+  <text class="head" x="72" y="86">AI Workspace</text>
+  <text class="muted" x="72" y="114">Recent prompts</text>
+
+  <rect class="chip" x="72" y="142" width="160" height="34" rx="17" />
+  <text class="chipText" x="92" y="164">Coverage gaps</text>
+  <rect class="chip" x="72" y="186" width="144" height="34" rx="17" />
+  <text class="chipText" x="92" y="208">Auth failures</text>
+  <rect class="chip" x="72" y="230" width="174" height="34" rx="17" />
+  <text class="chipText" x="92" y="252">Latency outliers</text>
+
+  <g transform="translate(286,74)">
+    <rect class="assistantBubble" x="10" y="0" width="420" height="66" rx="14" />
+    <text class="assistantText" x="30" y="26">Assistant: I found 3 failed scenarios tied</text>
+    <text class="assistantText" x="30" y="46">to token scope mismatch in staging.</text>
+
+    <rect class="userBubble" x="150" y="88" width="330" height="56" rx="14" />
+    <text class="userText" x="170" y="122">Show evidence and likely root cause.</text>
+
+    <rect class="assistantBubble" x="10" y="164" width="470" height="86" rx="14" />
+    <text class="assistantText" x="30" y="194">Assistant: Correlated failures share 401</text>
+    <text class="assistantText" x="30" y="214">from /v2/payments after key rotation.</text>
+    <text class="assistantText" x="30" y="234">Suggested fix: update env secret mapping.</text>
+
+    <rect class="chip" x="10" y="272" width="150" height="30" rx="15" />
+    <text class="chipText" x="30" y="291">Evidence linked</text>
+    <rect class="chip" x="170" y="272" width="124" height="30" rx="15" />
+    <text class="chipText" x="190" y="291">3 citations</text>
+    <rect class="chip" x="304" y="272" width="170" height="30" rx="15" />
+    <text class="chipText" x="324" y="291">Diff from prior run</text>
+  </g>
+
+  <rect class="input" x="286" y="530" width="518" height="46" rx="14" />
+  <text class="muted" x="308" y="558">Ask about regressions, risks, or next tests…</text>
+  <rect class="btn" x="816" y="530" width="80" height="46" rx="14" />
+  <text class="btnText" x="837" y="558">Send</text>
+</svg>
