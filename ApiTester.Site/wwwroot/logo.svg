@@ -1,17 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200" role="img" aria-label="ApiTester logo">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 220" role="img" aria-label="ApiTester app shell logo">
   <defs>
-    <linearGradient id="logoGradient" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4f46e5" />
-      <stop offset="1" stop-color="#22d3ee" />
+    <linearGradient id="shellBrand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6366f1" />
+      <stop offset="1" stop-color="#06b6d4" />
     </linearGradient>
   </defs>
-  <rect width="640" height="200" rx="48" fill="#0b1120" />
-  <g transform="translate(56 40)">
-    <rect width="120" height="120" rx="28" fill="url(#logoGradient)" />
-    <path d="M32 76h56" stroke="#0b1120" stroke-width="14" stroke-linecap="round" />
-    <circle cx="44" cy="44" r="18" fill="#ffffff" opacity="0.9" />
-    <circle cx="86" cy="86" r="18" fill="#ffffff" opacity="0.9" />
+  <rect width="720" height="220" rx="44" fill="#020617" />
+  <g transform="translate(40 40)">
+    <rect width="140" height="140" rx="32" fill="url(#shellBrand)" />
+    <rect x="30" y="30" width="80" height="80" rx="18" fill="#0f172a" opacity="0.38" />
+    <path d="M40 96h60" stroke="#ffffff" stroke-width="12" stroke-linecap="round" />
+    <circle cx="56" cy="56" r="16" fill="#ffffff" opacity="0.9" />
+    <circle cx="94" cy="96" r="16" fill="#ffffff" opacity="0.9" />
   </g>
-  <text x="210" y="125" font-family="'Inter', system-ui, sans-serif" font-size="64" fill="#e2e8f0" font-weight="700">ApiTester</text>
-  <text x="214" y="158" font-family="'Inter', system-ui, sans-serif" font-size="22" fill="#94a3b8" font-weight="500">MCP Playground</text>
+  <text x="220" y="116" font-family="'Inter', system-ui, sans-serif" font-size="68" font-weight="800" fill="#e2e8f0">ApiTester</text>
+  <text x="223" y="158" font-family="'Inter', system-ui, sans-serif" font-size="24" font-weight="500" fill="#94a3b8">App Shell</text>
 </svg>
