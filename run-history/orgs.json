@@ -1,0 +1,15 @@
+[
+  {
+    "organisationId": "11111111-1111-1111-1111-111111111111",
+    "name": "Local Dev",
+    "slug": "local-dev",
+    "createdUtc": "2026-01-01T00:00:00Z",
+    "retentionDays": null,
+    "redactionRules": [],
+    "orgSettings": {
+      "allowedDomains": [],
+      "allowLocalhost": false,
+      "allowPrivateIps": false
+    }
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "organisationId": "11111111-1111-1111-1111-111111111111",
+    "plan": "Team",
+    "status": "Active",
+    "renews": true,
+    "periodStartUtc": "2026-01-01T00:00:00Z",
+    "periodEndUtc": "2030-01-01T00:00:00Z",
+    "projectsUsed": 0,
+    "runsUsed": 0,
+    "aiCallsUsed": 0,
+    "updatedUtc": "2026-01-01T00:00:00Z"
+  }
+]
