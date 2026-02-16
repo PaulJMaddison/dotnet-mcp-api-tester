@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-label="AI agent orchestrator flow">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f8ff" />
+      <stop offset="1" stop-color="#ffffff" />
+    </linearGradient>
+    <linearGradient id="blueGlow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4ea1ff" />
+      <stop offset="1" stop-color="#0d6efd" />
+    </linearGradient>
+    <style>
+      .frame { fill: url(#bg); }
+      .panel { fill: #fff; stroke: #d4deeb; stroke-width: 2; }
+      .title { font: 700 30px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #0b1f3a; }
+      .subtitle { font: 500 17px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #4f6a85; }
+      .nodeTitle { font: 700 18px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #163a63; }
+      .nodeText { font: 500 15px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #4f6a85; }
+      .chip { fill: #e8f1ff; stroke: #bfd5f5; stroke-width: 1.5; }
+      .chipText { font: 600 12px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #25548b; letter-spacing: .35px; }
+      .line { stroke: #79aef7; stroke-width: 3.5; fill: none; stroke-linecap: round; }
+      .arrow { fill: #79aef7; }
+      .core { fill: url(#blueGlow); }
+      .coreText { font: 700 18px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #fff; }
+    </style>
+  </defs>
+
+  <rect class="frame" x="0" y="0" width="1200" height="700" rx="30" />
+
+  <text class="title" x="70" y="95">AI Orchestrator: Prompt → Tools → Evidence</text>
+  <text class="subtitle" x="70" y="130">Asset-only diagram for dashboard cards, docs blocks, and social previews.</text>
+
+  <g transform="translate(70,190)">
+    <rect class="panel" x="0" y="0" width="250" height="180" rx="16" />
+    <text class="nodeTitle" x="22" y="42">User Intent</text>
+    <text class="nodeText" x="22" y="72">Natural language goal</text>
+    <text class="nodeText" x="22" y="96">Context + constraints</text>
+    <rect class="chip" x="22" y="124" width="112" height="28" rx="14" />
+    <text class="chipText" x="39" y="143">PROMPT INPUT</text>
+  </g>
+
+  <g transform="translate(450,180)">
+    <circle class="core" cx="140" cy="100" r="92" />
+    <circle cx="140" cy="100" r="108" fill="none" stroke="#bfd5f5" stroke-width="2" stroke-dasharray="7 8" />
+    <text class="coreText" x="84" y="94">Agent</text>
+    <text class="coreText" x="66" y="120">Orchestrator</text>
+  </g>
+
+  <g transform="translate(880,190)">
+    <rect class="panel" x="0" y="0" width="250" height="180" rx="16" />
+    <text class="nodeTitle" x="22" y="42">MCP Tools</text>
+    <text class="nodeText" x="22" y="72">Plan / Execute / Verify</text>
+    <text class="nodeText" x="22" y="96">External service calls</text>
+    <rect class="chip" x="22" y="124" width="102" height="28" rx="14" />
+    <text class="chipText" x="43" y="143">TOOLING</text>
+  </g>
+
+  <g transform="translate(250,470)">
+    <rect class="panel" x="0" y="0" width="310" height="160" rx="16" />
+    <text class="nodeTitle" x="22" y="40">Evidence Store</text>
+    <text class="nodeText" x="22" y="70">Responses, timings, and diffs</text>
+    <text class="nodeText" x="22" y="94">Used for grounded AI answers</text>
+    <rect class="chip" x="22" y="112" width="130" height="28" rx="14" />
+    <text class="chipText" x="40" y="131">TRACE DATA</text>
+  </g>
+
+  <g transform="translate(640,470)">
+    <rect class="panel" x="0" y="0" width="340" height="160" rx="16" />
+    <text class="nodeTitle" x="22" y="40">Insight Output</text>
+    <text class="nodeText" x="22" y="70">Cited summaries + recommendations</text>
+    <text class="nodeText" x="22" y="94">Compliance-ready artifacts</text>
+    <rect class="chip" x="22" y="112" width="120" height="28" rx="14" />
+    <text class="chipText" x="43" y="131">AI REPORT</text>
+  </g>
+
+  <path class="line" d="M320 280 L445 280" />
+  <polygon class="arrow" points="445,280 431,272 431,288" />
+
+  <path class="line" d="M735 280 L878 280" />
+  <polygon class="arrow" points="878,280 864,272 864,288" />
+
+  <path class="line" d="M590 378 L590 468" />
+  <polygon class="arrow" points="590,468 582,454 598,454" />
+
+  <path class="line" d="M744 550 L638 550" />
+  <polygon class="arrow" points="638,550 652,542 652,558" />
+</svg>
