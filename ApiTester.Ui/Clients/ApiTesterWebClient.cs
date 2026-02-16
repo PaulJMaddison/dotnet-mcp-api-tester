@@ -235,6 +235,31 @@ public sealed class ApiTesterWebClient
 
         return payload;
     }
+
+    public async Task<ApiPolicyResponse> GetPolicy(CancellationToken ct = default)
+    {
+        var response = await _httpClient.GetFromJsonAsync<ApiPolicyResponse>("/api/runtime/policy", ct);
+        if (response is null)
+        {
+            throw new InvalidOperationException("Empty response when loading policy.");
+        }
+
+        return response;
+    }
+
+    public async Task<ApiPolicyResponse> UpdatePolicy(ApiPolicyUpdateRequest request, CancellationToken ct = default)
+    {
+        var response = await _httpClient.PutAsJsonAsync("/api/runtime/policy", request, ct);
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadFromJsonAsync<ApiPolicyResponse>(cancellationToken: ct);
+        if (payload is null)
+        {
+            throw new InvalidOperationException("Empty response when updating policy.");
+        }
+
+        return payload;
+    }
 }
 
 public sealed record ProjectDto(Guid ProjectId, string Name, string ProjectKey, DateTime CreatedUtc);
@@ -380,3 +405,29 @@ public sealed record TestPlanResponse(
     string OperationId,
     string PlanJson,
     DateTime CreatedUtc);
+
+public sealed record ApiPolicyResponse(
+    bool DryRun,
+    IReadOnlyList<string> AllowedBaseUrls,
+    IReadOnlyList<string> AllowedMethods,
+    int TimeoutSeconds,
+    int MaxRequestBodyBytes,
+    int MaxResponseBodyBytes,
+    bool ValidateSchema,
+    bool BlockLocalhost,
+    bool BlockPrivateNetworks,
+    bool RetryOnFlake,
+    int MaxRetries);
+
+public sealed record ApiPolicyUpdateRequest(
+    bool? DryRun,
+    IReadOnlyList<string>? AllowedBaseUrls,
+    IReadOnlyList<string>? AllowedMethods,
+    int? TimeoutSeconds,
+    int? MaxRequestBodyBytes,
+    int? MaxResponseBodyBytes,
+    bool? ValidateSchema,
+    bool? BlockLocalhost,
+    bool? BlockPrivateNetworks,
+    bool? RetryOnFlake,
+    int? MaxRetries);
