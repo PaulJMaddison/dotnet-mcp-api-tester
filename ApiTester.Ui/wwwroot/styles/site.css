@@ -577,3 +577,60 @@ pre {
 .form-field small {
     color: var(--color-muted);
 }
+
+.policy-guidance {
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    border: 1px solid #bfdbfe;
+    background: #eff6ff;
+}
+
+.policy-guidance h2 {
+    margin-bottom: var(--space-2);
+    font-size: 1.1rem;
+}
+
+.policy-guidance p {
+    margin: 0;
+    color: #1e3a8a;
+    font-size: var(--font-sm);
+}
+
+.policy-form {
+    display: grid;
+    gap: var(--space-4);
+    padding: var(--space-5);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-tight);
+}
+
+.form-grid {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.form-field textarea,
+.form-field input {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid #cbd2d9;
+    font-size: 0.95rem;
+    background: #fff;
+    color: var(--color-text);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.form-field textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.form-actions {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+}
