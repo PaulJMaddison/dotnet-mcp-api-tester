@@ -94,6 +94,65 @@ public sealed class ApiTesterWebClient
         return payload;
     }
 
+    public async Task<IReadOnlyList<OpenApiSpecMetadataDto>> ListOpenApiSpecs(Guid projectId, CancellationToken ct = default)
+    {
+        var response = await _httpClient.GetFromJsonAsync<IReadOnlyList<OpenApiSpecMetadataDto>>($"/api/projects/{projectId}/specs", ct);
+        if (response is null)
+        {
+            throw new InvalidOperationException("Empty response when loading OpenAPI specs.");
+        }
+
+        return response;
+    }
+
+    public async Task<OpenApiSpecDetailDto?> GetOpenApiSpecDetail(Guid specId, CancellationToken ct = default)
+    {
+        var response = await _httpClient.GetAsync($"/api/specs/{specId}", ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<OpenApiSpecDetailDto>(cancellationToken: ct);
+        if (payload is null)
+        {
+            throw new InvalidOperationException("Empty response when loading OpenAPI spec detail.");
+        }
+
+        return payload;
+    }
+
+    public async Task<OpenApiOperationListResponse> ListOperations(Guid projectId, CancellationToken ct = default)
+    {
+        var response = await _httpClient.GetFromJsonAsync<OpenApiOperationListResponse>($"/api/projects/{projectId}/operations", ct);
+        if (response is null)
+        {
+            throw new InvalidOperationException("Empty response when loading operations.");
+        }
+
+        return response;
+    }
+
+    public async Task<OpenApiOperationDescribeResponse?> DescribeOperation(Guid projectId, string operationId, CancellationToken ct = default)
+    {
+        var requestUri = QueryHelpers.AddQueryString($"/api/projects/{projectId}/operations/describe", "operationId", operationId);
+        var response = await _httpClient.GetAsync(requestUri, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadFromJsonAsync<OpenApiOperationDescribeResponse>(cancellationToken: ct);
+        if (payload is null)
+        {
+            throw new InvalidOperationException("Empty response when describing operation.");
+        }
+
+        return payload;
+    }
+
     public async Task<TestPlanResponse?> GetTestPlan(Guid projectId, string operationId, CancellationToken ct = default)
     {
         var response = await _httpClient.GetAsync($"/api/projects/{projectId}/testplans/{Uri.EscapeDataString(operationId)}", ct);
@@ -284,6 +343,62 @@ public sealed record OpenApiSpecMetadataDto(
     string Version,
     string SpecHash,
     DateTime UploadedUtc);
+
+public sealed record OpenApiSpecDetailDto(
+    Guid SpecId,
+    Guid ProjectId,
+    string Title,
+    string Version,
+    string SpecJson,
+    string SpecHash,
+    DateTime UploadedUtc);
+
+public sealed record OpenApiOperationListResponse(IReadOnlyList<OpenApiOperationSummaryDto> Operations);
+
+public sealed record OpenApiOperationSummaryDto(
+    string OperationId,
+    string Method,
+    string Path,
+    string Summary,
+    string Description,
+    bool RequiresAuth);
+
+public sealed record OpenApiOperationDescribeResponse(
+    string OperationId,
+    string Method,
+    string Path,
+    string Summary,
+    string Description,
+    bool RequiresAuth,
+    IReadOnlyList<OpenApiOperationParameterDto> Parameters,
+    OpenApiOperationRequestBodyDto? RequestBody,
+    IReadOnlyDictionary<string, OpenApiOperationResponseDto> Responses);
+
+public sealed record OpenApiOperationParameterDto(
+    string Name,
+    string In,
+    bool Required,
+    string Description,
+    OpenApiSchemaDto? Schema);
+
+public sealed record OpenApiOperationRequestBodyDto(
+    bool Required,
+    string Description,
+    IReadOnlyDictionary<string, OpenApiOperationContentDto> Content);
+
+public sealed record OpenApiOperationResponseDto(
+    string Description,
+    IReadOnlyDictionary<string, OpenApiOperationContentDto> Content);
+
+public sealed record OpenApiOperationContentDto(OpenApiSchemaDto? Schema);
+
+public sealed record OpenApiSchemaDto(
+    string Type,
+    string Format,
+    bool Nullable,
+    OpenApiSchemaItemDto? Items);
+
+public sealed record OpenApiSchemaItemDto(string Type, string Format);
 
 public sealed record TestPlanResponse(
     Guid ProjectId,

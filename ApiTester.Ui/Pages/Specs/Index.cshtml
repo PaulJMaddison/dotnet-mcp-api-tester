@@ -1,0 +1,99 @@
+@page "/app/specs"
+@model ApiTester.Ui.Pages.Specs.IndexModel
+
+@{
+    ViewData["Title"] = "Specs";
+
+    var header = new PageHeaderModel(
+        "OpenAPI Specs",
+        "Import and browse specs and operations for a selected project.",
+        new[]
+        {
+            new BreadcrumbItem("Projects", "/"),
+            new BreadcrumbItem("Specs")
+        }
+    );
+}
+
+<partial name="Shared/_PageHeader" model="header" />
+
+@if (Model.HasError)
+{
+    <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.ImportResultMessage))
+{
+    <p class="page-hint">@Model.ImportResultMessage</p>
+}
+
+<section class="toolbar" aria-label="Spec project filter">
+    <form method="get" class="toolbar-grid">
+        <div class="toolbar-item">
+            <label for="projectId">Project</label>
+            <select id="projectId" name="projectId" onchange="this.form.submit()">
+                @foreach (var project in Model.Projects)
+                {
+                    if (Model.ProjectId == project.ProjectId)
+                    {
+                        <option value="@project.ProjectId" selected>@project.ProjectKey</option>
+                    }
+                    else
+                    {
+                        <option value="@project.ProjectId">@project.ProjectKey</option>
+                    }
+                }
+            </select>
+        </div>
+    </form>
+</section>
+
+<section class="table-card">
+    <h2>Import spec</h2>
+    <p class="page-hint">Inputs are treated as untrusted. The server decides ingestion and validation.</p>
+    <form method="post" enctype="multipart/form-data" asp-page-handler="Import" class="toolbar-grid">
+        <input type="hidden" asp-for="ProjectId" />
+        <div class="toolbar-item">
+            <label asp-for="UploadFile">Local file</label>
+            <input asp-for="UploadFile" type="file" accept=".json,.yaml,.yml" />
+        </div>
+        <div class="toolbar-item">
+            <label asp-for="ImportUrl">URL</label>
+            <input asp-for="ImportUrl" type="url" placeholder="https://example.com/openapi.json" />
+        </div>
+        <div class="toolbar-item">
+            <button class="button" type="submit">Import</button>
+        </div>
+    </form>
+</section>
+
+@if (Model.Specs.Count == 0)
+{
+    <partial name="Shared/_EmptyState" model='new EmptyStateModel("No specs imported for this project yet.")' />
+}
+else
+{
+    <div class="table-card">
+        <table>
+            <thead>
+                <tr>
+                    <th scope="col">Title</th>
+                    <th scope="col">Version</th>
+                    <th scope="col">Uploaded UTC</th>
+                    <th scope="col">Spec ID</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var spec in Model.Specs)
+                {
+                    <tr>
+                        <td><a href="/app/specs/@spec.SpecId?projectId=@spec.ProjectId">@spec.Title</a></td>
+                        <td>@spec.Version</td>
+                        <td>@DisplayFormatters.FormatUtc(spec.UploadedUtc)</td>
+                        <td>@spec.SpecId</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

@@ -1,0 +1,119 @@
+@page "/app/operations/{operationId}"
+@model ApiTester.Ui.Pages.Operations.DetailsModel
+
+@{
+    ViewData["Title"] = "Operation Describe";
+
+    var opId = Model.Operation?.OperationId ?? "Operation";
+    var header = new PageHeaderModel(
+        "Operation Describe",
+        "Review parameters and responses for a selected API operation.",
+        new[]
+        {
+            new BreadcrumbItem("Projects", "/"),
+            new BreadcrumbItem("Specs", "/app/specs"),
+            new BreadcrumbItem(opId)
+        }
+    );
+}
+
+<partial name="Shared/_PageHeader" model="header" />
+
+@if (Model.HasError)
+{
+    <partial name="Shared/_ErrorPanel" model="new ErrorPanelModel(Model.ErrorMessage!, Model.ErrorDetails)" />
+}
+else if (Model.NotFound)
+{
+    <partial name="Shared/_EmptyState" model='new EmptyStateModel("Operation not found.")' />
+}
+else if (Model.Operation is not null)
+{
+    <section class="toolbar" aria-label="Operation metadata">
+        <div class="toolbar-grid">
+            <div class="toolbar-item"><span>Operation ID</span><strong>@Model.Operation.OperationId</strong></div>
+            <div class="toolbar-item"><span>Method</span><strong>@Model.Operation.Method</strong></div>
+            <div class="toolbar-item"><span>Path</span><strong>@Model.Operation.Path</strong></div>
+            <div class="toolbar-item"><span>Auth</span><strong>@(Model.Operation.RequiresAuth ? "Required" : "None")</strong></div>
+        </div>
+    </section>
+
+    <h2>Parameters</h2>
+    if (Model.Operation.Parameters.Count == 0)
+    {
+        <partial name="Shared/_EmptyState" model='new EmptyStateModel("No parameters defined.")' />
+    }
+    else
+    {
+        <div class="table-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">In</th>
+                        <th scope="col">Required</th>
+                        <th scope="col">Schema</th>
+                        <th scope="col">Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var parameter in Model.Operation.Parameters)
+                    {
+                        <tr>
+                            <td>@parameter.Name</td>
+                            <td>@parameter.In</td>
+                            <td>@(parameter.Required ? "Yes" : "No")</td>
+                            <td>@FormatSchema(parameter.Schema)</td>
+                            <td>@parameter.Description</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <h2>Responses</h2>
+    if (Model.Operation.Responses.Count == 0)
+    {
+        <partial name="Shared/_EmptyState" model='new EmptyStateModel("No responses defined.")' />
+    }
+    else
+    {
+        <div class="table-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Status</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Content Types</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var response in Model.Operation.Responses.OrderBy(x => x.Key, StringComparer.Ordinal))
+                    {
+                        <tr>
+                            <td>@response.Key</td>
+                            <td>@response.Value.Description</td>
+                            <td>@string.Join(", ", response.Value.Content.Keys)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@functions {
+    private static string FormatSchema(ApiTester.Ui.Clients.OpenApiSchemaDto? schema)
+    {
+        if (schema is null)
+        {
+            return "n/a";
+        }
+
+        var nullable = schema.Nullable ? "?" : string.Empty;
+        var format = string.IsNullOrWhiteSpace(schema.Format) ? string.Empty : $" ({schema.Format})";
+        var items = schema.Items is null ? string.Empty : $" [{schema.Items.Type}{(string.IsNullOrWhiteSpace(schema.Items.Format) ? string.Empty : $" ({schema.Items.Format})")}]";
+        return $"{schema.Type}{nullable}{format}{items}";
+    }
+}
