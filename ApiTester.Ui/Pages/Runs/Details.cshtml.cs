@@ -1,4 +1,6 @@
+using System.Net;
 using ApiTester.Ui.Clients;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace ApiTester.Ui.Pages.Runs;
@@ -24,7 +26,7 @@ public class DetailsModel : PageModel
 
     public bool IsLoading { get; private set; }
 
-    public async Task OnGetAsync(Guid runId)
+    public async Task<IActionResult> OnGetAsync(Guid runId)
     {
         try
         {
@@ -33,10 +35,15 @@ public class DetailsModel : PageModel
             if (run is null)
             {
                 NotFound = true;
-                return;
+                return Page();
             }
 
             Run = run;
+            return Page();
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            return Redirect($"/Auth/SignIn?returnUrl={Uri.EscapeDataString(HttpContext.Request.Path + HttpContext.Request.QueryString)}");
         }
         catch (Exception ex)
         {
@@ -47,5 +54,7 @@ public class DetailsModel : PageModel
         {
             IsLoading = false;
         }
+
+        return Page();
     }
 }

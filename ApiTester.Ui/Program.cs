@@ -8,7 +8,10 @@ var allowedKeys = authOptions.ResolveKeys();
 if (allowedKeys.Count == 0)
     throw new InvalidOperationException("UI requires an API key configured (Auth:ApiKey or Auth:ApiKeys).");
 
-builder.Services.AddRazorPages();
+builder.Services.AddRazorPages(options =>
+{
+    options.Conventions.AddPageRoute("/Runs/Details", "/app/runs/{runId:guid}");
+});
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
