@@ -1,4 +1,4 @@
-@page "/app/projects/{projectId}"
+@page "/app/projects/{id}"
 @inject IApiTesterWebClient ApiClient
 @inject NavigationManager NavigationManager
 
@@ -11,15 +11,9 @@
 
     <div class="app-page-header">
         <div>
-            <div class="d-flex align-items-center gap-3">
-                <img src="/assets/projects/project-shield.svg"
-                     alt="Project security icon"
-                     width="36"
-                     height="36" />
-                <div>
-                    <h1 class="h3 mb-1">@(_project?.Name ?? "Project details")</h1>
-                    <p class="text-secondary mb-0">Review project metadata and related actions.</p>
-                </div>
+            <div>
+                <h1 class="h3 mb-1">@(_project?.Name ?? "Project details")</h1>
+                <p class="text-secondary mb-0">Review project metadata and related actions.</p>
             </div>
         </div>
         <div class="d-flex gap-2">
@@ -58,7 +52,7 @@
     {
         <div class="app-card app-state">
             <h2 class="h6">Project not found</h2>
-            <p class="text-secondary mb-0">We couldn't match "@ProjectId" to a project in this workspace.</p>
+            <p class="text-secondary mb-0">We couldn't match "@Id" to a project in this workspace.</p>
         </div>
     }
     else
@@ -66,13 +60,7 @@
         <div class="row g-4">
             <div class="col-12 col-lg-7">
                 <div class="app-card">
-                    <h2 class="h5 d-flex align-items-center gap-2">
-                        <img src="/assets/projects/project-folder.svg"
-                             alt="Project overview icon"
-                             width="24"
-                             height="24" />
-                        <span>Project overview</span>
-                    </h2>
+                    <h2 class="h5">Project overview</h2>
                     <dl class="row mb-0">
                         <dt class="col-sm-4 text-secondary">Project key</dt>
                         <dd class="col-sm-8">@_project.ProjectKey</dd>
@@ -83,13 +71,7 @@
                     </dl>
                 </div>
                 <div class="app-card mt-4">
-                    <h2 class="h6 d-flex align-items-center gap-2">
-                        <img src="/assets/projects/project-rocket.svg"
-                             alt="Next steps icon"
-                             width="20"
-                             height="20" />
-                        <span>Next steps</span>
-                    </h2>
+                    <h2 class="h6">Next steps</h2>
                     <ul class="text-secondary mb-0">
                         <li>Configure integrations and test run schedules.</li>
                         <li>Review recent runs for anomalies.</li>
@@ -99,13 +81,7 @@
             </div>
             <div class="col-12 col-lg-5">
                 <div class="app-card">
-                    <h2 class="h6 d-flex align-items-center gap-2">
-                        <img src="/assets/projects/project-analytics.svg"
-                             alt="Activity snapshot icon"
-                             width="20"
-                             height="20" />
-                        <span>Activity snapshot</span>
-                    </h2>
+                    <h2 class="h6">Activity snapshot</h2>
                     <p class="text-secondary mb-2">Recent activity will appear here once runs are executed.</p>
                     <div class="d-flex flex-column gap-2">
                         <div class="p-3 border rounded bg-light">No runs recorded yet.</div>
@@ -113,13 +89,7 @@
                     </div>
                 </div>
                 <div class="app-card mt-4">
-                    <h2 class="h6 d-flex align-items-center gap-2">
-                        <img src="/assets/projects/project-users.svg"
-                             alt="Quick actions icon"
-                             width="20"
-                             height="20" />
-                        <span>Quick actions</span>
-                    </h2>
+                    <h2 class="h6">Quick actions</h2>
                     <div class="d-grid gap-2">
                         <NavLink class="btn btn-outline-primary" href="@($"/app/projects/{_project.ProjectKey}/runs")">View runs</NavLink>
                         <NavLink class="btn btn-outline-secondary" href="/app/projects/new">Draft a new project</NavLink>
@@ -131,7 +101,7 @@
 </div>
 
 @code {
-    [Parameter] public string ProjectId { get; set; } = string.Empty;
+    [Parameter] public string Id { get; set; } = string.Empty;
 
     private ApiResult<ProjectListResponse>? _response;
     private ProjectDto? _project;
@@ -140,7 +110,7 @@
     private IReadOnlyList<BreadcrumbItem> Breadcrumbs => new List<BreadcrumbItem>
     {
         new("Projects", "/app/projects"),
-        new(_project?.Name ?? "Project details", $"/app/projects/{ProjectId}")
+        new(_project?.Name ?? "Project details", $"/app/projects/{Id}")
     };
 
     protected override async Task OnParametersSetAsync()
@@ -149,7 +119,7 @@
         _project = null;
         _response = null;
 
-        if (string.IsNullOrWhiteSpace(ProjectId))
+        if (string.IsNullOrWhiteSpace(Id))
         {
             _response = ApiResult<ProjectListResponse>.Failure("Project id is required.", null);
             _isLoading = false;
@@ -165,7 +135,7 @@
 
         if (_response?.Data is not null)
         {
-            _project = FindProject(_response.Data.Projects, ProjectId);
+            _project = FindProject(_response.Data.Projects, Id);
         }
 
         _isLoading = false;
