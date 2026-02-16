@@ -37,6 +37,7 @@ else if (Model.Run is not null)
     var realFail = classification.Fail + classification.BlockedUnexpected;
 
     <h2>Run Summary</h2>
+    <p class="page-subtitle">Run ID: @Model.Run.RunId</p>
     <div class="toolbar">
         <button class="button" type="button">Generate explanation</button>
     </div>
@@ -125,15 +126,15 @@ else if (Model.Run is not null)
                             <td colspan="6">
                                 <div class="details-stack">
                                     <details>
-                                        <summary>Failure Reason</summary>
+                                        <summary>failureReason</summary>
                                         <p>@(string.IsNullOrWhiteSpace(result.FailureReason) ? "None" : result.FailureReason)</p>
                                     </details>
                                     <details>
-                                        <summary>Block Reason</summary>
+                                        <summary>blockReason</summary>
                                         <p>@(string.IsNullOrWhiteSpace(result.BlockReason) ? "None" : result.BlockReason)</p>
                                     </details>
                                     <details>
-                                        <summary>Response Snippet</summary>
+                                        <summary>responseSnippet</summary>
                                         <pre class="code-block">@(string.IsNullOrWhiteSpace(result.ResponseSnippet) ? "None" : result.ResponseSnippet)</pre>
                                     </details>
                                 </div>

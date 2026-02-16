@@ -1,8 +1,8 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using ApiTester.Ui.Clients;
 using ApiTester.Ui.Auth;
+using ApiTester.Ui.Clients;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,6 +29,22 @@ public class RunDetailsPageTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Run Summary", content);
         Assert.Contains("Case Results", content);
+    }
+
+    [Fact]
+    public async Task GetRunDetails_AppRoute_ReturnsSummaryHeading()
+    {
+        var runId = Guid.NewGuid();
+        var handler = new FakeHttpMessageHandler(request => BuildResponse(request, runId));
+
+        await using var factory = CreateFactory(handler);
+        var client = CreateClient(factory);
+
+        var response = await client.GetAsync($"/app/runs/{runId}");
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Run Summary", content);
     }
 
     [Fact]
@@ -69,6 +85,24 @@ public class RunDetailsPageTests
     }
 
     [Fact]
+    public async Task GetRunDetails_RendersExpandableDetailSections()
+    {
+        var runId = Guid.NewGuid();
+        var handler = new FakeHttpMessageHandler(request => BuildResponse(request, runId));
+
+        await using var factory = CreateFactory(handler);
+        var client = CreateClient(factory);
+
+        var response = await client.GetAsync($"/runs/{runId}");
+        var content = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("<summary>failureReason</summary>", content);
+        Assert.Contains("<summary>blockReason</summary>", content);
+        Assert.Contains("<summary>responseSnippet</summary>", content);
+    }
+
+    [Fact]
     public async Task GetRunDetails_RunNotFound_ShowsMessage()
     {
         var runId = Guid.NewGuid();
@@ -82,6 +116,27 @@ public class RunDetailsPageTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Run not found", content);
+    }
+
+    [Fact]
+    public async Task GetRunDetails_Unauthorized_RedirectsToSignIn()
+    {
+        var runId = Guid.NewGuid();
+        var handler = new FakeHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
+
+        await using var factory = CreateFactory(handler);
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add(ApiKeyAuthDefaults.HeaderName, ApiKey);
+
+        var response = await client.GetAsync($"/runs/{runId}");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.StartsWith("/Auth/SignIn", response.Headers.Location!.OriginalString, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains($"returnUrl=%2Fruns%2F{runId}", response.Headers.Location!.OriginalString, StringComparison.OrdinalIgnoreCase);
     }
 
     private static WebApplicationFactory<Program> CreateFactory(FakeHttpMessageHandler handler)
