@@ -19,8 +19,9 @@ public sealed record BillingUsageResponse(
     BillingPlanLimits Limits,
     BillingUsageCounters Usage);
 
-public sealed record BillingUsageCounters(int ProjectsUsed, int RunsUsed, int AiCallsUsed);
+public sealed record BillingUsageCounters(int ProjectsUsed, int RunsUsed, int AiCallsUsed, int ExportsUsed);
 
-public sealed record UpgradeIntentRequest(string DesiredPlan);
 
-public sealed record UpgradeIntentResponse(string Message, string ContactEmail);
+public sealed record BillingCheckoutRequest(string Plan);
+public sealed record BillingCheckoutResponse(string Url);
+public sealed record BillingPortalResponse(string Url);

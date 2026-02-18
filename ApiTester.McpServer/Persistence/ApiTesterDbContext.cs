@@ -24,6 +24,8 @@ public sealed class ApiTesterDbContext : DbContext
     public DbSet<AuditEventEntity> AuditEvents => Set<AuditEventEntity>();
     public DbSet<BaselineRunEntity> BaselineRuns => Set<BaselineRunEntity>();
     public DbSet<SubscriptionEntity> Subscriptions => Set<SubscriptionEntity>();
+    public DbSet<UsageCounterEntity> UsageCounters => Set<UsageCounterEntity>();
+    public DbSet<BillingWebhookEventEntity> BillingWebhookEvents => Set<BillingWebhookEventEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -305,7 +307,10 @@ public sealed class ApiTesterDbContext : DbContext
         {
             b.HasKey(x => x.OrganisationId);
             b.Property(x => x.Plan).HasConversion<string>().HasMaxLength(40).IsRequired();
+            b.Property(x => x.TenantId).IsRequired();
             b.Property(x => x.Status).HasConversion<string>().HasMaxLength(40).IsRequired();
+            b.Property(x => x.StripeCustomerId).HasMaxLength(200);
+            b.Property(x => x.StripeSubscriptionId).HasMaxLength(200);
             b.Property(x => x.PeriodStartUtc).IsRequired();
             b.Property(x => x.PeriodEndUtc).IsRequired();
             b.Property(x => x.UpdatedUtc).IsRequired();
@@ -314,6 +319,21 @@ public sealed class ApiTesterDbContext : DbContext
                 .WithOne()
                 .HasForeignKey<SubscriptionEntity>(x => x.OrganisationId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UsageCounterEntity>(b =>
+        {
+            b.HasKey(x => new { x.TenantId, x.PeriodStartUtc });
+            b.Property(x => x.PeriodEndUtc).IsRequired();
+            b.Property(x => x.UpdatedUtc).IsRequired();
+        });
+
+        modelBuilder.Entity<BillingWebhookEventEntity>(b =>
+        {
+            b.HasKey(x => x.BillingWebhookEventEntityId);
+            b.Property(x => x.EventId).HasMaxLength(200).IsRequired();
+            b.Property(x => x.EventType).HasMaxLength(120).IsRequired();
+            b.HasIndex(x => x.EventId).IsUnique();
         });
     }
 }

@@ -35,7 +35,11 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
                 ["Persistence:Provider"] = "Sqlite",
                 ["Persistence:ConnectionString"] = _connectionString,
                 ["Execution:AllowedBaseUrls:0"] = "https://httpbin.org",
-                ["Execution:DryRun"] = "false"
+                ["Execution:DryRun"] = "false",
+                ["Stripe:SecretKey"] = "sk_test_123",
+                ["Stripe:WebhookSecret"] = "whsec_test_secret",
+                ["Stripe:ProPriceId"] = "price_pro",
+                ["Stripe:TeamPriceId"] = "price_team"
             };
             config.AddInMemoryCollection(settings);
         });

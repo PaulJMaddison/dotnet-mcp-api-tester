@@ -136,6 +136,8 @@ builder.Services.AddScoped<AiExplainService>();
 builder.Services.AddScoped<AiDocsGenerationService>();
 builder.Services.AddScoped<AiRunSummaryService>();
 builder.Services.AddScoped<AiSuggestTestsService>();
+builder.Services.Configure<StripeBillingOptions>(builder.Configuration.GetSection(StripeBillingOptions.SectionName));
+builder.Services.AddScoped<StripeBillingService>();
 builder.Services.AddScoped<SubscriptionEnforcementService>();
 builder.Services.AddScoped<RunCleanupCoordinator>();
 builder.Services.AddScoped<OrgContextResolver>();
@@ -198,7 +200,8 @@ app.UseSwaggerUI();
 
 app.UseWhen(
     context => !context.Request.Path.StartsWithSegments("/health")
-        && !context.Request.Path.StartsWithSegments("/api/v1/admin"),
+        && !context.Request.Path.StartsWithSegments("/api/v1/admin")
+        && !context.Request.Path.StartsWithSegments("/api/v1/billing/webhook"),
     builder =>
     {
         builder.UseMiddleware<ApiKeyAuthMiddleware>();
@@ -376,6 +379,7 @@ v1.MapGet("/billing/usage", async (IProjectStore projectStore, SubscriptionEnfor
     await subscriptions.UpdateProjectsUsedAsync(tenantContext.TenantId, totalProjects, ct);
 
     var snapshot = await subscriptions.GetSnapshotAsync(tenantContext.TenantId, ct);
+    var usageCounter = await subscriptions.GetUsageAsync(tenantContext.TenantId, ct);
     var limits = new BillingPlanLimits(
         snapshot.Limits.MaxProjects,
         snapshot.Limits.MaxRunsPerPeriod,
@@ -383,30 +387,50 @@ v1.MapGet("/billing/usage", async (IProjectStore projectStore, SubscriptionEnfor
 
     var usage = new BillingUsageCounters(
         totalProjects,
-        snapshot.Subscription.RunsUsed,
-        snapshot.Subscription.AiCallsUsed);
+        usageCounter.RunsUsed,
+        usageCounter.AiCallsUsed,
+        usageCounter.ExportsUsed);
 
     var response = new BillingUsageResponse(
-        snapshot.Subscription.PeriodStartUtc,
-        snapshot.Subscription.PeriodEndUtc,
+        usageCounter.PeriodStartUtc,
+        usageCounter.PeriodEndUtc,
         limits,
         usage);
 
     return Results.Ok(response);
 });
 
-v1.MapPost("/billing/upgrade-intent", async (UpgradeIntentRequest request, HttpContext httpContext) =>
+v1.MapPost("/billing/checkout", async (BillingCheckoutRequest request, StripeBillingService stripeBilling, HttpContext httpContext, CancellationToken ct) =>
 {
-    var desired = (request?.DesiredPlan ?? string.Empty).Trim();
+    var desired = (request?.Plan ?? string.Empty).Trim();
     if (string.IsNullOrWhiteSpace(desired))
-        return InvalidRequest("desiredPlan is required.");
+        return InvalidRequest("plan is required.");
 
-    var response = new UpgradeIntentResponse(
-        $"Upgrade request received for plan '{desired}'. A billing specialist will follow up with next steps.",
-        "billing@apitester.ai");
-
-    return Results.Ok(response);
+    var tenantContext = httpContext.GetTenantContext();
+    var url = await stripeBilling.CreateCheckoutSessionAsync(tenantContext.TenantId, desired, ct);
+    return Results.Ok(new BillingCheckoutResponse(url));
 });
+
+v1.MapPost("/billing/portal", async (StripeBillingService stripeBilling, HttpContext httpContext, CancellationToken ct) =>
+{
+    var tenantContext = httpContext.GetTenantContext();
+    var url = await stripeBilling.CreatePortalSessionAsync(tenantContext.TenantId, ct);
+    return Results.Ok(new BillingPortalResponse(url));
+});
+
+v1.MapPost("/billing/webhook", async (HttpContext httpContext, StripeBillingService stripeBilling, CancellationToken ct) =>
+{
+    httpContext.Request.EnableBuffering();
+    using var reader = new StreamReader(httpContext.Request.Body, Encoding.UTF8, leaveOpen: true);
+    var payload = await reader.ReadToEndAsync();
+    httpContext.Request.Body.Position = 0;
+    var signature = httpContext.Request.Headers["Stripe-Signature"].ToString();
+    if (string.IsNullOrWhiteSpace(signature))
+        return InvalidRequest("Stripe-Signature header is required.");
+
+    var processed = await stripeBilling.HandleWebhookAsync(payload, signature, ct);
+    return processed ? Results.Ok() : Results.Accepted();
+}).AllowAnonymous();
 
 v1.MapPost("/admin/tenants", async (AdminTenantCreateRequest request, IOrganisationStore orgStore, IUserStore userStore, IMembershipStore membershipStore, IHostEnvironment env, CancellationToken ct) =>
 {
@@ -2255,7 +2279,7 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
         return scopeCheck;
 
     var tenantContext = httpContext.GetTenantContext();
-    var exportGate = await subscriptions.CheckExportAccessAsync(tenantContext.TenantId, ct);
+    var exportGate = await subscriptions.TryConsumeExportAsync(tenantContext.TenantId, ct);
     if (!exportGate.Allowed)
         return SubscriptionProblem(exportGate);
 
@@ -2302,7 +2326,7 @@ app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore stor
         return scopeCheck;
 
     var tenantContext = httpContext.GetTenantContext();
-    var exportGate = await subscriptions.CheckExportAccessAsync(tenantContext.TenantId, ct);
+    var exportGate = await subscriptions.TryConsumeExportAsync(tenantContext.TenantId, ct);
     if (!exportGate.Allowed)
         return SubscriptionProblem(exportGate);
 
@@ -2348,7 +2372,7 @@ app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store
         return scopeCheck;
 
     var tenantContext = httpContext.GetTenantContext();
-    var exportGate = await subscriptions.CheckExportAccessAsync(tenantContext.TenantId, ct);
+    var exportGate = await subscriptions.TryConsumeExportAsync(tenantContext.TenantId, ct);
     if (!exportGate.Allowed)
         return SubscriptionProblem(exportGate);
 
@@ -2394,7 +2418,7 @@ app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store,
         return scopeCheck;
 
     var tenantContext = httpContext.GetTenantContext();
-    var exportGate = await subscriptions.CheckExportAccessAsync(tenantContext.TenantId, ct);
+    var exportGate = await subscriptions.TryConsumeExportAsync(tenantContext.TenantId, ct);
     if (!exportGate.Allowed)
         return SubscriptionProblem(exportGate);
 

@@ -41,6 +41,12 @@ public sealed class SubscriptionEnforcementService
         return new SubscriptionSnapshot(record, limits);
     }
 
+    public async Task<UsageCounterRecord> GetUsageAsync(Guid organisationId, CancellationToken ct)
+    {
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        return await _subscriptions.GetOrCreateUsageAsync(organisationId, nowUtc, ct);
+    }
+
     public async Task<RetentionWindow> GetRetentionWindowAsync(Guid organisationId, CancellationToken ct)
     {
         var snapshot = await GetSnapshotAsync(organisationId, ct);
@@ -104,7 +110,7 @@ public sealed class SubscriptionEnforcementService
         var consumed = await _subscriptions.TryConsumeAsync(
             organisationId,
             new SubscriptionUsageUpdate(0, 1, 0),
-            new SubscriptionUsageLimits(snapshot.Limits.MaxProjects, snapshot.Limits.MaxRunsPerPeriod, snapshot.Limits.MaxAiCallsPerPeriod),
+            new SubscriptionUsageLimits(snapshot.Limits.MaxProjects, snapshot.Limits.MaxRunsPerPeriod, snapshot.Limits.MaxAiCallsPerPeriod, null),
             nowUtc,
             ct);
 
@@ -148,7 +154,7 @@ public sealed class SubscriptionEnforcementService
         var consumed = await _subscriptions.TryConsumeAsync(
             organisationId,
             new SubscriptionUsageUpdate(0, 0, 1),
-            new SubscriptionUsageLimits(snapshot.Limits.MaxProjects, snapshot.Limits.MaxRunsPerPeriod, snapshot.Limits.MaxAiCallsPerPeriod),
+            new SubscriptionUsageLimits(snapshot.Limits.MaxProjects, snapshot.Limits.MaxRunsPerPeriod, snapshot.Limits.MaxAiCallsPerPeriod, null),
             nowUtc,
             ct);
 
@@ -193,6 +199,39 @@ public sealed class SubscriptionEnforcementService
 
     public async Task<SubscriptionGateResult> CheckExportAccessAsync(Guid organisationId, CancellationToken ct)
     {
-        return await CheckTeamFeatureAccessAsync(organisationId, "Export", ct);
+        var snapshot = await GetSnapshotAsync(organisationId, ct);
+        if (!snapshot.IsActive)
+        {
+            _telemetry.RecordQuotaBlock("subscription_inactive");
+            return new SubscriptionGateResult(false, "Subscription inactive", $"Organisation subscription status is {snapshot.Subscription.Status}.", StatusCodes.Status402PaymentRequired);
+        }
+
+        if (snapshot.Subscription.Plan is SubscriptionPlan.Free)
+        {
+            _telemetry.RecordQuotaBlock("export_plan_unavailable");
+            return new SubscriptionGateResult(false, "Export not available", "Export requires a Pro or Team subscription.", StatusCodes.Status403Forbidden);
+        }
+
+        return new SubscriptionGateResult(true, string.Empty, string.Empty, StatusCodes.Status200OK);
+    }
+
+    public async Task<SubscriptionGateResult> TryConsumeExportAsync(Guid organisationId, CancellationToken ct)
+    {
+        var access = await CheckExportAccessAsync(organisationId, ct);
+        if (!access.Allowed)
+            return access;
+
+        var snapshot = await GetSnapshotAsync(organisationId, ct);
+        var nowUtc = _timeProvider.GetUtcNow().UtcDateTime;
+        var consumed = await _subscriptions.TryConsumeAsync(
+            organisationId,
+            new SubscriptionUsageUpdate(0, 0, 0, 1),
+            new SubscriptionUsageLimits(snapshot.Limits.MaxProjects, snapshot.Limits.MaxRunsPerPeriod, snapshot.Limits.MaxAiCallsPerPeriod, null),
+            nowUtc,
+            ct);
+
+        return consumed is null
+            ? new SubscriptionGateResult(false, "Export quota exceeded", "Export quota exceeded for the billing period.", StatusCodes.Status402PaymentRequired)
+            : new SubscriptionGateResult(true, string.Empty, string.Empty, StatusCodes.Status200OK);
     }
 }

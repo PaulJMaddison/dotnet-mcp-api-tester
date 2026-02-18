@@ -136,21 +136,27 @@ public sealed class RunCleanupCoordinatorTests
             var plan = _plans.TryGetValue(organisationId, out var value) ? value : SubscriptionPlan.Free;
             return Task.FromResult(new SubscriptionRecord(
                 organisationId,
+                organisationId,
                 plan,
                 SubscriptionStatus.Active,
                 true,
+                null,
+                null,
                 nowUtc.AddDays(-1),
                 nowUtc.AddDays(30),
-                0,
-                0,
-                0,
                 nowUtc));
         }
 
-        public Task<SubscriptionRecord?> TryConsumeAsync(Guid organisationId, SubscriptionUsageUpdate update, SubscriptionUsageLimits limits, DateTime nowUtc, CancellationToken ct)
+        public Task<SubscriptionRecord> UpsertStripeAsync(Guid organisationId, Guid tenantId, SubscriptionPlan plan, SubscriptionStatus status, bool renews, string? stripeCustomerId, string? stripeSubscriptionId, DateTime periodStartUtc, DateTime periodEndUtc, DateTime nowUtc, CancellationToken ct)
             => throw new NotSupportedException();
 
-        public Task<SubscriptionRecord?> UpdateProjectsUsedAsync(Guid organisationId, int projectsUsed, DateTime nowUtc, CancellationToken ct)
+        public Task<UsageCounterRecord> GetOrCreateUsageAsync(Guid tenantId, DateTime nowUtc, CancellationToken ct)
+            => Task.FromResult(new UsageCounterRecord(tenantId, nowUtc.AddDays(-1), nowUtc.AddDays(30), 0, 0, 0, 0, nowUtc));
+
+        public Task<UsageCounterRecord?> TryConsumeAsync(Guid organisationId, SubscriptionUsageUpdate update, SubscriptionUsageLimits limits, DateTime nowUtc, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<UsageCounterRecord?> UpdateProjectsUsedAsync(Guid organisationId, int projectsUsed, DateTime nowUtc, CancellationToken ct)
             => throw new NotSupportedException();
     }
 

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -10,6 +11,7 @@ using ApiTester.Web.Contracts;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.Security.Cryptography;
 
 namespace ApiTester.Web.IntegrationTests;
 
@@ -39,22 +41,9 @@ public sealed class BillingEnforcementEndpointsTests
         Assert.NotNull(usage);
         Assert.Equal(0, usage!.Usage.RunsUsed);
         Assert.Equal(0, usage.Usage.AiCallsUsed);
+        Assert.Equal(0, usage.Usage.ExportsUsed);
     }
 
-    [Fact]
-    public async Task UpgradeIntent_ReturnsStubInstructions()
-    {
-        using var factory = new ApiTesterWebFactory();
-        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
-
-        var response = await client.PostAsJsonAsync("/api/v1/billing/upgrade-intent", new UpgradeIntentRequest("Team"));
-        var payload = await response.Content.ReadFromJsonAsync<UpgradeIntentResponse>();
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(payload);
-        Assert.Contains("Team", payload!.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("billing@apitester.ai", payload.ContactEmail);
-    }
 
     [Fact]
     public async Task CreateProject_ReturnsPaymentRequired_WhenFreeProjectQuotaExceeded()
@@ -159,6 +148,56 @@ public sealed class BillingEnforcementEndpointsTests
         Assert.Equal("Audit log not available", problem!.Title);
     }
 
+
+    [Fact]
+    public async Task BillingWebhook_IsIdempotent_WhenSameEventPostedTwice()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var client = factory.CreateClient();
+
+        const string payload = """
+        {
+          "id":"evt_test_duplicate",
+          "object":"event",
+          "type":"customer.subscription.updated",
+          "data":{
+            "object":{
+              "id":"sub_test_1",
+              "object":"subscription",
+              "customer":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "status":"active",
+              "cancel_at_period_end":false,
+              "current_period_start":1735689600,
+              "current_period_end":1738368000,
+              "items":{"data":[{"price":{"id":"price_pro","lookup_key":"pro"}}]},
+              "metadata":{"tenantId":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}
+            }
+          }
+        }
+        """;
+
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var signature = CreateStripeSignatureHeader(timestamp, payload, "whsec_test_secret");
+
+        var firstRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/billing/webhook")
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        };
+        firstRequest.Headers.Add("Stripe-Signature", signature);
+
+        var secondRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/billing/webhook")
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json")
+        };
+        secondRequest.Headers.Add("Stripe-Signature", signature);
+
+        var first = await client.SendAsync(firstRequest);
+        var second = await client.SendAsync(secondRequest);
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, second.StatusCode);
+    }
+
     private static HttpClient CreateClient(WebApplicationFactory<Program> factory, string apiKey)
     {
         var client = factory.CreateClient();
@@ -172,7 +211,7 @@ public sealed class BillingEnforcementEndpointsTests
         var subscriptions = scope.ServiceProvider.GetRequiredService<ISubscriptionStore>();
         await subscriptions.TryConsumeAsync(
             ApiTesterWebFactory.OrganisationAlphaId,
-            new SubscriptionUsageUpdate(0, runsDelta, aiCallsDelta),
+            new SubscriptionUsageUpdate(0, runsDelta, aiCallsDelta, 0),
             new SubscriptionUsageLimits(int.MaxValue, int.MaxValue, int.MaxValue),
             DateTime.UtcNow,
             CancellationToken.None);
@@ -261,6 +300,15 @@ public sealed class BillingEnforcementEndpointsTests
         db.TestRuns.Add(run);
         await db.SaveChangesAsync();
         return run;
+    }
+
+
+    private static string CreateStripeSignatureHeader(long timestamp, string payload, string secret)
+    {
+        var signed = $"{timestamp}.{payload}";
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
+        var digest = Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(signed))).ToLowerInvariant();
+        return $"t={timestamp},v1={digest}";
     }
 
     private sealed record ProblemDetailsResponse(string? Title, string? Detail, int? Status);
