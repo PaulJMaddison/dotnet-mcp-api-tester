@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,10 @@ public sealed class SiteWebApplicationFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        builder.UseSetting("Auth:Authority", "https://example.test");
+        builder.UseSetting("Auth:ClientId", "test-client");
+        builder.UseSetting("Auth:ClientSecret", "test-secret");
+
         builder.ConfigureAppConfiguration((_, config) =>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
@@ -34,6 +39,8 @@ public sealed class SiteWebApplicationFactory : WebApplicationFactory<Program>
                 options.DefaultChallengeScheme = TestAuthHandler.SchemeName;
                 options.DefaultScheme = TestAuthHandler.SchemeName;
             }).AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(TestAuthHandler.SchemeName, _ => { });
+
+            services.AddScoped<AuthenticationStateProvider, HttpContextAuthenticationStateProvider>();
         });
     }
 }
@@ -75,5 +82,22 @@ internal sealed class TestAuthHandler : AuthenticationHandler<AuthenticationSche
         Response.StatusCode = StatusCodes.Status302Found;
         Response.Headers.Location = "/signin";
         return Task.CompletedTask;
+    }
+}
+
+
+internal sealed class HttpContextAuthenticationStateProvider : AuthenticationStateProvider
+{
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    public HttpContextAuthenticationStateProvider(IHttpContextAccessor httpContextAccessor)
+    {
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    public override Task<AuthenticationState> GetAuthenticationStateAsync()
+    {
+        var user = _httpContextAccessor.HttpContext?.User ?? new ClaimsPrincipal(new ClaimsIdentity());
+        return Task.FromResult(new AuthenticationState(user));
     }
 }

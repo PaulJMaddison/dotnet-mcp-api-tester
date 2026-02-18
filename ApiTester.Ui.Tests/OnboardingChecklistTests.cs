@@ -142,11 +142,14 @@ public class OnboardingChecklistTests
     {
         var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
+            builder.UseSetting("Auth:ApiKey", ApiKey);
+            builder.UseSetting("Auth:ApiKeys:0", ApiKey);
             builder.ConfigureAppConfiguration((_, config) =>
             {
                 var settings = new Dictionary<string, string?>
                 {
-                    ["Auth:ApiKey"] = ApiKey
+                    ["Auth:ApiKey"] = ApiKey,
+                    ["Auth:ApiKeys:0"] = ApiKey
                 };
                 config.AddInMemoryCollection(settings);
             });

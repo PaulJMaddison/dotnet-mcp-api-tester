@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 
 namespace ApiTester.Web.AI;
@@ -47,7 +48,8 @@ public static class AiDocsSchemas
 
     public static AiDocsPayload ParseDocs(string json)
     {
-        using var doc = JsonDocument.Parse(json);
+        var normalizedJson = NormalizeJson(json);
+        using var doc = JsonDocument.Parse(normalizedJson);
         var root = doc.RootElement;
         if (root.ValueKind != JsonValueKind.Object)
             throw new AiSchemaValidationException("AI response must be a JSON object.");
@@ -89,6 +91,98 @@ public static class AiDocsSchemas
         }
 
         return new AiDocsPayload(title, summary, sections);
+    }
+
+    private static string NormalizeJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return json;
+
+        var trimmed = json.Trim();
+        var firstObject = TryExtractFirstJsonObject(trimmed);
+        if (!string.IsNullOrWhiteSpace(firstObject))
+            trimmed = firstObject;
+
+        var builder = new StringBuilder(trimmed.Length);
+        var inString = false;
+        var escaped = false;
+
+        foreach (var ch in trimmed)
+        {
+            if (inString && (ch == '\n' || ch == '\r'))
+            {
+                builder.Append("\\n");
+                escaped = false;
+                continue;
+            }
+
+            builder.Append(ch);
+
+            if (escaped)
+            {
+                escaped = false;
+                continue;
+            }
+
+            if (ch == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+
+            if (ch == '"')
+                inString = !inString;
+        }
+
+        return builder.ToString();
+    }
+
+    private static string? TryExtractFirstJsonObject(string input)
+    {
+        var start = input.IndexOf('{');
+        if (start < 0)
+            return null;
+
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+
+        for (var i = start; i < input.Length; i++)
+        {
+            var ch = input[i];
+
+            if (escaped)
+            {
+                escaped = false;
+                continue;
+            }
+
+            if (ch == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                inString = !inString;
+                continue;
+            }
+
+            if (inString)
+                continue;
+
+            if (ch == '{')
+                depth++;
+            else if (ch == '}')
+            {
+                depth--;
+                if (depth == 0)
+                    return input[start..(i + 1)];
+            }
+        }
+
+        return null;
     }
 
     private static string RequireString(JsonElement element, string propertyName)

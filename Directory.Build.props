@@ -8,4 +8,8 @@
     <InformationalVersion Condition="'$(SourceRevisionId)' != ''">$(VersionPrefix)+sha.$(SourceRevisionId)</InformationalVersion>
     <InformationalVersion Condition="'$(SourceRevisionId)' == ''">$(VersionPrefix)</InformationalVersion>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
+    <VSTestTestCaseFilter Condition="'$(VSTestTestCaseFilter)' == ''">Category!=E2E</VSTestTestCaseFilter>
+  </PropertyGroup>
 </Project>

@@ -8,12 +8,15 @@ namespace ApiTester.Site.Tests;
 public sealed class DevAuthBypassTests
 {
     [Fact]
-    public async Task Development_WithDevBypassEnabled_AllowsAppRouteWithoutAuth()
+    public async Task Development_WithDevBypassEnabled_ReturnsUnauthorizedWithoutSession()
     {
-        using var baseFactory = new SiteWebApplicationFactory();
-        using var factory = baseFactory.WithWebHostBuilder(builder =>
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Development");
+            builder.UseSetting("Auth:Authority", string.Empty);
+            builder.UseSetting("Auth:ClientId", string.Empty);
+            builder.UseSetting("Auth:ClientSecret", string.Empty);
+            builder.UseSetting("Auth:DevBypass", "true");
             builder.ConfigureAppConfiguration((_, config) =>
             {
                 config.AddInMemoryCollection(new Dictionary<string, string?>
@@ -31,8 +34,9 @@ public sealed class DevAuthBypassTests
             AllowAutoRedirect = false
         });
 
-        var response = await client.GetAsync("/app/projects");
+        var response = await client.GetAsync("/signin");
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/app", response.Headers.Location?.OriginalString);
     }
 }

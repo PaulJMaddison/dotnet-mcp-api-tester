@@ -11,6 +11,10 @@ public sealed class BillingConfigurationTests
         using var baseFactory = new ApiTesterWebFactory();
         using var factory = baseFactory.WithWebHostBuilder(builder =>
         {
+            builder.UseSetting("Stripe:SecretKey", string.Empty);
+            builder.UseSetting("Stripe:WebhookSecret", string.Empty);
+            builder.UseSetting("Stripe:ProPriceId", string.Empty);
+            builder.UseSetting("Stripe:TeamPriceId", string.Empty);
             builder.ConfigureAppConfiguration((_, config) =>
             {
                 config.AddInMemoryCollection(new Dictionary<string, string?>
