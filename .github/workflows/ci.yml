@@ -4,48 +4,31 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-test:
+  release-quality:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-          cache: true
-          cache-dependency-path: |
-            **/*.csproj
-            **/*.sln
-
       - name: Restore
-        run: dotnet restore DotnetMcpApiTester.sln
-
-      - name: Build
-        run: dotnet build DotnetMcpApiTester.sln -c Release --no-restore
-
-      - name: Test
-        run: dotnet test DotnetMcpApiTester.sln -c Release --no-build --logger "trx;LogFileName=test-results.trx" --results-directory ./artifacts/test-results
-        run: dotnet test -c Release --no-build --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults
-
-      - name: Upload test results
+        run: dotnet restore
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore
+      - name: Test (Release)
+        run: dotnet test -c Release --no-build --logger trx
+      - name: Upload trx artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results-trx
-          path: artifacts/test-results/**/*.trx
-
-      - name: Build Docker image (ApiTester.Web)
+          path: '**/*.trx'
+      - name: Docker build Web
         run: docker build -f ApiTester.Web/Dockerfile -t apitester-web:ci .
-
-      - name: Build Docker image (ApiTester.Site)
-          name: dotnet-test-trx
-          path: TestResults/**/*.trx
-
-      - name: Build ApiTester.Web image
-        run: docker build -f ApiTester.Web/Dockerfile -t apitester-web:ci .
-
-      - name: Build ApiTester.Site image
+      - name: Docker build Site
         run: docker build -f ApiTester.Site/Dockerfile -t apitester-site:ci .
+      - name: Docker build FixtureApi (if present)
+        run: |
+          if [ -f ApiTester.SmokeApi/Dockerfile ]; then
+            docker build -f ApiTester.SmokeApi/Dockerfile -t apitester-smokeapi:ci .
+          fi

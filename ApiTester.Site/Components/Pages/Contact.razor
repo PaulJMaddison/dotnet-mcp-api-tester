@@ -48,26 +48,26 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label" for="firstName">First name</label>
-                            <InputText id="firstName" class="form-control" @bind-Value="LeadCapture.FirstName" placeholder="Avery" />
+                            <InputText id="firstName" class="form-control" @bind-Value="LeadCapture.FirstName" data-hint="Avery" />
                             <ValidationMessage For="() => LeadCapture.FirstName" class="text-danger" />
                         </div>
                         <div class="col-md-6">
                             <label class="form-label" for="lastName">Last name</label>
-                            <InputText id="lastName" class="form-control" @bind-Value="LeadCapture.LastName" placeholder="Jordan" />
+                            <InputText id="lastName" class="form-control" @bind-Value="LeadCapture.LastName" data-hint="Jordan" />
                             <ValidationMessage For="() => LeadCapture.LastName" class="text-danger" />
                         </div>
                         <div class="col-md-6">
                             <label class="form-label" for="email">Work email</label>
-                            <InputText id="email" type="email" class="form-control" @bind-Value="LeadCapture.Email" placeholder="avery@company.com" />
+                            <InputText id="email" type="email" class="form-control" @bind-Value="LeadCapture.Email" data-hint="avery@company.com" />
                             <ValidationMessage For="() => LeadCapture.Email" class="text-danger" />
                         </div>
                         <div class="col-md-6">
                             <label class="form-label" for="company">Company</label>
-                            <InputText id="company" class="form-control" @bind-Value="LeadCapture.Company" placeholder="Northwind" />
+                            <InputText id="company" class="form-control" @bind-Value="LeadCapture.Company" data-hint="Northwind" />
                         </div>
                         <div class="col-12">
                             <label class="form-label" for="message">What would you like to achieve?</label>
-                            <InputTextArea id="message" class="form-control" @bind-Value="LeadCapture.Message" rows="4" placeholder="We want to consolidate API testing across environments and improve release confidence." />
+                            <InputTextArea id="message" class="form-control" @bind-Value="LeadCapture.Message" rows="4" data-hint="We want to consolidate API testing across environments and improve release confidence." />
                             <ValidationMessage For="() => LeadCapture.Message" class="text-danger" />
                         </div>
                         <div class="visually-hidden">

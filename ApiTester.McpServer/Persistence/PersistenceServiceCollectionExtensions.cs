@@ -15,7 +15,8 @@ public static class PersistenceServiceCollectionExtensions
         var selection = PersistenceProviderSelector.Select(options);
 
         services.Configure<PersistenceOptions>(configuration.GetSection("Persistence"));
-        services.AddSingleton<RedactionService>();
+        services.AddSingleton<IRedactor, RedactionService>();
+        services.AddSingleton<RedactionService>(sp => (RedactionService)sp.GetRequiredService<IRedactor>());
 
         services.AddSingleton<FileTestRunStore>();
         services.AddSingleton<FileProjectStore>();
@@ -52,7 +53,7 @@ public static class PersistenceServiceCollectionExtensions
                 if (selection.Provider == PersistenceProvider.SqlServer)
                     opt.UseSqlServer(selection.ConnectionString);
                 else if (selection.Provider == PersistenceProvider.PostgreSql)
-                    opt.UseNpgsql(selection.ConnectionString);
+                    throw new InvalidOperationException("PostgreSQL provider requires Npgsql packages to be restored before startup.");
             });
 
             services.AddScoped<SqlOpenApiSpecStore>();

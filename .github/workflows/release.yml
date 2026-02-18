@@ -1,0 +1,29 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore
+      - name: Publish Web
+        run: dotnet publish ApiTester.Web/ApiTester.Web.csproj -c Release -o artifacts/web
+      - name: Publish Site
+        run: dotnet publish ApiTester.Site/ApiTester.Site.csproj -c Release -o artifacts/site
+      - name: Publish FixtureApi (if present)
+        run: |
+          if [ -f ApiTester.SmokeApi/ApiTester.SmokeApi.csproj ]; then
+            dotnet publish ApiTester.SmokeApi/ApiTester.SmokeApi.csproj -c Release -o artifacts/fixture-api
+          fi
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: artifacts/
