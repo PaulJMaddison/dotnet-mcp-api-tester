@@ -27,6 +27,7 @@ using ApiTester.Web.AbuseProtection;
 using ApiTester.Web.Jobs;
 using ApiTester.AI;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Readers;
@@ -246,6 +247,18 @@ app.MapGet("/health", (IHostEnvironment env, IOptions<PersistenceOptions> option
 });
 
 app.MapGet("/api/version", () => Results.Ok(new VersionResponse(appVersion)));
+
+using (var scope = app.Services.CreateScope())
+{
+    var persistenceOptions = scope.ServiceProvider.GetRequiredService<IOptions<PersistenceOptions>>().Value;
+    var selection = PersistenceProviderSelector.Select(persistenceOptions);
+
+    if (selection.UseSqlProvider)
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApiTesterDbContext>();
+        dbContext.Database.Migrate();
+    }
+}
 
 var v1 = app.MapGroup("/api/v1");
 

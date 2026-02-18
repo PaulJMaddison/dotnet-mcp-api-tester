@@ -5,12 +5,14 @@ namespace ApiTester.McpServer.Persistence;
 public enum PersistenceProvider
 {
     File,
-    SqlServer
+    SqlServer,
+    PostgreSql
 }
 
 public sealed record PersistenceSelection(PersistenceProvider Provider, string ConnectionString)
 {
-    public bool UseSqlProvider => Provider == PersistenceProvider.SqlServer && !string.IsNullOrWhiteSpace(ConnectionString);
+    public bool UseSqlProvider => Provider is PersistenceProvider.SqlServer or PersistenceProvider.PostgreSql
+        && !string.IsNullOrWhiteSpace(ConnectionString);
 }
 
 public static class PersistenceProviderSelector
@@ -27,6 +29,12 @@ public static class PersistenceProviderSelector
             return string.IsNullOrWhiteSpace(connectionString)
                 ? new PersistenceSelection(PersistenceProvider.File, string.Empty)
                 : new PersistenceSelection(PersistenceProvider.SqlServer, connectionString);
+
+        if (provider.Equals("PostgreSql", StringComparison.OrdinalIgnoreCase)
+            || provider.Equals("Postgres", StringComparison.OrdinalIgnoreCase))
+            return string.IsNullOrWhiteSpace(connectionString)
+                ? new PersistenceSelection(PersistenceProvider.File, string.Empty)
+                : new PersistenceSelection(PersistenceProvider.PostgreSql, connectionString);
 
         return new PersistenceSelection(PersistenceProvider.File, string.Empty);
     }

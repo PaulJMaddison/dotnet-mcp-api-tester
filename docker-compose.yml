@@ -1,0 +1,87 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: apitester-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: apitester
+      POSTGRES_USER: apitester
+      POSTGRES_PASSWORD: apitester
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - apitester
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apitester -d apitester"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: ApiTester.Web/Dockerfile
+    container_name: apitester-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      Persistence__Provider: PostgreSql
+      Persistence__ConnectionString: Host=db;Port=5432;Database=apitester;Username=apitester;Password=apitester
+      Auth__ApiKeys__0: dev-api-key
+      AI__OpenAI__ApiKey: ""
+    ports:
+      - "8080:8080"
+    networks:
+      - apitester
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  site:
+    build:
+      context: .
+      dockerfile: ApiTester.Site/Dockerfile
+    container_name: apitester-site
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8081
+      ApiTesterWeb__BaseUrl: http://web:8080
+      ApiTesterWeb__ApiKey: dev-api-key
+      ConnectionStrings__LeadCapture: Data Source=/app/data/leads.db
+      ConnectionStrings__Identity: Data Source=/app/data/identity.db
+      Auth__Authority: ""
+      Auth__ClientId: ""
+      Auth__ClientSecret: ""
+      Auth__CallbackPath: /signin-oidc
+    ports:
+      - "8081:8081"
+    volumes:
+      - site_data:/app/data
+    networks:
+      - apitester
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:8081/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+networks:
+  apitester:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  site_data:
