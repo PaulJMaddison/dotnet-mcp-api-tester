@@ -27,6 +27,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ApiTester.Web\ApiTester.Web.csproj" />
     <ProjectReference Include="..\ApiTester.McpServer\ApiTester.McpServer.csproj" />
+    <ProjectReference Include="..\ApiTester.Cli\ApiTester.Cli.csproj" />
   </ItemGroup>
 
   <ItemGroup>

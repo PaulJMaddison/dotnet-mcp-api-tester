@@ -87,6 +87,8 @@ public sealed class TestCaseResult
 
     public bool Pass { get; init; }
     public string? FailureReason { get; init; }
+    public object? FailureDetails { get; init; }
+    public string? ValidationUnavailableReason { get; init; }
 
     public string? ResponseSnippet { get; init; }
 

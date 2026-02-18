@@ -53,6 +53,8 @@ public sealed class TestCaseResult
 
     public bool Pass { get; init; }
     public string? FailureReason { get; init; }
+    public object? FailureDetails { get; init; }
+    public string? ValidationUnavailableReason { get; init; }
 
     public string? ResponseSnippet { get; init; }
 
@@ -60,4 +62,9 @@ public sealed class TestCaseResult
     public string? FlakeReasonCategory { get; set; }
 
     public ResultClassification Classification { get; set; }
+}
+
+public static class FailureReasons
+{
+    public const string ContractViolation = "ContractViolation";
 }

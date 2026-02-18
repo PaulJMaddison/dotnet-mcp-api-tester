@@ -84,6 +84,8 @@ public sealed class SqlTestRunStore : ITestRunStore
                 DurationMs = r.DurationMs,
                 Pass = r.Pass,
                 FailureReason = r.FailureReason,
+                FailureDetailsJson = r.FailureDetails is null ? null : JsonSerializer.Serialize(r.FailureDetails, JsonDefaults.Default),
+                ValidationUnavailableReason = r.ValidationUnavailableReason,
                 ResponseSnippet = r.ResponseSnippet,
                 IsFlaky = r.IsFlaky,
                 FlakeReasonCategory = r.FlakeReasonCategory,
@@ -120,6 +122,8 @@ public sealed class SqlTestRunStore : ITestRunStore
                 DurationMs = r.DurationMs,
                 Pass = r.Pass,
                 FailureReason = r.FailureReason,
+                FailureDetails = DeserializeFailureDetails(r.FailureDetailsJson),
+                ValidationUnavailableReason = r.ValidationUnavailableReason,
                 ResponseSnippet = r.ResponseSnippet,
                 IsFlaky = r.IsFlaky,
                 FlakeReasonCategory = r.FlakeReasonCategory,
@@ -245,6 +249,8 @@ public sealed class SqlTestRunStore : ITestRunStore
                     DurationMs = r.DurationMs,
                     Pass = r.Pass,
                     FailureReason = r.FailureReason,
+                    FailureDetails = DeserializeFailureDetails(r.FailureDetailsJson),
+                    ValidationUnavailableReason = r.ValidationUnavailableReason,
                     ResponseSnippet = r.ResponseSnippet,
                     IsFlaky = r.IsFlaky,
                     FlakeReasonCategory = r.FlakeReasonCategory,
@@ -357,6 +363,14 @@ public sealed class SqlTestRunStore : ITestRunStore
         _db.Projects.Add(created);
         await _db.SaveChangesAsync();
         return created;
+    }
+
+    private static object? DeserializeFailureDetails(string? failureDetailsJson)
+    {
+        if (string.IsNullOrWhiteSpace(failureDetailsJson))
+            return null;
+
+        return JsonSerializer.Deserialize<object>(failureDetailsJson, JsonDefaults.Default);
     }
 
     private static Guid NormalizeTenantId(Guid tenantId)

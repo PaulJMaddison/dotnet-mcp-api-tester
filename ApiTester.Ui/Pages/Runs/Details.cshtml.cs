@@ -66,6 +66,28 @@ public class DetailsModel : PageModel
         return Page();
     }
 
+    public async Task<IActionResult> OnPostDownloadEvidencePackAsync(Guid runId)
+    {
+        var response = await _apiTesterWebClient.DownloadEvidencePackAsync(runId, HttpContext.RequestAborted);
+        if (response.StatusCode == HttpStatusCode.Forbidden || response.StatusCode == HttpStatusCode.PaymentRequired)
+        {
+            ErrorMessage = "Evidence pack export is not available for the current plan.";
+            await LoadPageAsync(runId);
+            return Page();
+        }
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            NotFound = true;
+            await LoadPageAsync(runId);
+            return Page();
+        }
+
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadAsByteArrayAsync(HttpContext.RequestAborted);
+        return File(payload, "application/zip", $"{runId}-evidence-pack.zip");
+    }
+
     private async Task<IActionResult> LoadPageAsync(Guid runId)
     {
         try

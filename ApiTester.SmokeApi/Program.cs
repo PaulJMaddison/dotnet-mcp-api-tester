@@ -1,42 +1,26 @@
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-var summaries = new[]
+app.MapGet("/api/pets", () => Results.Ok(new
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    pets = new[]
+    {
+        new { id = 1, name = "Milo", species = "cat" },
+        new { id = 2, name = "Rex", species = "dog" }
+    }
+}));
 
-app.MapGet("/weatherforecast", () =>
+app.MapGet("/api/pets/{id:int}", (int id) =>
 {
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
+    if (id == 1)
+        return Results.Ok(new { id = 1, name = "Milo", species = "cat" });
+    if (id == 2)
+        return Results.Ok(new { id = 2, name = "Rex", species = "dog" });
+
+    return Results.NotFound(new { message = "pet not found" });
+});
 
 app.Run();
-
-internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

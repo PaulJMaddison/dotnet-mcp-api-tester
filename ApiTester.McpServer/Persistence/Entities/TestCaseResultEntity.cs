@@ -21,6 +21,8 @@ public sealed class TestCaseResultEntity
 
     public bool Pass { get; set; }
     public string? FailureReason { get; set; }
+    public string? FailureDetailsJson { get; set; }
+    public string? ValidationUnavailableReason { get; set; }
     public string? ResponseSnippet { get; set; }
 
     public bool IsFlaky { get; set; }

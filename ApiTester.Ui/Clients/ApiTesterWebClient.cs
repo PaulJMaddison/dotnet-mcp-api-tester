@@ -77,6 +77,9 @@ public sealed class ApiTesterWebClient
         return run;
     }
 
+    public async Task<HttpResponseMessage> DownloadEvidencePackAsync(Guid runId, CancellationToken ct = default)
+        => await _httpClient.GetAsync($"/api/v1/runs/{runId}/evidence-pack", ct);
+
     public async Task<OpenApiSpecMetadataDto?> GetOpenApiSpec(Guid projectId, CancellationToken ct = default)
     {
         var response = await _httpClient.GetAsync($"/api/projects/{projectId}/openapi", ct);
@@ -363,6 +366,8 @@ public sealed record TestCaseResult(
     long DurationMs,
     bool Pass,
     string? FailureReason,
+    object? FailureDetails,
+    string? ValidationUnavailableReason,
     string? ResponseSnippet,
     bool IsFlaky,
     string? FlakeReasonCategory,

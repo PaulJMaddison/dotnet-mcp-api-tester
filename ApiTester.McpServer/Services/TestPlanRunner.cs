@@ -4,7 +4,6 @@ using System.Text;
 using System.Text.Json;
 using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
-using ApiTester.McpServer.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 
@@ -329,11 +328,25 @@ public sealed class TestPlanRunner
             var expected = tc.ExpectedStatusCodes.Count > 0 ? tc.ExpectedStatusCodes : new List<int> { 200 };
             var pass = expected.Contains(status);
             var failureReason = pass ? null : $"Expected [{string.Join(", ", expected)}] but got {status}.";
+            object? failureDetails = null;
+            string? validationUnavailableReason = null;
 
             if (pass && policySnapshot.ValidateSchema)
             {
-                failureReason = ValidateContract(plan, resp, bodyBytes, status);
-                pass = failureReason is null;
+                var contractValidation = ValidateContract(plan, resp, bodyBytes, status);
+                if (contractValidation is not null)
+                {
+                    if (contractValidation.IsViolation)
+                    {
+                        pass = false;
+                        failureReason = FailureReasons.ContractViolation;
+                        failureDetails = contractValidation.Details;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(contractValidation.UnavailableReason))
+                    {
+                        validationUnavailableReason = contractValidation.UnavailableReason;
+                    }
+                }
             }
 
             return new TestCaseResult
@@ -346,6 +359,8 @@ public sealed class TestPlanRunner
                 DurationMs = sw.ElapsedMilliseconds,
                 Pass = pass,
                 FailureReason = failureReason,
+                FailureDetails = failureDetails,
+                ValidationUnavailableReason = validationUnavailableReason,
                 ResponseSnippet = snippet
             };
         }
@@ -412,29 +427,29 @@ public sealed class TestPlanRunner
         }
     }
 
-    private string? ValidateContract(TestPlan plan, HttpResponseMessage response, byte[] bodyBytes, int statusCode)
+    private ContractValidationResult? ValidateContract(TestPlan plan, HttpResponseMessage response, byte[] bodyBytes, int statusCode)
     {
         var doc = _store.Document;
         if (doc is null)
-            return null;
+            return ContractValidationResult.Unavailable("No OpenAPI document loaded.");
 
         var operation = ResolveOperation(plan, doc);
         if (operation is null)
-            return null;
+            return ContractValidationResult.Unavailable($"Operation '{plan.OperationId}' was not found in OpenAPI document.");
 
         if (!TryGetResponse(operation, statusCode, out var expectedResponse) || expectedResponse is null)
-            return null;
+            return ContractValidationResult.Unavailable($"No OpenAPI response schema matched status code {statusCode}.");
 
         if (expectedResponse.Content is null || expectedResponse.Content.Count == 0)
-            return null;
+            return ContractValidationResult.Unavailable("OpenAPI response does not define content schemas.");
 
         var actualContentType = response.Content?.Headers.ContentType?.MediaType;
         if (string.IsNullOrWhiteSpace(actualContentType))
         {
-            return BuildContractFailure(
+            return ContractValidationResult.Violation(BuildContractFailure(
                 "content_type_missing",
                 "Response content type was missing but schema defines response content.",
-                new { expected = expectedResponse.Content.Keys.ToArray(), status = statusCode });
+                new { expected = expectedResponse.Content.Keys.ToArray(), status = statusCode }));
         }
 
         var matchedContentType = expectedResponse.Content.Keys
@@ -442,21 +457,21 @@ public sealed class TestPlanRunner
 
         if (matchedContentType is null)
         {
-            return BuildContractFailure(
+            return ContractValidationResult.Violation(BuildContractFailure(
                 "content_type_mismatch",
                 "Response content type did not match OpenAPI schema.",
-                new { expected = expectedResponse.Content.Keys.ToArray(), actual = actualContentType, status = statusCode });
+                new { expected = expectedResponse.Content.Keys.ToArray(), actual = actualContentType, status = statusCode }));
         }
 
-        if (!IsJsonContentType(actualContentType) && !IsJsonContentType(matchedContentType))
-            return null;
+        if (!IsJsonContentType(matchedContentType))
+            return ContractValidationResult.Unavailable($"Schema validation is only supported for application/json content. Matched '{matchedContentType}'.");
 
         var schema = ResolveSchema(doc, expectedResponse.Content[matchedContentType].Schema);
         if (schema is null)
-            return null;
+            return ContractValidationResult.Unavailable("OpenAPI response schema was not available.");
 
         if (bodyBytes.Length == 0)
-            return null;
+            return ContractValidationResult.Unavailable("Response body was empty, skipping JSON schema validation.");
 
         JsonDocument docBody;
         try
@@ -465,10 +480,10 @@ public sealed class TestPlanRunner
         }
         catch (JsonException ex)
         {
-            return BuildContractFailure(
+            return ContractValidationResult.Violation(BuildContractFailure(
                 "invalid_json",
                 "Response body was not valid JSON.",
-                new { error = ex.Message, status = statusCode, contentType = actualContentType });
+                new { error = ex.Message, status = statusCode, contentType = actualContentType }));
         }
 
         using (docBody)
@@ -478,10 +493,10 @@ public sealed class TestPlanRunner
 
             if (errors.Count > 0)
             {
-                return BuildContractFailure(
+                return ContractValidationResult.Violation(BuildContractFailure(
                     "schema_mismatch",
                     "Response body did not match OpenAPI schema.",
-                    new { errors, status = statusCode, contentType = actualContentType });
+                    new { errors, status = statusCode, contentType = actualContentType }));
             }
         }
 
@@ -649,10 +664,13 @@ public sealed class TestPlanRunner
         }
     }
 
-    private static string BuildContractFailure(string type, string message, object? details)
+    private static ContractFailureReason BuildContractFailure(string type, string message, object? details)
+        => new("contract", type, message, details);
+
+    private sealed record ContractValidationResult(bool IsViolation, ContractFailureReason? Details, string? UnavailableReason)
     {
-        var failure = new ContractFailureReason("contract", type, message, details);
-        return JsonSerializer.Serialize(failure, JsonDefaults.Default);
+        public static ContractValidationResult Violation(ContractFailureReason details) => new(true, details, null);
+        public static ContractValidationResult Unavailable(string reason) => new(false, null, reason);
     }
 
     private async Task<string?> PolicyBlockReasonAsync(Uri uri, string method, string baseUrl, ApiExecutionPolicySnapshot policySnapshot, CancellationToken ct)

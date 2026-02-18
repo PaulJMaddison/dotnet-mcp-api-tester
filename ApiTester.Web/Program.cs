@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http;
-using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -421,10 +420,13 @@ v1.MapGet("/billing/usage", async (IProjectStore projectStore, SubscriptionEnfor
     return Results.Ok(response);
 });
 
-v1.MapPost("/billing/checkout", async (BillingCheckoutRequest request, StripeBillingService stripeBilling, HttpContext httpContext, CancellationToken ct) =>
+v1.MapPost("/billing/checkout", async (BillingCheckoutRequest request, StripeBillingService stripeBilling, IOptions<StripeBillingOptions> stripeOptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!stripeBillingConfigured)
         return BillingNotConfigured();
+    if (!stripeOptions.Value.BillingEnabled)
+        return BillingNotConfigured();
+
     var desired = (request?.Plan ?? string.Empty).Trim();
     if (string.IsNullOrWhiteSpace(desired))
         return InvalidRequest("plan is required.");
@@ -434,19 +436,25 @@ v1.MapPost("/billing/checkout", async (BillingCheckoutRequest request, StripeBil
     return Results.Ok(new BillingCheckoutResponse(url));
 });
 
-v1.MapPost("/billing/portal", async (StripeBillingService stripeBilling, HttpContext httpContext, CancellationToken ct) =>
+v1.MapPost("/billing/portal", async (StripeBillingService stripeBilling, IOptions<StripeBillingOptions> stripeOptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!stripeBillingConfigured)
         return BillingNotConfigured();
+    if (!stripeOptions.Value.BillingEnabled)
+        return BillingNotConfigured();
+
     var tenantContext = httpContext.GetTenantContext();
     var url = await stripeBilling.CreatePortalSessionAsync(tenantContext.TenantId, ct);
     return Results.Ok(new BillingPortalResponse(url));
 });
 
-v1.MapPost("/billing/webhook", async (HttpContext httpContext, StripeBillingService stripeBilling, CancellationToken ct) =>
+v1.MapPost("/billing/webhook", async (HttpContext httpContext, StripeBillingService stripeBilling, IOptions<StripeBillingOptions> stripeOptions, CancellationToken ct) =>
 {
     if (!stripeBillingConfigured)
         return BillingNotConfigured();
+    if (!stripeOptions.Value.WebhookEnabled)
+        return BillingNotConfigured();
+
     httpContext.Request.EnableBuffering();
     using var reader = new StreamReader(httpContext.Request.Body, Encoding.UTF8, leaveOpen: true);
     var payload = await reader.ReadToEndAsync();
@@ -2481,7 +2489,7 @@ app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store,
     return Results.Text(payload, "text/csv; charset=utf-8");
 });
 
-app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, IConfiguration configuration, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
@@ -2505,18 +2513,68 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
         return retentionResult;
 
     var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
-    var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
-    var runJson = RunExportGenerator.GenerateJson(redactedRun, jsonOptions);
-    var policyJson = JsonSerializer.Serialize(new
-    {
-        redactedRun.RunId,
-        redactedRun.PolicySnapshot
-    }, jsonOptions);
-
     var auditEvents = await auditStore.ListAsync(tenantContext.TenantId, 200, null, null, null, ct);
     var auditSubset = auditEvents
         .Where(evt => string.Equals(evt.TargetType, "run", StringComparison.OrdinalIgnoreCase) &&
-                      string.Equals(evt.TargetId, redactedRun.RunId.ToString(), StringComparison.OrdinalIgnoreCase))
+                      string.Equals(evt.TargetId, run.RunId.ToString(), StringComparison.OrdinalIgnoreCase))
+        .Take(100)
+        .ToList();
+    var evidencePackBytes = EvidencePackBuilder.BuildZip(
+        run,
+        org,
+        auditSubset,
+        redactionService,
+        jsonOptions,
+        DateTime.UtcNow,
+        configuration["Security:EvidenceSigningKey"]);
+
+    var exportMetadata = JsonSerializer.Serialize(new
+    {
+        Format = "evidence-bundle"
+    });
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        tenantContext.TenantId,
+        orgContext.UserId,
+        AuditActions.ExportGenerated,
+        "run",
+        run.RunId.ToString(),
+        DateTime.UtcNow,
+        exportMetadata), ct);
+
+    RecordExportGenerated(httpContext, "evidence-bundle");
+    return Results.File(evidencePackBytes, "application/zip", $"{run.RunId}-evidence.zip");
+});
+
+app.MapGet("/api/v1/runs/{runId}/evidence-pack", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, IConfiguration configuration, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var tenantContext = httpContext.GetTenantContext();
+    var exportGate = await subscriptions.CheckTeamFeatureAccessAsync(tenantContext.TenantId, "Evidence pack export", ct);
+    if (!exportGate.Allowed)
+        return SubscriptionProblem(exportGate);
+
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
+    var auditEvents = await auditStore.ListAsync(tenantContext.TenantId, 200, null, null, null, ct);
+    var auditSubset = auditEvents
+        .Where(evt => string.Equals(evt.TargetType, "run", StringComparison.OrdinalIgnoreCase) &&
+                      string.Equals(evt.TargetId, run.RunId.ToString(), StringComparison.OrdinalIgnoreCase))
         .Take(100)
         .ToList();
 
@@ -2557,10 +2615,18 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
         AddZipEntry(archive, "exports/junit.xml", junitExport);
         AddZipEntry(archive, "exports/results.csv", csvExport);
     }
+    var evidencePackBytes = EvidencePackBuilder.BuildZip(
+        run,
+        org,
+        auditSubset,
+        redactionService,
+        jsonOptions,
+        DateTime.UtcNow,
+        configuration["Security:EvidenceSigningKey"]);
 
     var exportMetadata = JsonSerializer.Serialize(new
     {
-        Format = "evidence-bundle"
+        Format = "evidence-pack"
     });
 
     await auditStore.CreateAsync(new AuditEventRecord(
@@ -2573,8 +2639,45 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
         DateTime.UtcNow,
         exportMetadata), ct);
 
-    RecordExportGenerated(httpContext, "evidence-bundle");
-    return Results.File(stream.ToArray(), "application/zip", $"{redactedRun.RunId}-evidence.zip");
+    RecordExportGenerated(httpContext, "evidence-pack");
+    return Results.File(evidencePackBytes, "application/zip", $"{run.RunId}-evidence-pack.zip");
+});
+
+app.MapGet("/api/v1/runs/{runId}/audit", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
+    var auditEvents = await auditStore.ListAsync(tenantContext.TenantId, 200, null, null, null, ct);
+    var auditSubset = auditEvents
+        .Where(evt => string.Equals(evt.TargetType, "run", StringComparison.OrdinalIgnoreCase) &&
+                      string.Equals(evt.TargetId, run.RunId.ToString(), StringComparison.OrdinalIgnoreCase))
+        .Take(100)
+        .ToList();
+
+    var response = EvidencePackBuilder.BuildImmutableAudit(
+        run,
+        org,
+        auditSubset,
+        redactionService,
+        jsonOptions,
+        DateTime.UtcNow);
+
+    return Results.Ok(response);
 });
 
 app.MapPost("/api/runs/{runId}/baseline/{baselineRunId}", async (string runId, string baselineRunId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
@@ -3422,6 +3525,12 @@ static void AddZipEntry(ZipArchive archive, string name, string content)
     using var writer = new StreamWriter(entryStream, Encoding.UTF8);
     writer.Write(content);
 }
+
+static IResult BillingNotConfigured()
+    => Results.Problem(
+        title: "Billing not configured",
+        detail: "Stripe billing is not configured for this environment.",
+        statusCode: StatusCodes.Status501NotImplemented);
 
 static IResult SubscriptionProblem(SubscriptionGateResult result)
     => Results.Problem(title: result.Title, detail: result.Detail, statusCode: result.StatusCode);

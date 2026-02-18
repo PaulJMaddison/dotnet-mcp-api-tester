@@ -42,6 +42,9 @@ else if (Model.Run is not null)
         <form method="post" asp-page-handler="Summarise">
             <button class="button" type="submit">AI: Generate summary</button>
         </form>
+        <form method="post" asp-page-handler="DownloadEvidencePack">
+            <button class="button button-secondary" type="submit">Download evidence pack</button>
+        </form>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(Model.AiBlockedAction))

@@ -12,4 +12,7 @@ public sealed class StripeBillingOptions
     public string FreePriceId { get; set; } = "";
     public string ProPriceId { get; set; } = "";
     public string TeamPriceId { get; set; } = "";
+
+    public bool BillingEnabled => !string.IsNullOrWhiteSpace(SecretKey);
+    public bool WebhookEnabled => BillingEnabled && !string.IsNullOrWhiteSpace(WebhookSecret);
 }
