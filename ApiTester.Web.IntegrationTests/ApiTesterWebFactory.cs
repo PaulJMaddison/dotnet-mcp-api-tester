@@ -3,6 +3,7 @@ using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Persistence.Entities;
 using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.Web.Auth;
+using ApiTester.Web.AI;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -28,18 +29,20 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
         if (_connection.State != System.Data.ConnectionState.Open)
             _connection.Open();
         builder.UseEnvironment("Testing");
+        builder.UseSetting("Persistence:Provider", "Sqlite");
+        builder.UseSetting("Persistence:ConnectionString", _connectionString);
+        builder.UseSetting("Execution:AllowedBaseUrls:0", "https://httpbin.org");
+        builder.UseSetting("Execution:DryRun", "false");
+        builder.UseSetting("Stripe:SecretKey", "sk_test_123");
+        builder.UseSetting("Stripe:WebhookSecret", "whsec_test_secret");
+        builder.UseSetting("Stripe:ProPriceId", "price_pro");
+        builder.UseSetting("Stripe:TeamPriceId", "price_team");
         builder.ConfigureAppConfiguration((_, config) =>
         {
             var settings = new Dictionary<string, string?>
             {
-                ["Persistence:Provider"] = "Sqlite",
-                ["Persistence:ConnectionString"] = _connectionString,
                 ["Execution:AllowedBaseUrls:0"] = "https://httpbin.org",
-                ["Execution:DryRun"] = "false",
-                ["Stripe:SecretKey"] = "sk_test_123",
-                ["Stripe:WebhookSecret"] = "whsec_test_secret",
-                ["Stripe:ProPriceId"] = "price_pro",
-                ["Stripe:TeamPriceId"] = "price_team"
+                ["Execution:DryRun"] = "false"
             };
             config.AddInMemoryCollection(settings);
         });
@@ -59,6 +62,7 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
             services.RemoveAll<IAuditEventStore>();
             services.RemoveAll<IGeneratedDocsStore>();
             services.RemoveAll<ISubscriptionStore>();
+            services.RemoveAll<IAiProvider>();
 
             services.AddDbContext<ApiTesterDbContext>(opt => opt.UseSqlite(_connection));
             services.AddScoped<SqlTestRunStore>();
@@ -84,6 +88,7 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
             services.AddScoped<IAuditEventStore>(sp => sp.GetRequiredService<SqlAuditEventStore>());
             services.AddScoped<IGeneratedDocsStore>(sp => sp.GetRequiredService<SqlGeneratedDocsStore>());
             services.AddScoped<ISubscriptionStore, TestSubscriptionStore>();
+            services.AddSingleton<IAiProvider, StubAiProvider>();
 
             using var provider = services.BuildServiceProvider();
             using var scope = provider.CreateScope();

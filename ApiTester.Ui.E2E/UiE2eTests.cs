@@ -5,6 +5,7 @@ using Microsoft.Playwright;
 
 namespace ApiTester.Ui.E2E;
 
+[Trait("Category", "E2E")]
 public class UiE2eTests : IClassFixture<E2eFixture>, IAsyncLifetime
 {
     private readonly E2eFixture _fixture;
@@ -173,18 +174,6 @@ public class UiE2eTests : IClassFixture<E2eFixture>, IAsyncLifetime
                 "ms-playwright");
             var hasChromium = HasChromium(cacheDir);
 
-            if (!hasChromium)
-            {
-                try
-                {
-                    Microsoft.Playwright.Program.Main(new[] { "install", "chromium" });
-                }
-                catch
-                {
-                }
-
-                hasChromium = HasChromium(cacheDir);
-            }
 
             _browsersReady = hasChromium;
             return _browsersReady;

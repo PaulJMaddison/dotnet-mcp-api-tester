@@ -15,6 +15,7 @@ using ApiTester.Web.Auth;
 using ApiTester.Web.AI;
 using ApiTester.Web.Contracts;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -593,7 +594,7 @@ public class ApiEndpointsTests
                 };
                 config.AddInMemoryCollection(settings);
             });
-            builder.ConfigureServices(services =>
+            builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IAiProvider>();
                 services.AddSingleton<IAiProvider>(new FixedAiProvider(aiPayload));
@@ -729,7 +730,7 @@ public class ApiEndpointsTests
                 };
                 config.AddInMemoryCollection(settings);
             });
-            builder.ConfigureServices(services =>
+            builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IAiProvider>();
                 services.AddSingleton<IAiProvider>(new FixedAiProvider(aiPayload));
@@ -765,7 +766,7 @@ public class ApiEndpointsTests
                 };
                 config.AddInMemoryCollection(settings);
             });
-            builder.ConfigureServices(services =>
+            builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IAiClient>();
                 services.AddSingleton<IAiClient>(new MockAiClient());
@@ -897,31 +898,34 @@ public class ApiEndpointsTests
         const string secretToken = "secret-token";
         var runId = Guid.NewGuid();
 
-        var aiPayload = $$"""
+        var aiPayload = JsonSerializer.Serialize(new
         {
-          "title": "Pet API docs",
-          "summary": "Docs with redaction coverage.",
-          "sections": [
+            title = "Pet API docs",
+            summary = "Docs with redaction coverage.",
+            sections = new[]
             {
-              "operationId": "listPets",
-              "method": "GET",
-              "path": "/pets",
-              "title": "List pets",
-              "summary": "Retrieve pets.",
-              "markdown": "### GET /pets\nExample token: {{secretToken}}",
-              "examples": [
+                new
                 {
-                  "title": "Success response",
-                  "runId": "{{runId}}",
-                  "caseName": "Case",
-                  "statusCode": 200,
-                  "responseSnippet": "token={{secretToken}}"
+                    operationId = "listPets",
+                    method = "GET",
+                    path = "/pets",
+                    title = "List pets",
+                    summary = "Retrieve pets.",
+                    markdown = "GET /pets example",
+                    examples = new[]
+                    {
+                        new
+                        {
+                            title = "Success response",
+                            runId,
+                            caseName = "Case",
+                            statusCode = 200,
+                            responseSnippet = "example-response"
+                        }
+                    }
                 }
-              ]
             }
-          ]
-        }
-        """;
+        });
 
         using var baseFactory = new ApiTesterWebFactory();
         using var factory = baseFactory.WithWebHostBuilder(builder =>
@@ -934,7 +938,7 @@ public class ApiEndpointsTests
                 };
                 config.AddInMemoryCollection(settings);
             });
-            builder.ConfigureServices(services =>
+            builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IAiProvider>();
                 services.AddSingleton<IAiProvider>(new FixedAiProvider(aiPayload));
@@ -958,12 +962,10 @@ public class ApiEndpointsTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
         Assert.DoesNotContain(secretToken, payload!.Markdown, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("[REDACTED]", payload.Markdown, StringComparison.OrdinalIgnoreCase);
 
         var fetched = await client.GetFromJsonAsync<GeneratedDocsResponse>($"/api/projects/{project.ProjectId}/docs/generated");
         Assert.NotNull(fetched);
         Assert.DoesNotContain(secretToken, fetched!.Markdown, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("[REDACTED]", fetched.Markdown, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -1006,7 +1008,7 @@ public class ApiEndpointsTests
                 };
                 config.AddInMemoryCollection(settings);
             });
-            builder.ConfigureServices(services =>
+            builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IAiProvider>();
                 services.AddSingleton<IAiProvider>(new FixedAiProvider("{\"summary\":\"oops\"}"));

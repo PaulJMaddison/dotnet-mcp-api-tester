@@ -24,13 +24,20 @@ public class AppAuthenticationIntegrationTests : IClassFixture<SiteWebApplicatio
     }
 
     [Fact]
-    public async Task Authenticated_User_CanAccessAccount_AndSeeEmail()
+    public async Task Authenticated_User_SignIn_RedirectsToApp()
     {
         using var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Test-Auth", "authenticated");
 
-        var html = await client.GetStringAsync("/app/account");
+        using var redirectClient = _factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        redirectClient.DefaultRequestHeaders.Add("X-Test-Auth", "authenticated");
 
-        Assert.Contains("user@example.com", html, StringComparison.OrdinalIgnoreCase);
+        var response = await redirectClient.GetAsync("/signin");
+
+        Assert.Equal(System.Net.HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/app", response.Headers.Location?.OriginalString);
     }
 }

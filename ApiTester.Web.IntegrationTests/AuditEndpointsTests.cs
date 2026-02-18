@@ -74,6 +74,7 @@ public class AuditEndpointsTests
     public async Task AuditLog_FiltersByActionAndTimestamp()
     {
         using var factory = new ApiTesterWebFactory();
+        await UpdateOrgSettingsAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, new OrgSettings(OrgPlan.Team));
         var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
 
         await using var scope = factory.Services.CreateAsyncScope();
