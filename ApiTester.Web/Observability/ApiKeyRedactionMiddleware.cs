@@ -24,6 +24,16 @@ public sealed class ApiKeyRedactionMiddleware
             }
         }
 
+        if (context.Request.Headers.TryGetValue(ApiKeyAuthDefaults.AuthorizationHeaderName, out var authorization))
+        {
+            var rawAuth = authorization.ToString();
+            if (!string.IsNullOrWhiteSpace(rawAuth))
+            {
+                context.Items[ApiKeyAuthDefaults.RawAuthorizationItemName] = rawAuth;
+                context.Request.Headers[ApiKeyAuthDefaults.AuthorizationHeaderName] = ApiKeyAuthDefaults.RedactedValue;
+            }
+        }
+
         await _next(context);
     }
 }

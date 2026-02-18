@@ -113,3 +113,25 @@ public sealed class ResultClassificationSummary
     public int BlockedUnexpected { get; set; }
     public int FlakyExternal { get; set; }
 }
+
+
+public sealed record ApiTokenDto(
+    Guid KeyId,
+    Guid UserId,
+    string Name,
+    IReadOnlyList<string> Scopes,
+    DateTime? ExpiresUtc,
+    DateTime? RevokedUtc,
+    DateTime? LastUsedUtc,
+    string Prefix);
+
+public sealed record ApiTokenListResponse(IReadOnlyList<ApiTokenDto> Keys);
+
+public sealed record ApiTokenCreateRequest(string Name, List<string> Scopes, DateTime? ExpiresUtc);
+
+public sealed record ApiTokenCreateResponse(ApiTokenDto ApiKey, string Token);
+
+public sealed record MeResponse(MeUser user, MeTenant tenant, MePlan plan);
+public sealed record MeUser(Guid UserId, string Role);
+public sealed record MeTenant(Guid TenantId, Guid OrganisationId);
+public sealed record MePlan(string Name, string Status, bool Renews, DateTime PeriodStartUtc, DateTime PeriodEndUtc);

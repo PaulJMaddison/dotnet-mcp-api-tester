@@ -23,7 +23,7 @@ public sealed class ApiKeyAuthTests
     }
 
     [Fact]
-    public async Task GetProjects_ReturnsForbidden_WhenExpired()
+    public async Task GetProjects_ReturnsUnauthorized_WhenExpired()
     {
         using var factory = new ApiTesterWebFactory();
         var expired = DateTime.UtcNow.AddMinutes(-5);
@@ -32,11 +32,11 @@ public sealed class ApiKeyAuthTests
         var client = CreateClient(factory, apiKey);
         var response = await client.GetAsync("/api/projects");
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]
-    public async Task GetProjects_ReturnsForbidden_WhenRevoked()
+    public async Task GetProjects_ReturnsUnauthorized_WhenRevoked()
     {
         using var factory = new ApiTesterWebFactory();
         var revoked = DateTime.UtcNow.AddMinutes(-1);
@@ -45,7 +45,7 @@ public sealed class ApiKeyAuthTests
         var client = CreateClient(factory, apiKey);
         var response = await client.GetAsync("/api/projects");
 
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     private static async Task<string> SeedApiKeyAsync(WebApplicationFactory<Program> factory, IEnumerable<string> scopes, DateTime? expiresUtc, DateTime? revokedUtc)

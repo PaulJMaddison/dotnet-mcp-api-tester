@@ -102,5 +102,26 @@ public class RunDetailRenderingTests
 
         public Task<ApiResult<RunDetailDto>> GetRunDetailAsync(Guid runId, CancellationToken cancellationToken)
             => Task.FromResult(RunDetailResponse);
+
+        public Task<ApiResult<BillingPlanResponse>> GetBillingPlanAsync(CancellationToken cancellationToken)
+            => Task.FromResult(ApiResult<BillingPlanResponse>.Failure("Not used", null));
+
+        public Task<ApiResult<AuditListResponse>> GetAuditEventsAsync(int? take, string? action, string? from, string? to, CancellationToken cancellationToken)
+            => Task.FromResult(ApiResult<AuditListResponse>.Failure("Not used", null));
+
+        public Task<ApiResult<ApiTokenListResponse>> GetTokensAsync(CancellationToken cancellationToken)
+            => Task.FromResult(ApiResult<ApiTokenListResponse>.Failure("Not used", null));
+
+        public Task<ApiResult<ApiTokenCreateResponse>> CreateTokenAsync(ApiTokenCreateRequest request, CancellationToken cancellationToken)
+            => Task.FromResult(ApiResult<ApiTokenCreateResponse>.Failure("Not used", null));
+
+        public Task<ApiResult<ApiTokenDto>> RevokeTokenAsync(Guid id, CancellationToken cancellationToken)
+            => Task.FromResult(ApiResult<ApiTokenDto>.Failure("Not used", null));
+
+        public Task<ApiResult<MeResponse>> GetMeAsync(CancellationToken cancellationToken)
+            => Task.FromResult(ApiResult<MeResponse>.Failure("Not used", null));
+
+        public string GetAbsoluteUrl(string path)
+            => path;
     }
 }

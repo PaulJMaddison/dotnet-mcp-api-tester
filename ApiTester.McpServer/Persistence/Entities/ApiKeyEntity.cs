@@ -11,6 +11,7 @@ public sealed class ApiKeyEntity
     public string Scopes { get; set; } = string.Empty;
     public DateTime? ExpiresUtc { get; set; }
     public DateTime? RevokedUtc { get; set; }
+    public DateTime? LastUsedUtc { get; set; }
     public string Hash { get; set; } = string.Empty;
     public string Prefix { get; set; } = string.Empty;
 }

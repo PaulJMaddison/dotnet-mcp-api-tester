@@ -7,8 +7,9 @@ public sealed record ApiKeyDto(
     IReadOnlyList<string> Scopes,
     DateTime? ExpiresUtc,
     DateTime? RevokedUtc,
+    DateTime? LastUsedUtc,
     string Prefix);
 
 public sealed record ApiKeyListResponse(IReadOnlyList<ApiKeyDto> Keys);
 
-public sealed record ApiKeyCreateResponse(ApiKeyDto ApiKey, string Key);
+public sealed record ApiKeyCreateResponse(ApiKeyDto ApiKey, string Token);

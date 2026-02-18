@@ -137,6 +137,7 @@ builder.Services.AddScoped<AiSuggestTestsService>();
 builder.Services.AddScoped<SubscriptionEnforcementService>();
 builder.Services.AddScoped<RunCleanupCoordinator>();
 builder.Services.AddScoped<OrgContextResolver>();
+builder.Services.AddScoped<IApiTokenService, ApiTokenService>();
 builder.Services.AddScoped<IRetentionPruner, RetentionPruner>();
 builder.Services.AddScoped<ITenantContext>(sp =>
 {
@@ -242,6 +243,106 @@ app.MapGet("/health", (IHostEnvironment env, IOptions<PersistenceOptions> option
 app.MapGet("/api/version", () => Results.Ok(new VersionResponse(appVersion)));
 
 var v1 = app.MapGroup("/api/v1");
+
+
+v1.MapGet("/tokens", async (IApiKeyStore apiKeyStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    var tenantContext = httpContext.GetTenantContext();
+    var keys = await apiKeyStore.ListAsync(tenantContext.TenantId, ct);
+    return Results.Ok(ApiKeyMapping.ToListResponse(keys));
+});
+
+v1.MapPost("/tokens", async (ApiKeyCreateRequest request, IApiTokenService apiTokenService, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryValidateRequiredName(request?.Name, RequestValidation.MaxNameLength, out var error))
+        return InvalidRequest(error);
+
+    if (request.Scopes is null || request.Scopes.Count == 0)
+        return InvalidRequest("At least one scope is required.");
+
+    var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
+    var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
+    if (adminCheck is not null)
+        return adminCheck;
+
+    var created = await apiTokenService.CreateTokenAsync(tenantContext.TenantId, orgContext.UserId, request.Name, request.Scopes, request.ExpiresUtc, ct);
+
+    var metadataJson = JsonSerializer.Serialize(new
+    {
+        created.Record.Name,
+        created.Record.Scopes,
+        created.Record.ExpiresUtc,
+        created.Record.Prefix
+    });
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        tenantContext.TenantId,
+        orgContext.UserId,
+        AuditActions.ApiKeyCreated,
+        "api_key",
+        created.Record.KeyId.ToString(),
+        DateTime.UtcNow,
+        metadataJson), ct);
+
+    return Results.Ok(new ApiKeyCreateResponse(ApiKeyMapping.ToDto(created.Record), created.Token));
+});
+
+v1.MapPost("/tokens/{id}/revoke", async (string id, IApiKeyStore apiKeyStore, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(id, out var keyId, out var error))
+        return InvalidRequest(error);
+
+    var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
+    var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
+    if (adminCheck is not null)
+        return adminCheck;
+
+    var record = await apiKeyStore.RevokeAsync(tenantContext.TenantId, keyId, DateTime.UtcNow, ct);
+    if (record is null)
+        return Results.NotFound();
+
+    var metadataJson = JsonSerializer.Serialize(new
+    {
+        record.Name,
+        record.RevokedUtc
+    });
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        tenantContext.TenantId,
+        orgContext.UserId,
+        AuditActions.ApiKeyRevoked,
+        "api_key",
+        record.KeyId.ToString(),
+        DateTime.UtcNow,
+        metadataJson), ct);
+
+    return Results.Ok(ApiKeyMapping.ToDto(record));
+});
+
+v1.MapGet("/me", async (SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
+{
+    var orgContext = httpContext.GetOrgContext();
+    var tenantContext = httpContext.GetTenantContext();
+    var snapshot = await subscriptions.GetSnapshotAsync(tenantContext.TenantId, ct);
+
+    return Results.Ok(new
+    {
+        user = new { orgContext.UserId, orgContext.Role },
+        tenant = new { tenantId = tenantContext.TenantId },
+        plan = new
+        {
+            name = snapshot.Subscription.Plan.ToString(),
+            status = snapshot.Subscription.Status.ToString(),
+            renews = snapshot.Subscription.Renews,
+            periodStartUtc = snapshot.Subscription.PeriodStartUtc,
+            periodEndUtc = snapshot.Subscription.PeriodEndUtc
+        }
+    });
+});
 
 v1.MapGet("/billing/plan", async (SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
@@ -1168,7 +1269,7 @@ app.MapPost("/admin/prune", async (IRetentionPruner pruner, HttpContext httpCont
     });
 });
 
-app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKeyStore, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiTokenService apiTokenService, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredName(request?.Name, RequestValidation.MaxNameLength, out var nameError))
         return InvalidRequest(nameError);
@@ -1185,17 +1286,14 @@ app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKey
     if (adminCheck is not null)
         return adminCheck;
 
-    var token = ApiKeyToken.Generate();
-    var hash = ApiKeyHasher.Hash(token.Token);
-    var record = await apiKeyStore.CreateAsync(
+    var created = await apiTokenService.CreateTokenAsync(
         tenantContext.TenantId,
         orgContext.UserId,
         request!.Name!,
-        ApiKeyScopes.Serialize(normalizedScopes),
+        normalizedScopes,
         request.ExpiresUtc,
-        hash,
-        token.Prefix,
         ct);
+    var record = created.Record;
 
     var metadataJson = JsonSerializer.Serialize(new
     {
@@ -1214,7 +1312,7 @@ app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKey
         DateTime.UtcNow,
         metadataJson), ct);
 
-    return Results.Ok(new ApiKeyCreateResponse(ApiKeyMapping.ToDto(record), token.Token));
+    return Results.Ok(new ApiKeyCreateResponse(ApiKeyMapping.ToDto(record), created.Token));
 });
 
 app.MapGet("/api-keys", async (IApiKeyStore apiKeyStore, HttpContext httpContext, CancellationToken ct) =>
