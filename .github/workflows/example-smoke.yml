@@ -1,0 +1,27 @@
+name: Example API smoke via CLI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore DotnetMcpApiTester.sln
+
+      - name: Run smoke command
+        env:
+          APITESTER_BASE_URL: ${{ secrets.APITESTER_BASE_URL }}
+          APITESTER_TOKEN: ${{ secrets.APITESTER_TOKEN }}
+          APITESTER_PROJECT_ID: ${{ secrets.APITESTER_PROJECT_ID }}
+          APITESTER_OPERATION_ID: ${{ secrets.APITESTER_OPERATION_ID }}
+        run: |
+          dotnet run --project ApiTester.Cli -- run execute --project "$APITESTER_PROJECT_ID" --operation "$APITESTER_OPERATION_ID"
