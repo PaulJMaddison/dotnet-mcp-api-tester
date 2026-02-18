@@ -484,6 +484,85 @@ v1.MapGet("/projects/{projectId}/specs", async (string projectId, IOpenApiSpecSt
     return Results.Ok(records.Select(OpenApiMapping.ToMetadataDto));
 });
 
+
+v1.MapGet("/projects/{projectId}/specs/{specId}", async (string projectId, string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (!RequestValidation.TryParseGuid(specId, out var specGuid, out var specError))
+        return InvalidRequest(specError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
+
+    var record = await specStore.GetByIdAsync(tenantContext.TenantId, specGuid, ct);
+    if (record is null || record.ProjectId != id)
+        return Results.NotFound();
+
+    return Results.Ok(OpenApiMapping.ToMetadataDto(record));
+});
+
+v1.MapGet("/projects/{projectId}/specs/diff", async (string projectId, string? from, string? to, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
+
+    if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
+        return InvalidRequest("Both from and to spec ids are required.");
+
+    if (!RequestValidation.TryParseGuid(from, out var specAId, out var specAError))
+        return InvalidRequest(specAError);
+
+    if (!RequestValidation.TryParseGuid(to, out var specBId, out var specBError))
+        return InvalidRequest(specBError);
+
+    var recordA = await specStore.GetByIdAsync(tenantContext.TenantId, specAId, ct);
+    if (recordA is null || recordA.ProjectId != id)
+        return Results.NotFound();
+
+    var recordB = await specStore.GetByIdAsync(tenantContext.TenantId, specBId, ct);
+    if (recordB is null || recordB.ProjectId != id)
+        return Results.NotFound();
+
+    var reader = new OpenApiStringReader();
+    var docA = reader.Read(recordA.SpecJson, out _);
+    if (docA is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Spec A could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var docB = reader.Read(recordB.SpecJson, out _);
+    if (docB is null)
+        return Results.Problem(title: "OpenAPI parse error", detail: "Spec B could not be parsed.", statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    var diff = OpenApiDiffEngine.Diff(docA, docB);
+    var response = new OpenApiDiffResponse(
+        recordA.SpecId,
+        recordB.SpecId,
+        diff.Items.Select(item => new OpenApiDiffItemDto(
+            item.Classification.ToString(),
+            item.Change,
+            item.Path,
+            item.Method,
+            item.Detail)).ToList());
+
+    return Results.Ok(response);
+});
+
 v1.MapDelete("/projects/{projectId}/specs/{specId}", async (string projectId, string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
@@ -1430,6 +1509,31 @@ app.MapGet("/api/projects/{projectId}/specs", async (string projectId, IOpenApiS
 
     var records = await specStore.ListAsync(tenantContext.TenantId, id, ct);
     return Results.Ok(records.Select(OpenApiMapping.ToMetadataDto));
+});
+
+
+app.MapGet("/api/projects/{projectId}/specs/{specId}", async (string projectId, string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
+        return InvalidRequest(error);
+
+    if (!RequestValidation.TryParseGuid(specId, out var specGuid, out var specError))
+        return InvalidRequest(specError);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var tenantContext = httpContext.GetTenantContext();
+    var project = await projectStore.GetAsync(tenantContext.TenantId, id, ct);
+    if (project is null)
+        return await NotFoundOrForbiddenAsync(projectStore, tenantContext, id, ct);
+
+    var record = await specStore.GetByIdAsync(tenantContext.TenantId, specGuid, ct);
+    if (record is null || record.ProjectId != id)
+        return Results.NotFound();
+
+    return Results.Ok(OpenApiMapping.ToMetadataDto(record));
 });
 
 app.MapGet("/api/projects/{projectId}/specs/diff", async (string projectId, string? from, string? to, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>

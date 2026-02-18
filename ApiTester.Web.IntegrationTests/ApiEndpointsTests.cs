@@ -224,6 +224,61 @@ public class ApiEndpointsTests
         Assert.Equal(payload.SpecId, fetched.SpecId);
     }
 
+
+    [Fact]
+    public async Task ImportOpenApi_DedupesBySpecHash_AndReturnsExistingVersion()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "OpenApiDedupe", "openapi-dedupe");
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+
+        var specJson = """
+                       {
+                         "openapi": "3.0.0",
+                         "info": {
+                           "title": "Sample API",
+                           "version": "1.2.3"
+                         },
+                         "paths": {}
+                       }
+                       """;
+
+        var first = await client.PostAsync($"/api/projects/{project.ProjectId}/openapi/import", BuildMultipartSpec(specJson));
+        var firstPayload = await first.Content.ReadFromJsonAsync<OpenApiSpecMetadataDto>();
+
+        var second = await client.PostAsync($"/api/projects/{project.ProjectId}/openapi/import", BuildMultipartSpec(specJson));
+        var secondPayload = await second.Content.ReadFromJsonAsync<OpenApiSpecMetadataDto>();
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.NotNull(firstPayload);
+        Assert.NotNull(secondPayload);
+        Assert.Equal(firstPayload!.SpecId, secondPayload!.SpecId);
+
+        var history = await client.GetFromJsonAsync<IReadOnlyList<OpenApiSpecMetadataDto>>($"/api/projects/{project.ProjectId}/specs");
+        Assert.NotNull(history);
+        Assert.Single(history!);
+    }
+
+    [Fact]
+    public async Task GetProjectSpecMetadata_ReturnsScopedSpecMetadata()
+    {
+        using var factory = new ApiTesterWebFactory();
+        var project = await SeedProjectAsync(factory, "OpenApiHistory", "openapi-history");
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+
+        var imported = await client.PostAsync($"/api/projects/{project.ProjectId}/openapi/import", BuildMultipartSpec(BuildSpecJson("op-1")));
+        var payload = await imported.Content.ReadFromJsonAsync<OpenApiSpecMetadataDto>();
+
+        Assert.Equal(HttpStatusCode.OK, imported.StatusCode);
+        Assert.NotNull(payload);
+
+        var metadata = await client.GetFromJsonAsync<OpenApiSpecMetadataDto>($"/api/projects/{project.ProjectId}/specs/{payload!.SpecId}");
+        Assert.NotNull(metadata);
+        Assert.Equal(payload.SpecId, metadata!.SpecId);
+        Assert.Equal(payload.SpecHash, metadata.SpecHash);
+    }
+
     [Fact]
     public async Task ImportOpenApi_ReturnsBadRequest_ForInvalidJson()
     {
