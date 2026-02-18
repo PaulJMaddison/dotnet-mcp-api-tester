@@ -4,6 +4,13 @@ namespace ApiTester.Web.Validation;
 
 public static class RequestValidation
 {
+    public const int MaxNameLength = 200;
+    public const int MaxEnvironmentNameLength = 100;
+    public const int MaxBaseUrlLength = 2048;
+    public const int MaxSlugLength = 80;
+    public const int MaxExternalIdLength = 200;
+    public const int MaxDisplayNameLength = 200;
+    public const int MaxEmailLength = 320;
     public const int MaxAnnotationNoteLength = 2000;
     public const int MaxJiraLinkLength = 2048;
 
@@ -109,10 +116,19 @@ public static class RequestValidation
     }
 
     public static bool TryValidateRequiredName(string? name, out string error)
+        => TryValidateRequiredName(name, MaxNameLength, out error);
+
+    public static bool TryValidateRequiredName(string? name, int maxLength, out string error)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
             error = "Name is required.";
+            return false;
+        }
+
+        if (name.Trim().Length > maxLength)
+        {
+            error = $"Name must be {maxLength} characters or fewer.";
             return false;
         }
 
@@ -121,10 +137,19 @@ public static class RequestValidation
     }
 
     public static bool TryValidateRequiredKey(string? key, string fieldName, out string error)
+        => TryValidateRequiredKey(key, fieldName, null, out error);
+
+    public static bool TryValidateRequiredKey(string? key, string fieldName, int? maxLength, out string error)
     {
         if (string.IsNullOrWhiteSpace(key))
         {
             error = $"{fieldName} is required.";
+            return false;
+        }
+
+        if (maxLength.HasValue && key.Trim().Length > maxLength.Value)
+        {
+            error = $"{fieldName} must be {maxLength.Value} characters or fewer.";
             return false;
         }
 
@@ -142,6 +167,13 @@ public static class RequestValidation
         }
 
         var trimmed = baseUrl.Trim();
+        if (trimmed.Length > MaxBaseUrlLength)
+        {
+            normalized = string.Empty;
+            error = $"baseUrl must be {MaxBaseUrlLength} characters or fewer.";
+            return false;
+        }
+
         if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
@@ -156,6 +188,9 @@ public static class RequestValidation
     }
 
     public static bool TryNormalizeOptionalValue(string? value, out string? normalized, out string error)
+        => TryNormalizeOptionalValue(value, null, out normalized, out error);
+
+    public static bool TryNormalizeOptionalValue(string? value, int? maxLength, out string? normalized, out string error)
     {
         if (value is null)
         {
@@ -169,6 +204,13 @@ public static class RequestValidation
         {
             normalized = null;
             error = "Value cannot be empty.";
+            return false;
+        }
+
+        if (maxLength.HasValue && trimmed.Length > maxLength.Value)
+        {
+            normalized = null;
+            error = $"Value must be {maxLength.Value} characters or fewer.";
             return false;
         }
 

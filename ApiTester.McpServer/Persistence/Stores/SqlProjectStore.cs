@@ -82,9 +82,7 @@ public sealed class SqlProjectStore : IProjectStore
             .Select(x => new ProjectRecord(x.ProjectId, x.OrganisationId, x.TenantId, x.OwnerKey, x.Name, x.ProjectKey, x.CreatedUtc))
             .ToListAsync(ct);
 
-        int? nextOffset = request.Offset + projects.Count < total
-            ? request.Offset + projects.Count
-            : null;
+        int? nextOffset = Paging.CalculateNextOffset(request.Offset, projects.Count, total);
 
         return new PagedResult<ProjectRecord>(projects, total, nextOffset);
     }

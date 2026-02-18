@@ -67,9 +67,7 @@ public sealed class FileProjectStore : IProjectStore
             .Take(request.PageSize)
             .ToList();
 
-        int? nextOffset = request.Offset + page.Count < total
-            ? request.Offset + page.Count
-            : null;
+        int? nextOffset = Paging.CalculateNextOffset(request.Offset, page.Count, total);
 
         return new PagedResult<ProjectRecord>(page, total, nextOffset);
     }
