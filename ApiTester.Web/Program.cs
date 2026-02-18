@@ -906,7 +906,7 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/run", async (
         project.ProjectKey,
         run.OperationId,
         Environment = environmentName
-    }, jsonOptions);
+    });
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
@@ -1022,13 +1022,17 @@ app.MapGet("/api/orgs/current/members", async (IOrganisationStore orgStore, IUse
     return Results.Ok(new OrgMembersResponse(members));
 });
 
-app.MapGet("/audit", async (int? take, string? action, string? from, string? to, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/audit", async (int? take, string? action, string? from, string? to, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
     var adminCheck = RequireAdminKeyAccess(httpContext, orgContext);
     if (adminCheck is not null)
         return adminCheck;
+
+    var gate = await subscriptions.CheckTeamFeatureAccessAsync(tenantContext.TenantId, "Audit log", ct);
+    if (!gate.Allowed)
+        return SubscriptionProblem(gate);
 
     var normalizedTake = take ?? 50;
     if (normalizedTake is < 1 or > 200)
@@ -1099,7 +1103,7 @@ app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKey
         record.Name,
         record.Scopes,
         record.ExpiresUtc
-    }, jsonOptions);
+    });
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
@@ -1145,7 +1149,7 @@ app.MapPost("/api-keys/{id}/revoke", async (string id, IApiKeyStore apiKeyStore,
     {
         record.Name,
         record.RevokedUtc
-    }, jsonOptions);
+    });
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
@@ -1718,7 +1722,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
         project.ProjectKey,
         run.OperationId,
         Environment = environmentName
-    }, jsonOptions);
+    });
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
@@ -2047,7 +2051,7 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
     var exportMetadata = JsonSerializer.Serialize(new
     {
         Format = reportFormat.ToString()
-    }, jsonOptions);
+    });
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
@@ -2092,7 +2096,7 @@ app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore stor
     var exportMetadata = JsonSerializer.Serialize(new
     {
         Format = "junit"
-    }, jsonOptions);
+    });
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
@@ -2137,7 +2141,7 @@ app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store
     var exportMetadata = JsonSerializer.Serialize(new
     {
         Format = "json"
-    }, jsonOptions);
+    });
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
@@ -2182,7 +2186,7 @@ app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store,
     var exportMetadata = JsonSerializer.Serialize(new
     {
         Format = "csv"
-    }, jsonOptions);
+    });
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
@@ -2207,7 +2211,7 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
         return scopeCheck;
 
     var tenantContext = httpContext.GetTenantContext();
-    var exportGate = await subscriptions.CheckExportAccessAsync(tenantContext.TenantId, ct);
+    var exportGate = await subscriptions.CheckTeamFeatureAccessAsync(tenantContext.TenantId, "Evidence pack export", ct);
     if (!exportGate.Allowed)
         return SubscriptionProblem(exportGate);
 
@@ -2260,7 +2264,7 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
     var exportMetadata = JsonSerializer.Serialize(new
     {
         Format = "evidence-bundle"
-    }, jsonOptions);
+    });
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
@@ -2428,6 +2432,8 @@ app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunSto
     if (!aiGate.Allowed)
         return SubscriptionProblem(aiGate);
 
+    await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "run.explanation", ct);
+
     var context = AiContextFactory.BuildRunExplanationContext(run);
     var runJson = JsonSerializer.Serialize(context, jsonOptions);
     var prompt = AiPromptTemplates.BuildRunExplanationPrompt(runJson);
@@ -2462,6 +2468,8 @@ async Task<IResult> ExplainAiEndpointAsync(
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
         return SubscriptionProblem(aiGate);
+
+    await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "explain", ct);
 
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, projectId, ct);
@@ -2537,6 +2545,8 @@ async Task<IResult> SuggestAiTestsEndpointAsync(
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
         return SubscriptionProblem(aiGate);
+
+    await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "suggest-tests", ct);
 
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, projectId, ct);
@@ -2621,6 +2631,8 @@ async Task<IResult> SummariseRunAiEndpointAsync(
     if (!aiGate.Allowed)
         return SubscriptionProblem(aiGate);
 
+    await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "summarise-run", ct);
+
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetByKeyAsync(tenantContext.TenantId, run.ProjectKey, ct);
     if (project is null)
@@ -2698,6 +2710,8 @@ async Task<IResult> SuggestImprovementsAiEndpointAsync(
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
         return SubscriptionProblem(aiGate);
+
+    await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "suggest-improvements", ct);
 
     var project = await projectStore.GetByKeyAsync(tenantContext.TenantId, run.ProjectKey, ct);
     if (project is null)
@@ -2780,6 +2794,8 @@ async Task<IResult> ComplianceReportAiEndpointAsync(
     if (!aiGate.Allowed)
         return SubscriptionProblem(aiGate);
 
+    await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "compliance-report", ct);
+
     var orgContext = httpContext.GetOrgContext();
     var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
     if (org is null)
@@ -2830,6 +2846,8 @@ async Task<IResult> GenerateDocsAiEndpointAsync(
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
         return SubscriptionProblem(aiGate);
+
+    await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "docs.generate", ct);
 
     var orgContext = httpContext.GetOrgContext();
     var project = await projectStore.GetAsync(tenantContext.TenantId, projectId, ct);
@@ -3020,7 +3038,7 @@ async Task<IResult> RunDraftPlanFromAiAsync(
         project.ProjectKey,
         run.OperationId,
         Environment = environmentName
-    }, jsonOptions);
+    });
 
     await auditStore.CreateAsync(new AuditEventRecord(
         Guid.NewGuid(),
@@ -3067,6 +3085,8 @@ app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpec
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
         return SubscriptionProblem(aiGate);
+
+    await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "spec.summary", ct);
 
     var orgContext = httpContext.GetOrgContext();
     var record = await specStore.GetByIdAsync(tenantContext.TenantId, id, ct);
@@ -3571,6 +3591,34 @@ static async Task<IResult> ImportOpenApiSpecAsync(
             title,
             version,
             specSource);
+
+        var metadata = JsonSerializer.Serialize(new
+        {
+            project.ProjectId,
+            project.ProjectKey,
+            title,
+            version,
+            Source = specSource
+        });
+
+        var route = request.Path.HasValue ? request.Path.Value! : "/projects/{projectId}/openapi/import";
+
+        var auditStore = httpContext.RequestServices.GetRequiredService<IAuditEventStore>();
+        await auditStore.CreateAsync(new AuditEventRecord(
+            Guid.NewGuid(),
+            tenantContext.TenantId,
+            orgContext.UserId,
+            AuditActions.SpecImported,
+            "project",
+            project.ProjectId.ToString(),
+            DateTime.UtcNow,
+            JsonSerializer.Serialize(new
+            {
+                Route = route,
+                Action = AuditActions.SpecImported,
+                Metadata = metadata
+            })), ct);
+
         return Results.Ok(OpenApiMapping.ToMetadataDto(record));
     }
 }
@@ -3620,6 +3668,31 @@ static bool TryParseAuditTimestamp(string? value, string name, out DateTime? par
 
     parsedUtc = parsed.ToUniversalTime();
     return true;
+}
+
+
+static async Task RecordAiAuditAsync(HttpContext httpContext, Guid tenantId, string capability, CancellationToken ct)
+{
+    var orgContext = httpContext.GetOrgContext();
+    var auditStore = httpContext.RequestServices.GetRequiredService<IAuditEventStore>();
+    var route = httpContext.Request.Path.HasValue ? httpContext.Request.Path.Value! : "/api/ai";
+
+    var metadata = JsonSerializer.Serialize(new
+    {
+        Route = route,
+        Action = AuditActions.AiCall,
+        Capability = capability
+    });
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        tenantId,
+        orgContext.UserId,
+        AuditActions.AiCall,
+        "ai",
+        capability,
+        DateTime.UtcNow,
+        metadata), ct);
 }
 
 public partial class Program { }

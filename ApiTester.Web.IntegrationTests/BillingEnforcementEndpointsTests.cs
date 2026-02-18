@@ -126,6 +126,39 @@ public sealed class BillingEnforcementEndpointsTests
         Assert.Equal("AI quota exceeded", problem!.Title);
     }
 
+
+    [Fact]
+    public async Task EvidencePackExport_ReturnsForbidden_WhenPlanIsPro()
+    {
+        using var factory = new ApiTesterWebFactory();
+        await UpdateOrgPlanAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, OrgPlan.Pro);
+        var project = await SeedProjectAsync(factory, "EvidenceGate", "evidence-gate");
+        var run = await SeedRunAsync(factory, project, "op-evidence", DateTime.UtcNow);
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.GetAsync($"/runs/{run.RunId}/export/evidence-bundle");
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetailsResponse>();
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.NotNull(problem);
+        Assert.Equal("Evidence pack export not available", problem!.Title);
+    }
+
+    [Fact]
+    public async Task AuditLogEndpoint_ReturnsForbidden_WhenPlanIsPro()
+    {
+        using var factory = new ApiTesterWebFactory();
+        await UpdateOrgPlanAsync(factory, ApiTesterWebFactory.OrganisationAlphaId, OrgPlan.Pro);
+
+        var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
+        var response = await client.GetAsync("/audit?take=10");
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetailsResponse>();
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.NotNull(problem);
+        Assert.Equal("Audit log not available", problem!.Title);
+    }
+
     private static HttpClient CreateClient(WebApplicationFactory<Program> factory, string apiKey)
     {
         var client = factory.CreateClient();
