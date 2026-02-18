@@ -1,8 +1,5 @@
 using ApiTester.Site.Components.Pages.App;
-using ApiTester.Site.Services;
 using Bunit;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace ApiTester.Site.Tests;
 
@@ -12,9 +9,6 @@ public class OnboardingChecklistTests
     public void Onboarding_RendersChecklistItems()
     {
         using var context = new TestContext();
-        context.Services.AddSingleton<IApiKeySession>(new FakeApiKeySession());
-        context.Services.AddSingleton<IHttpContextAccessor>(new HttpContextAccessor());
-
         var cut = context.RenderComponent<Onboarding>();
 
         cut.WaitForAssertion(() =>
@@ -25,20 +19,5 @@ public class OnboardingChecklistTests
             Assert.Contains("Set base URL + policy", cut.Markup);
             Assert.Contains("Run test plan", cut.Markup);
         });
-    }
-
-    private sealed class FakeApiKeySession : IApiKeySession
-    {
-        public bool HasApiKey => true;
-
-        public string? GetApiKey() => "test-key";
-
-        public void SetApiKey(string apiKey)
-        {
-        }
-
-        public void ClearApiKey()
-        {
-        }
     }
 }

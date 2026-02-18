@@ -1,9 +1,15 @@
+using ApiTester.Site.Data;
+using ApiTester.Site.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorComponents();
+builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
@@ -12,25 +18,74 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
     options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Strict;
 });
-builder.Services.Configure<ApiTester.Site.Services.ApiTesterWebOptions>(
-    builder.Configuration.GetSection(ApiTester.Site.Services.ApiTesterWebOptions.SectionName));
-builder.Services.AddScoped<ApiTester.Site.Services.IApiKeySession, ApiTester.Site.Services.ApiKeySession>();
-builder.Services.AddTransient<ApiTester.Site.Services.ApiKeyHeaderHandler>();
-builder.Services.AddHttpClient<ApiTester.Site.Services.IApiTesterWebClient, ApiTester.Site.Services.ApiTesterWebClient>(
+builder.Services.Configure<ApiTesterWebOptions>(
+    builder.Configuration.GetSection(ApiTesterWebOptions.SectionName));
+builder.Services.AddTransient<ApiKeyHeaderHandler>();
+builder.Services.AddHttpClient<IApiTesterWebClient, ApiTesterWebClient>(
     (serviceProvider, client) =>
     {
-        var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ApiTester.Site.Services.ApiTesterWebOptions>>().Value;
+        var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ApiTesterWebOptions>>().Value;
         client.BaseAddress = new Uri(options.BaseUrl);
     })
-    .AddHttpMessageHandler<ApiTester.Site.Services.ApiKeyHeaderHandler>();
-builder.Services.AddHttpClient<ApiTester.Site.Services.LeadCaptureClient>();
-builder.Services.AddDbContext<ApiTester.Site.Data.LeadCaptureDbContext>(options =>
+    .AddHttpMessageHandler<ApiKeyHeaderHandler>();
+builder.Services.AddHttpClient<LeadCaptureClient>();
+
+builder.Services.AddDbContext<LeadCaptureDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("LeadCapture");
     options.UseSqlite(string.IsNullOrWhiteSpace(connectionString) ? "Data Source=leads.db" : connectionString);
 });
-builder.Services.AddScoped<ApiTester.Site.Services.ILeadCaptureStore, ApiTester.Site.Services.LeadCaptureStore>();
-builder.Services.AddScoped<ApiTester.Site.Services.ILeadCaptureService, ApiTester.Site.Services.LeadCaptureService>();
+
+builder.Services.AddDbContext<IdentityDbContext>(options =>
+{
+    var connectionString = builder.Configuration.GetConnectionString("Identity");
+    options.UseSqlite(string.IsNullOrWhiteSpace(connectionString) ? "Data Source=identity.db" : connectionString);
+});
+
+builder.Services.AddScoped<ILeadCaptureStore, LeadCaptureStore>();
+builder.Services.AddScoped<ILeadCaptureService, LeadCaptureService>();
+builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
+builder.Services.AddScoped<ITenantBootstrapper, TenantBootstrapper>();
+
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+    })
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/signin";
+        options.LogoutPath = "/signout";
+    })
+    .AddOpenIdConnect(options =>
+    {
+        options.Authority = builder.Configuration["Auth:Authority"] ?? string.Empty;
+        options.ClientId = builder.Configuration["Auth:ClientId"] ?? string.Empty;
+        options.ClientSecret = builder.Configuration["Auth:ClientSecret"] ?? string.Empty;
+        options.CallbackPath = builder.Configuration["Auth:CallbackPath"] ?? "/signin-oidc";
+        options.ResponseType = "code";
+        options.SaveTokens = true;
+        options.GetClaimsFromUserInfoEndpoint = true;
+
+        options.Scope.Clear();
+        var configuredScopes = builder.Configuration.GetSection("Auth:Scopes").Get<string[]>() ?? Array.Empty<string>();
+        if (configuredScopes.Length == 0)
+        {
+            options.Scope.Add("openid");
+            options.Scope.Add("profile");
+            options.Scope.Add("email");
+        }
+        else
+        {
+            foreach (var scope in configuredScopes.Where(s => !string.IsNullOrWhiteSpace(s)))
+            {
+                options.Scope.Add(scope);
+            }
+        }
+    });
+
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
@@ -56,14 +111,46 @@ app.UseStaticFiles(new StaticFileOptions
         }
     }
 });
+
 app.UseSession();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 using (var scope = app.Services.CreateScope())
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<ApiTester.Site.Data.LeadCaptureDbContext>();
-    dbContext.Database.EnsureCreated();
+    var leadDbContext = scope.ServiceProvider.GetRequiredService<LeadCaptureDbContext>();
+    leadDbContext.Database.EnsureCreated();
+
+    var identityDbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+    identityDbContext.Database.EnsureCreated();
 }
+
+app.MapGet("/signin", async (HttpContext httpContext) =>
+{
+    if (httpContext.User.Identity?.IsAuthenticated == true)
+    {
+        return Results.Redirect("/app");
+    }
+
+    await httpContext.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme, new Microsoft.AspNetCore.Authentication.AuthenticationProperties
+    {
+        RedirectUri = "/app"
+    });
+
+    return Results.Empty;
+});
+
+app.MapGet("/signout", async (HttpContext httpContext) =>
+{
+    await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    await httpContext.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme, new Microsoft.AspNetCore.Authentication.AuthenticationProperties
+    {
+        RedirectUri = "/"
+    });
+
+    return Results.Empty;
+});
 
 app.MapPost("/api/leads", async (
     ApiTester.Site.Models.LeadCaptureRequest request,
@@ -84,6 +171,27 @@ app.MapPost("/api/leads", async (
 
     return Results.Ok();
 });
+
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/app") && context.User.Identity?.IsAuthenticated != true)
+    {
+        context.Response.Redirect("/signin");
+        return;
+    }
+
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        using var scope = context.RequestServices.CreateScope();
+        var bootstrapper = scope.ServiceProvider.GetRequiredService<ITenantBootstrapper>();
+        await bootstrapper.EnsureUserTenantMembershipAsync(context.User, context.RequestAborted);
+    }
+
+    await next();
+});
+
 app.MapRazorComponents<ApiTester.Site.Components.App>();
 
 app.Run();
+
+public partial class Program;

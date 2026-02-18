@@ -1,4 +1,5 @@
 @page "/app/leads"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject ApiTester.Site.Services.ILeadCaptureStore LeadCaptureStore
 
 <PageTitle>Leads</PageTitle>

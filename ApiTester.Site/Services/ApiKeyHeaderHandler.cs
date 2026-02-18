@@ -1,18 +1,20 @@
+using Microsoft.Extensions.Options;
+
 namespace ApiTester.Site.Services;
 
 public sealed class ApiKeyHeaderHandler : DelegatingHandler
 {
     private const string ApiKeyHeaderName = "X-Api-Key";
-    private readonly IApiKeySession _apiKeySession;
+    private readonly IOptions<ApiTesterWebOptions> _options;
 
-    public ApiKeyHeaderHandler(IApiKeySession apiKeySession)
+    public ApiKeyHeaderHandler(IOptions<ApiTesterWebOptions> options)
     {
-        _apiKeySession = apiKeySession;
+        _options = options;
     }
 
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        var apiKey = _apiKeySession.GetApiKey();
+        var apiKey = _options.Value.ApiKey;
         if (!string.IsNullOrWhiteSpace(apiKey) && !request.Headers.Contains(ApiKeyHeaderName))
         {
             request.Headers.Add(ApiKeyHeaderName, apiKey);

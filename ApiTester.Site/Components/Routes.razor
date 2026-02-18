@@ -34,7 +34,8 @@
             }
 
             if (template.StartsWith("app", StringComparison.OrdinalIgnoreCase)
-                && !template.StartsWith("app/sign-in", StringComparison.OrdinalIgnoreCase))
+                && !template.StartsWith("app/sign-in", StringComparison.OrdinalIgnoreCase)
+                && !template.StartsWith("app/sign-out", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
