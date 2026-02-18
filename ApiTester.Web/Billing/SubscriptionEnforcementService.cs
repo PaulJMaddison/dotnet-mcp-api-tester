@@ -1,5 +1,6 @@
 using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
+using ApiTester.Web.Observability;
 using Microsoft.AspNetCore.Http;
 
 namespace ApiTester.Web.Billing;
@@ -18,15 +19,18 @@ public sealed class SubscriptionEnforcementService
     private readonly ISubscriptionStore _subscriptions;
     private readonly IProjectStore _projects;
     private readonly TimeProvider _timeProvider;
+    private readonly ApiTesterTelemetry _telemetry;
 
     public SubscriptionEnforcementService(
         ISubscriptionStore subscriptions,
         IProjectStore projects,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ApiTesterTelemetry telemetry)
     {
         _subscriptions = subscriptions;
         _projects = projects;
         _timeProvider = timeProvider;
+        _telemetry = telemetry;
     }
 
     public async Task<SubscriptionSnapshot> GetSnapshotAsync(Guid organisationId, CancellationToken ct)
@@ -49,6 +53,7 @@ public sealed class SubscriptionEnforcementService
         var snapshot = await GetSnapshotAsync(organisationId, ct);
         if (!snapshot.IsActive)
         {
+            _telemetry.RecordQuotaBlock("subscription_inactive");
             return new SubscriptionGateResult(
                 false,
                 "Subscription inactive",
@@ -65,6 +70,7 @@ public sealed class SubscriptionEnforcementService
 
         if (result.Total >= snapshot.Limits.MaxProjects)
         {
+            _telemetry.RecordQuotaBlock("project_limit");
             return new SubscriptionGateResult(
                 false,
                 "Project limit reached",
@@ -86,6 +92,7 @@ public sealed class SubscriptionEnforcementService
         var snapshot = await GetSnapshotAsync(organisationId, ct);
         if (!snapshot.IsActive)
         {
+            _telemetry.RecordQuotaBlock("subscription_inactive");
             return new SubscriptionGateResult(
                 false,
                 "Subscription inactive",
@@ -103,6 +110,7 @@ public sealed class SubscriptionEnforcementService
 
         if (consumed is null)
         {
+            _telemetry.RecordQuotaBlock("run_quota");
             return new SubscriptionGateResult(
                 false,
                 "Run quota exceeded",
@@ -118,6 +126,7 @@ public sealed class SubscriptionEnforcementService
         var snapshot = await GetSnapshotAsync(organisationId, ct);
         if (!snapshot.IsActive)
         {
+            _telemetry.RecordQuotaBlock("subscription_inactive");
             return new SubscriptionGateResult(
                 false,
                 "Subscription inactive",
@@ -127,6 +136,7 @@ public sealed class SubscriptionEnforcementService
 
         if (!snapshot.Limits.AiEnabled || snapshot.Limits.MaxAiCallsPerPeriod <= 0)
         {
+            _telemetry.RecordQuotaBlock("ai_disabled");
             return new SubscriptionGateResult(
                 false,
                 "AI not available",
@@ -144,6 +154,7 @@ public sealed class SubscriptionEnforcementService
 
         if (consumed is null)
         {
+            _telemetry.RecordQuotaBlock("ai_quota");
             return new SubscriptionGateResult(
                 false,
                 "AI quota exceeded",
@@ -159,6 +170,7 @@ public sealed class SubscriptionEnforcementService
         var snapshot = await GetSnapshotAsync(organisationId, ct);
         if (!snapshot.IsActive)
         {
+            _telemetry.RecordQuotaBlock("subscription_inactive");
             return new SubscriptionGateResult(
                 false,
                 "Subscription inactive",
@@ -168,6 +180,7 @@ public sealed class SubscriptionEnforcementService
 
         if (!snapshot.Limits.AuditExportEnabled)
         {
+            _telemetry.RecordQuotaBlock("team_feature_unavailable");
             return new SubscriptionGateResult(
                 false,
                 $"{featureName} not available",

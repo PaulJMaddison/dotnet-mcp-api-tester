@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics;
+using System.Globalization;
 using System.Net.Http;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -33,6 +34,12 @@ using WebOpenApiImportLimits = ApiTester.Web.OpenApiImportLimits;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Logging.AddJsonConsole(options =>
+{
+    options.IncludeScopes = true;
+    options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ ";
+});
+
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.Limits.MaxRequestBodySize = WebOpenApiImportLimits.MaxRequestBodyBytes;
@@ -43,6 +50,7 @@ builder.Services.AddSingleton(appConfig);
 
 builder.Services.AddApiTesterPersistence(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<ApiTesterTelemetry>();
 
 builder.Services.Configure<ExecutionOptions>(builder.Configuration.GetSection("Execution"));
 builder.Services.Configure<CleanupJobOptions>(builder.Configuration.GetSection("CleanupJobs"));
@@ -179,6 +187,7 @@ app.UseExceptionHandler(config =>
 });
 
 app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ApiKeyRedactionMiddleware>();
 
 app.UseSwagger();
@@ -909,6 +918,7 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/run", async (
     logger.LogInformation("Executing run for project {ProjectId} operation {OperationId}", project.ProjectId, trimmedOperationId);
     var run = await runner.RunPlanAsync(plan, project.ProjectKey, tenantContext.TenantId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
     logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, trimmedOperationId);
+    RecordRunExecuted(httpContext, "projects.run.execute");
 
     var runMetadata = JsonSerializer.Serialize(new
     {
@@ -1725,6 +1735,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     logger.LogInformation("Executing run for project {ProjectId} operation {OperationId}", project.ProjectId, trimmedOperationId);
     var run = await runner.RunPlanAsync(plan, project.ProjectKey, tenantContext.TenantId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
     logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, trimmedOperationId);
+    RecordRunExecuted(httpContext, "projects.run.execute");
 
     var runMetadata = JsonSerializer.Serialize(new
     {
@@ -2073,6 +2084,7 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
         DateTime.UtcNow,
         exportMetadata), ct);
 
+    RecordExportGenerated(httpContext, reportFormat.ToString().ToLowerInvariant());
     return Results.Text(report, contentType);
 });
 
@@ -2118,6 +2130,7 @@ app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore stor
         DateTime.UtcNow,
         exportMetadata), ct);
 
+    RecordExportGenerated(httpContext, "junit");
     return Results.Text(content, "application/junit+xml; charset=utf-8");
 });
 
@@ -2163,6 +2176,7 @@ app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store
         DateTime.UtcNow,
         exportMetadata), ct);
 
+    RecordExportGenerated(httpContext, "json");
     return Results.Text(payload, "application/json; charset=utf-8");
 });
 
@@ -2208,6 +2222,7 @@ app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store,
         DateTime.UtcNow,
         exportMetadata), ct);
 
+    RecordExportGenerated(httpContext, "csv");
     return Results.Text(payload, "text/csv; charset=utf-8");
 });
 
@@ -2286,6 +2301,7 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
         DateTime.UtcNow,
         exportMetadata), ct);
 
+    RecordExportGenerated(httpContext, "evidence-bundle");
     return Results.File(stream.ToArray(), "application/zip", $"{redactedRun.RunId}-evidence.zip");
 });
 
@@ -3041,6 +3057,7 @@ async Task<IResult> RunDraftPlanFromAiAsync(
     logger.LogInformation("Executing draft run {DraftId} for project {ProjectId} operation {OperationId}", draft.DraftId, project.ProjectId, draft.OperationId);
     var run = await runner.RunPlanAsync(plan, project.ProjectKey, tenantContext.TenantId, orgContext.OwnerKey, spec.SpecId, orgContext.OwnerKey, environmentName, ct);
     logger.LogInformation("Stored run {RunId} for project {ProjectId} operation {OperationId}", run.RunId, project.ProjectId, draft.OperationId);
+    RecordRunExecuted(httpContext, "drafts.run.execute");
 
     var runMetadata = JsonSerializer.Serialize(new
     {
@@ -3129,6 +3146,22 @@ static void AddZipEntry(ZipArchive archive, string name, string content)
 
 static IResult SubscriptionProblem(SubscriptionGateResult result)
     => Results.Problem(title: result.Title, detail: result.Detail, statusCode: result.StatusCode);
+
+static void RecordRunExecuted(HttpContext context, string source)
+{
+    context.RequestServices.GetRequiredService<ApiTesterTelemetry>().RecordRunExecuted(source);
+
+    using var activity = ApiTesterTelemetry.ActivitySource.StartActivity("run.execute", ActivityKind.Internal);
+    activity?.SetTag("run.source", source);
+}
+
+static void RecordExportGenerated(HttpContext context, string format)
+{
+    context.RequestServices.GetRequiredService<ApiTesterTelemetry>().RecordExportGenerated(format);
+
+    using var activity = ApiTesterTelemetry.ActivitySource.StartActivity("run.export", ActivityKind.Internal);
+    activity?.SetTag("export.format", format);
+}
 
 static void ApplyFreePreviewWatermarkIfNeeded(HttpContext context, SubscriptionSnapshot snapshot)
 {
