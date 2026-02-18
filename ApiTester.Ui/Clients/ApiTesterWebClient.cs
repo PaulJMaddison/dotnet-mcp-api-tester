@@ -363,6 +363,8 @@ public sealed record TestCaseResult(
     long DurationMs,
     bool Pass,
     string? FailureReason,
+    object? FailureDetails,
+    string? ValidationUnavailableReason,
     string? ResponseSnippet,
     bool IsFlaky,
     string? FlakeReasonCategory,

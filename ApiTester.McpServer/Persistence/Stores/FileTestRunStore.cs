@@ -325,6 +325,8 @@ public sealed class FileTestRunStore : ITestRunStore
                             DurationMs = result.DurationMs,
                             Pass = result.Pass,
                             FailureReason = result.FailureReason,
+                            FailureDetails = result.FailureDetails,
+                            ValidationUnavailableReason = result.ValidationUnavailableReason,
                             ResponseSnippet = result.ResponseSnippet[..maxSnippetLength],
                             IsFlaky = result.IsFlaky,
                             FlakeReasonCategory = result.FlakeReasonCategory,

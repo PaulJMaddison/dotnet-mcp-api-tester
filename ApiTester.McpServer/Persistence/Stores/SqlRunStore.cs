@@ -1,7 +1,9 @@
 ﻿using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Entities;
+using ApiTester.McpServer.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace ApiTester.McpServer.Persistence.Stores;
 
@@ -52,6 +54,8 @@ public sealed class SqlRunStore : IRunStore
                 DurationMs = r.DurationMs,
                 Pass = r.Pass,
                 FailureReason = r.FailureReason,
+                FailureDetailsJson = r.FailureDetails is null ? null : JsonSerializer.Serialize(r.FailureDetails, JsonDefaults.Default),
+                ValidationUnavailableReason = r.ValidationUnavailableReason,
                 ResponseSnippet = r.ResponseSnippet,
                 IsFlaky = r.IsFlaky,
                 FlakeReasonCategory = r.FlakeReasonCategory,
@@ -86,6 +90,8 @@ public sealed class SqlRunStore : IRunStore
                 DurationMs = r.DurationMs,
                 Pass = r.Pass,
                 FailureReason = r.FailureReason,
+                FailureDetails = DeserializeFailureDetails(r.FailureDetailsJson),
+                ValidationUnavailableReason = r.ValidationUnavailableReason,
                 ResponseSnippet = r.ResponseSnippet,
                 IsFlaky = r.IsFlaky,
                 FlakeReasonCategory = r.FlakeReasonCategory
@@ -121,6 +127,8 @@ public sealed class SqlRunStore : IRunStore
                     durationMs = r.DurationMs,
                     pass = r.Pass,
                     failureReason = r.FailureReason,
+                    failureDetails = r.FailureDetails,
+                    validationUnavailableReason = r.ValidationUnavailableReason,
                     responseSnippet = r.ResponseSnippet,
                     isFlaky = r.IsFlaky,
                     flakeReasonCategory = r.FlakeReasonCategory,
@@ -167,6 +175,14 @@ public sealed class SqlRunStore : IRunStore
             total = runs.Count,
             runs
         };
+    }
+
+    private static object? DeserializeFailureDetails(string? failureDetailsJson)
+    {
+        if (string.IsNullOrWhiteSpace(failureDetailsJson))
+            return null;
+
+        return JsonSerializer.Deserialize<object>(failureDetailsJson, JsonDefaults.Default);
     }
 
     private static Guid NormalizeTenantId(Guid tenantId)

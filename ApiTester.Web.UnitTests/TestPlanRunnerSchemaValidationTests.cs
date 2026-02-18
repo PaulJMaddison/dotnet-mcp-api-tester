@@ -24,8 +24,10 @@ public sealed class TestPlanRunnerSchemaValidationTests
         var runner = BuildRunner(store, runtime, handler);
         var record = await runner.RunPlanAsync(BuildPlan(), "default", CancellationToken.None);
 
-        using var failure = ParseFailure(record.Result.Results.Single().FailureReason);
-        Assert.Equal("content_type_mismatch", failure.RootElement.GetProperty("type").GetString());
+        var caseResult = record.Result.Results.Single();
+        Assert.Equal(FailureReasons.ContractViolation, caseResult.FailureReason);
+        using var failure = ParseFailure(caseResult.FailureDetails);
+        Assert.Equal("content_type_mismatch", failure.RootElement.GetProperty("Type").GetString());
     }
 
     [Fact]
@@ -40,9 +42,11 @@ public sealed class TestPlanRunnerSchemaValidationTests
         var runner = BuildRunner(store, runtime, handler);
         var record = await runner.RunPlanAsync(BuildPlan(), "default", CancellationToken.None);
 
-        using var failure = ParseFailure(record.Result.Results.Single().FailureReason);
-        Assert.Equal("schema_mismatch", failure.RootElement.GetProperty("type").GetString());
-        Assert.Contains("missing required property", failure.RootElement.GetProperty("details").GetProperty("errors")[0].GetString());
+        var caseResult = record.Result.Results.Single();
+        Assert.Equal(FailureReasons.ContractViolation, caseResult.FailureReason);
+        using var failure = ParseFailure(caseResult.FailureDetails);
+        Assert.Equal("schema_mismatch", failure.RootElement.GetProperty("Type").GetString());
+        Assert.Contains("missing required property", failure.RootElement.GetProperty("Details").GetProperty("errors")[0].GetString());
     }
 
     [Fact]
@@ -57,15 +61,42 @@ public sealed class TestPlanRunnerSchemaValidationTests
         var runner = BuildRunner(store, runtime, handler);
         var record = await runner.RunPlanAsync(BuildPlan(), "default", CancellationToken.None);
 
-        using var failure = ParseFailure(record.Result.Results.Single().FailureReason);
-        Assert.Equal("schema_mismatch", failure.RootElement.GetProperty("type").GetString());
-        Assert.Contains("expected integer", failure.RootElement.GetProperty("details").GetProperty("errors")[0].GetString());
+        var caseResult = record.Result.Results.Single();
+        Assert.Equal(FailureReasons.ContractViolation, caseResult.FailureReason);
+        using var failure = ParseFailure(caseResult.FailureDetails);
+        Assert.Equal("schema_mismatch", failure.RootElement.GetProperty("Type").GetString());
+        Assert.Contains("expected integer", failure.RootElement.GetProperty("Details").GetProperty("errors")[0].GetString());
     }
 
-    private static JsonDocument ParseFailure(string? failureReason)
+
+    [Fact]
+    public async Task RunPlanAsync_DoesNotValidateWhenValidateSchemaDisabled()
     {
-        Assert.False(string.IsNullOrWhiteSpace(failureReason));
-        return JsonDocument.Parse(failureReason!);
+        var store = new OpenApiStore();
+        store.SetDocument(BuildDocument(BuildSchemaWithIntegerAge()));
+
+        var runtime = BuildRuntimeConfig();
+        runtime.Policy.ValidateSchema = false;
+        var handler = new StaticResponseHandler("{\"age\":\"oops\"}", "application/json");
+
+        var runner = BuildRunner(store, runtime, handler);
+        var record = await runner.RunPlanAsync(BuildPlan(), "default", CancellationToken.None);
+
+        var caseResult = record.Result.Results.Single();
+        Assert.True(caseResult.Pass);
+        Assert.Null(caseResult.FailureReason);
+        Assert.Null(caseResult.FailureDetails);
+    }
+
+    private static JsonDocument ParseFailure(object? failureDetails)
+    {
+        Assert.NotNull(failureDetails);
+
+        return failureDetails switch
+        {
+            JsonElement element => JsonDocument.Parse(element.GetRawText()),
+            _ => JsonDocument.Parse(JsonSerializer.Serialize(failureDetails))
+        };
     }
 
     private static TestPlanRunner BuildRunner(OpenApiStore store, ApiRuntimeConfig runtime, HttpMessageHandler handler)
