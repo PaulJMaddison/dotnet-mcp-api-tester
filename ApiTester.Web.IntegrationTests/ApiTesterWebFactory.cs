@@ -213,7 +213,14 @@ public sealed class ApiTesterWebFactory : WebApplicationFactory<Program>
                 OrganisationId = OrganisationBravoId,
                 UserId = UserBravoId,
                 Name = "Bravo Reader",
-                Scopes = ApiKeyScopes.Serialize(new[] { ApiKeyScopes.ProjectsRead }),
+                Scopes = ApiKeyScopes.Serialize(new[]
+                {
+                    ApiKeyScopes.ProjectsRead,
+                    ApiKeyScopes.ProjectsWrite,
+                    ApiKeyScopes.RunsRead,
+                    ApiKeyScopes.RunsWrite,
+                    ApiKeyScopes.AdminKeys
+                }),
                 ExpiresUtc = null,
                 RevokedUtc = null,
                 Hash = ApiKeyHasher.Hash(ApiKeyBravo),
