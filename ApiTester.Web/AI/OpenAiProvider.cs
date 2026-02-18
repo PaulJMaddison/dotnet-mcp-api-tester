@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using ApiTester.Web.Observability;
 
 namespace ApiTester.Web.AI;
 
@@ -12,6 +14,7 @@ public sealed class OpenAiProvider : IAiProvider
     private readonly OpenAiProviderOptions _options;
     private readonly ILogger<OpenAiProvider> _logger;
     private readonly TimeProvider _timeProvider;
+    private readonly ApiTesterTelemetry _telemetry;
     private readonly object _circuitLock = new();
     private int _consecutiveFailures;
     private DateTimeOffset? _circuitOpenedUntil;
@@ -20,12 +23,14 @@ public sealed class OpenAiProvider : IAiProvider
         IHttpClientFactory httpClientFactory,
         IOptions<OpenAiProviderOptions> options,
         ILogger<OpenAiProvider> logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ApiTesterTelemetry telemetry)
     {
         _httpClientFactory = httpClientFactory;
         _options = options.Value;
         _logger = logger;
         _timeProvider = timeProvider;
+        _telemetry = telemetry;
     }
 
     public Task<AiResult> ExplainApiAsync(string spec, string operationId, CancellationToken ct)
@@ -66,6 +71,12 @@ public sealed class OpenAiProvider : IAiProvider
             max_tokens = maxTokens
         };
 
+        _telemetry.RecordAiCall("openai", model);
+
+        using var activity = ApiTesterTelemetry.ActivitySource.StartActivity("ai.openai.complete", ActivityKind.Client);
+        activity?.SetTag("ai.provider", "openai");
+        activity?.SetTag("ai.model", model);
+
         var attempts = Math.Max(1, _options.MaxRetries + 1);
         Exception? lastError = null;
         for (var attempt = 1; attempt <= attempts; attempt++)
@@ -96,6 +107,7 @@ public sealed class OpenAiProvider : IAiProvider
 
                 var content = ParseContent(bytes);
                 RecordSuccess();
+                activity?.SetTag("ai.success", true);
                 return new AiResult(Truncate(content, _options.MaxOutputChars), model);
             }
             catch (Exception ex) when (attempt < attempts)
@@ -112,6 +124,7 @@ public sealed class OpenAiProvider : IAiProvider
         }
 
         RecordFailure(lastError);
+        activity?.SetTag("ai.success", false);
         throw new InvalidOperationException("OpenAI request failed after retries.", lastError);
     }
 
