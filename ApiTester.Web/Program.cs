@@ -22,6 +22,7 @@ using ApiTester.Web.Diff;
 using ApiTester.Web.Mapping;
 using ApiTester.Web.Reports;
 using ApiTester.Web.Validation;
+using ApiTester.Web.AbuseProtection;
 using ApiTester.Web.Jobs;
 using ApiTester.AI;
 using Microsoft.AspNetCore.Diagnostics;
@@ -49,6 +50,8 @@ builder.Services.AddSingleton<OpenApiStore>();
 builder.Services.AddSingleton<ProjectContext>();
 builder.Services.AddSingleton<SsrfGuard>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.Configure<AbuseRateLimitOptions>(builder.Configuration.GetSection("AbuseProtection:RateLimits"));
+builder.Services.AddSingleton<TenantIpRateLimiter>();
 builder.Services.AddScoped<ApiRuntimeConfig>(sp =>
 {
     var options = sp.GetRequiredService<IOptions<ExecutionOptions>>().Value;
@@ -189,6 +192,7 @@ app.UseWhen(
         builder.UseMiddleware<ApiKeyAuthMiddleware>();
         builder.UseMiddleware<TenantContextMiddleware>();
         builder.UseMiddleware<OrgContextMiddleware>();
+        builder.UseMiddleware<TenantIpRateLimitMiddleware>();
     });
 
 app.UseWhen(context => context.Request.Path.StartsWithSegments("/api"), branch =>
