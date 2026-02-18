@@ -54,6 +54,8 @@ public sealed class RedactionService
             DurationMs = r.DurationMs,
             Pass = r.Pass,
             FailureReason = r.FailureReason,
+            FailureDetails = r.FailureDetails,
+            ValidationUnavailableReason = r.ValidationUnavailableReason,
             ResponseSnippet = RedactText(r.ResponseSnippet, patterns),
             IsFlaky = r.IsFlaky,
             FlakeReasonCategory = r.FlakeReasonCategory,

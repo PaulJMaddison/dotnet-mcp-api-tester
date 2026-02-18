@@ -1,3 +1,4 @@
+@using System.Text.Json
 @page "/app/runs/{runId}"
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject IApiTesterWebClient ApiClient
@@ -136,6 +137,23 @@
                                             {
                                                 <div class="text-secondary small">@result.FailureReason</div>
                                             }
+                                            @if (string.Equals(result.FailureReason, "ContractViolation", StringComparison.Ordinal))
+                                            {
+                                                <div class="mt-1">
+                                                    <span class="badge text-bg-danger">Contract violations</span>
+                                                </div>
+                                                @if (result.FailureDetails is not null)
+                                                {
+                                                    <details class="mt-1">
+                                                        <summary class="small">View contract violation details</summary>
+                                                        <pre class="small mb-0">@FormatFailureDetails(result.FailureDetails)</pre>
+                                                    </details>
+                                                }
+                                            }
+                                            else if (!string.IsNullOrWhiteSpace(result.ValidationUnavailableReason))
+                                            {
+                                                <div class="text-secondary small">Schema validation unavailable: @result.ValidationUnavailableReason</div>
+                                            }
                                             @if (!string.IsNullOrWhiteSpace(result.BlockReason))
                                             {
                                                 <div class="text-secondary small">@result.BlockReason</div>
@@ -184,6 +202,18 @@
 
         _response = await ApiClient.GetRunDetailAsync(runId, CancellationToken.None);
         _isLoading = false;
+    }
+
+
+    private static string FormatFailureDetails(object details)
+    {
+        if (details is null)
+            return string.Empty;
+
+        if (details is JsonElement element)
+            return JsonSerializer.Serialize(element, new JsonSerializerOptions { WriteIndented = true });
+
+        return JsonSerializer.Serialize(details, new JsonSerializerOptions { WriteIndented = true });
     }
 
     private static CaseStatusViewModel GetCaseStatusViewModel(TestCaseResult result)
