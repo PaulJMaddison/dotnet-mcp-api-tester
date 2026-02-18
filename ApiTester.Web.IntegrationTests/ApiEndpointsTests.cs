@@ -1180,6 +1180,7 @@ public class ApiEndpointsTests
         using var stream = new MemoryStream(evidenceBytes);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
         var entryNames = archive.Entries.Select(entry => entry.FullName).ToList();
+        Assert.Contains("manifest.json", entryNames);
         Assert.Contains("run.json", entryNames);
         Assert.Contains("policy.json", entryNames);
         Assert.Contains("audit.json", entryNames);

@@ -47,6 +47,20 @@ builder.Services.AddScoped<ILeadCaptureService, LeadCaptureService>();
 builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
 builder.Services.AddScoped<ITenantBootstrapper, TenantBootstrapper>();
 
+var oidcAuthority = builder.Configuration["Auth:Authority"] ?? string.Empty;
+var oidcClientId = builder.Configuration["Auth:ClientId"] ?? string.Empty;
+var oidcClientSecret = builder.Configuration["Auth:ClientSecret"] ?? string.Empty;
+var oidcConfigured = !string.IsNullOrWhiteSpace(oidcAuthority)
+    && !string.IsNullOrWhiteSpace(oidcClientId)
+    && !string.IsNullOrWhiteSpace(oidcClientSecret);
+var allowDevBypass = builder.Environment.IsDevelopment()
+    && builder.Configuration.GetValue<bool>("Auth:DevBypass");
+
+if (!oidcConfigured && !allowDevBypass)
+{
+    throw new InvalidOperationException("OIDC is not configured. Set Auth:Authority/Auth:ClientId/Auth:ClientSecret or enable Auth:DevBypass=true in Development only.");
+}
+
 builder.Services
     .AddAuthentication(options =>
     {
@@ -60,9 +74,9 @@ builder.Services
     })
     .AddOpenIdConnect(options =>
     {
-        options.Authority = builder.Configuration["Auth:Authority"] ?? string.Empty;
-        options.ClientId = builder.Configuration["Auth:ClientId"] ?? string.Empty;
-        options.ClientSecret = builder.Configuration["Auth:ClientSecret"] ?? string.Empty;
+        options.Authority = oidcAuthority;
+        options.ClientId = oidcClientId;
+        options.ClientSecret = oidcClientSecret;
         options.CallbackPath = builder.Configuration["Auth:CallbackPath"] ?? "/signin-oidc";
         options.ResponseType = "code";
         options.SaveTokens = true;
@@ -88,6 +102,11 @@ builder.Services
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+if (allowDevBypass)
+{
+    app.Logger.LogWarning("Auth:DevBypass=true enabled in Development. /app routes are accessible without OIDC sign-in.");
+}
 
 app.UseStaticFiles(new StaticFileOptions
 {
@@ -130,6 +149,9 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapGet("/signin", async (HttpContext httpContext) =>
 {
+    if (allowDevBypass)
+        return Results.Redirect("/app");
+
     if (httpContext.User.Identity?.IsAuthenticated == true)
     {
         return Results.Redirect("/app");
@@ -178,6 +200,12 @@ app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/app") && context.User.Identity?.IsAuthenticated != true)
     {
+        if (allowDevBypass)
+        {
+            await next();
+            return;
+        }
+
         context.Response.Redirect("/signin");
         return;
     }

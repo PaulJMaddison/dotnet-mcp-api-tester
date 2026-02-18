@@ -1,0 +1,24 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Smoke Fixture API",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "__BASE_URL__"
+    }
+  ],
+  "paths": {
+    "/fixture/status": {
+      "get": {
+        "operationId": "getFixtureStatus",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  }
+}

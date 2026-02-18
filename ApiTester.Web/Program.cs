@@ -137,6 +137,10 @@ builder.Services.AddScoped<AiExplainService>();
 builder.Services.AddScoped<AiDocsGenerationService>();
 builder.Services.AddScoped<AiRunSummaryService>();
 builder.Services.AddScoped<AiSuggestTestsService>();
+var stripeOptions = builder.Configuration.GetSection(StripeBillingOptions.SectionName).Get<StripeBillingOptions>() ?? new StripeBillingOptions();
+var stripeBillingConfigured = !string.IsNullOrWhiteSpace(stripeOptions.SecretKey)
+    && !string.IsNullOrWhiteSpace(stripeOptions.WebhookSecret);
+
 builder.Services.Configure<StripeBillingOptions>(builder.Configuration.GetSection(StripeBillingOptions.SectionName));
 builder.Services.AddScoped<StripeBillingService>();
 builder.Services.AddScoped<SubscriptionEnforcementService>();
@@ -364,6 +368,8 @@ v1.MapGet("/me", async (SubscriptionEnforcementService subscriptions, HttpContex
 
 v1.MapGet("/billing/plan", async (SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
+    if (!stripeBillingConfigured)
+        return BillingNotConfigured();
     var tenantContext = httpContext.GetTenantContext();
     var snapshot = await subscriptions.GetSnapshotAsync(tenantContext.TenantId, ct);
     var limits = new BillingPlanLimits(
@@ -387,6 +393,8 @@ v1.MapGet("/billing/plan", async (SubscriptionEnforcementService subscriptions, 
 
 v1.MapGet("/billing/usage", async (IProjectStore projectStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
+    if (!stripeBillingConfigured)
+        return BillingNotConfigured();
     var tenantContext = httpContext.GetTenantContext();
     var totalProjects = await GetProjectCountAsync(projectStore, tenantContext.TenantId, ct);
     await subscriptions.UpdateProjectsUsedAsync(tenantContext.TenantId, totalProjects, ct);
@@ -415,6 +423,8 @@ v1.MapGet("/billing/usage", async (IProjectStore projectStore, SubscriptionEnfor
 
 v1.MapPost("/billing/checkout", async (BillingCheckoutRequest request, StripeBillingService stripeBilling, HttpContext httpContext, CancellationToken ct) =>
 {
+    if (!stripeBillingConfigured)
+        return BillingNotConfigured();
     var desired = (request?.Plan ?? string.Empty).Trim();
     if (string.IsNullOrWhiteSpace(desired))
         return InvalidRequest("plan is required.");
@@ -426,6 +436,8 @@ v1.MapPost("/billing/checkout", async (BillingCheckoutRequest request, StripeBil
 
 v1.MapPost("/billing/portal", async (StripeBillingService stripeBilling, HttpContext httpContext, CancellationToken ct) =>
 {
+    if (!stripeBillingConfigured)
+        return BillingNotConfigured();
     var tenantContext = httpContext.GetTenantContext();
     var url = await stripeBilling.CreatePortalSessionAsync(tenantContext.TenantId, ct);
     return Results.Ok(new BillingPortalResponse(url));
@@ -433,6 +445,8 @@ v1.MapPost("/billing/portal", async (StripeBillingService stripeBilling, HttpCon
 
 v1.MapPost("/billing/webhook", async (HttpContext httpContext, StripeBillingService stripeBilling, CancellationToken ct) =>
 {
+    if (!stripeBillingConfigured)
+        return BillingNotConfigured();
     httpContext.Request.EnableBuffering();
     using var reader = new StreamReader(httpContext.Request.Body, Encoding.UTF8, leaveOpen: true);
     var payload = await reader.ReadToEndAsync();
@@ -2516,9 +2530,26 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
     var complianceReport = ComplianceReportBuilder.Build(run, org, auditSubset.Take(25).ToList(), redactionService);
     var complianceReportJson = JsonSerializer.Serialize(complianceReport, jsonOptions);
 
+    var manifest = JsonSerializer.Serialize(new
+    {
+        generatedUtc = DateTime.UtcNow,
+        runId = redactedRun.RunId,
+        entries = new[]
+        {
+            "manifest.json",
+            "run.json",
+            "policy.json",
+            "audit.json",
+            "compliance-report.json",
+            "exports/junit.xml",
+            "exports/results.csv"
+        }
+    }, jsonOptions);
+
     using var stream = new MemoryStream();
     using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true))
     {
+        AddZipEntry(archive, "manifest.json", manifest);
         AddZipEntry(archive, "run.json", runJson);
         AddZipEntry(archive, "policy.json", policyJson);
         AddZipEntry(archive, "audit.json", auditJson);
@@ -3377,6 +3408,12 @@ app.Run();
 
 static IResult InvalidRequest(string detail)
     => Results.Problem(title: "Invalid request", detail: detail, statusCode: StatusCodes.Status400BadRequest);
+
+static IResult BillingNotConfigured()
+    => Results.Problem(
+        title: "Billing not configured",
+        detail: "Stripe settings are missing. Configure Stripe before using billing endpoints.",
+        statusCode: StatusCodes.Status501NotImplemented);
 
 static void AddZipEntry(ZipArchive archive, string name, string content)
 {
