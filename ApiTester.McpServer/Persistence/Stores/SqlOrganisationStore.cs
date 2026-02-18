@@ -89,6 +89,22 @@ public sealed class SqlOrganisationStore : IOrganisationStore
             .FirstOrDefaultAsync(ct);
     }
 
+
+    public async Task<IReadOnlyList<OrganisationRecord>> ListAsync(CancellationToken ct)
+    {
+        return await _db.Organisations.AsNoTracking()
+            .OrderBy(o => o.CreatedUtc)
+            .Select(o => new OrganisationRecord(
+                o.OrganisationId,
+                o.Name,
+                o.Slug,
+                o.CreatedUtc,
+                o.RetentionDays,
+                DeserializeRedactionRules(o.RedactionRulesJson),
+                DeserializeOrgSettings(o.OrgSettingsJson)))
+            .ToListAsync(ct);
+    }
+
     public async Task<OrganisationRecord?> UpdateSettingsAsync(
         Guid organisationId,
         int? retentionDays,

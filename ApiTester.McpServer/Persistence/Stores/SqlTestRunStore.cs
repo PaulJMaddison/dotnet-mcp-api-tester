@@ -314,6 +314,32 @@ public sealed class SqlTestRunStore : ITestRunStore
         return runs.Count;
     }
 
+
+    public async Task<int> TrimResponseSnippetsAsync(Guid tenantId, int maxSnippetLength, CancellationToken ct)
+    {
+        tenantId = NormalizeTenantId(tenantId);
+        if (maxSnippetLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxSnippetLength), "Maximum snippet length must be greater than zero.");
+
+        var results = await _db.TestCaseResults
+            .Where(r => r.Run != null
+                        && r.Run.Project != null
+                        && r.Run.TenantId == tenantId
+                        && r.Run.Project.TenantId == tenantId
+                        && r.ResponseSnippet != null
+                        && r.ResponseSnippet.Length > maxSnippetLength)
+            .ToListAsync(ct);
+
+        if (results.Count == 0)
+            return 0;
+
+        foreach (var result in results)
+            result.ResponseSnippet = result.ResponseSnippet![..maxSnippetLength];
+
+        await _db.SaveChangesAsync(ct);
+        return results.Count;
+    }
+
     private async Task<ProjectEntity> EnsureProjectAsync(Guid tenantId, string projectKey, string ownerKey)
     {
         var existing = await _db.Projects.FirstOrDefaultAsync(p => p.ProjectKey == projectKey && p.TenantId == tenantId);

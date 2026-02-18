@@ -57,6 +57,12 @@ public sealed class FileOrganisationStore : IOrganisationStore
         return list.FirstOrDefault(o => o.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
     }
 
+    public async Task<IReadOnlyList<OrganisationRecord>> ListAsync(CancellationToken ct)
+    {
+        var list = await LoadAsync(ct);
+        return list;
+    }
+
     public async Task<OrganisationRecord?> UpdateSettingsAsync(
         Guid organisationId,
         int? retentionDays,
