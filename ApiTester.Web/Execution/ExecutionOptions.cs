@@ -4,6 +4,7 @@ public sealed class ExecutionOptions
 {
     public string? BaseUrl { get; init; }
     public bool? DryRun { get; init; }
+    public bool HostedMode { get; init; }
     public List<string> AllowedBaseUrls { get; init; } = new();
     public List<string> AllowedMethods { get; init; } = new();
     public bool? BlockLocalhost { get; init; }

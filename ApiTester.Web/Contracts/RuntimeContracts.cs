@@ -1,6 +1,7 @@
 namespace ApiTester.Web.Contracts;
 
 public sealed record ApiPolicyResponse(
+    bool HostedMode,
     bool DryRun,
     IReadOnlyList<string> AllowedBaseUrls,
     IReadOnlyList<string> AllowedMethods,
@@ -14,6 +15,7 @@ public sealed record ApiPolicyResponse(
     int MaxRetries);
 
 public sealed record ApiPolicyUpdateRequest(
+    bool? HostedMode,
     bool? DryRun,
     IReadOnlyList<string>? AllowedBaseUrls,
     IReadOnlyList<string>? AllowedMethods,

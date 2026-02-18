@@ -81,6 +81,106 @@ public sealed class TestPlanRunnerTests
         Assert.Contains("truncated", snippet, StringComparison.OrdinalIgnoreCase);
     }
 
+
+    [Fact]
+    public async Task RunPlanAsync_HostedMode_BlocksLoopbackEvenIfAllowListed()
+    {
+        var plan = BuildSimplePlan();
+        var runtime = new ApiRuntimeConfig();
+        runtime.SetBaseUrl("http://127.0.0.1:5001");
+        runtime.Policy.DryRun = false;
+        runtime.Policy.HostedMode = true;
+        runtime.Policy.AllowedMethods.Clear();
+        runtime.Policy.AllowedMethods.Add("GET");
+        runtime.Policy.AllowedBaseUrls.Add("http://127.0.0.1:5001");
+
+        var runner = new TestPlanRunner(
+            new OpenApiStore(),
+            runtime,
+            new StaticHttpClientFactory(new HttpClient(new StaticResponseHandler())),
+            new FakeTestRunStore(),
+            new SsrfGuard(),
+            NullLogger<TestPlanRunner>.Instance);
+
+        var record = await runner.RunPlanAsync(plan, "default", CancellationToken.None);
+        var result = record.Result.Results.Single();
+
+        Assert.True(result.Blocked);
+        Assert.Contains("Loopback", result.BlockReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunPlanAsync_HostedMode_AllowsExplicitAllowedBaseUrl()
+    {
+        var plan = BuildSimplePlan();
+        var runtime = new ApiRuntimeConfig();
+        runtime.SetBaseUrl("https://example.com");
+        runtime.Policy.DryRun = false;
+        runtime.Policy.HostedMode = true;
+        runtime.Policy.AllowedMethods.Clear();
+        runtime.Policy.AllowedMethods.Add("GET");
+        runtime.Policy.AllowedBaseUrls.Add("https://example.com");
+
+        var runner = new TestPlanRunner(
+            new OpenApiStore(),
+            runtime,
+            new StaticHttpClientFactory(new HttpClient(new StaticResponseHandler())),
+            new FakeTestRunStore(),
+            new SsrfGuard(),
+            NullLogger<TestPlanRunner>.Instance);
+
+        var record = await runner.RunPlanAsync(plan, "default", CancellationToken.None);
+        var result = record.Result.Results.Single();
+
+        Assert.False(result.Blocked);
+        Assert.True(result.Pass);
+    }
+
+    [Fact]
+    public async Task RunPlanAsync_BlocksRedirectToLoopback()
+    {
+        var plan = BuildSimplePlan();
+        var runtime = new ApiRuntimeConfig();
+        runtime.SetBaseUrl("https://example.com");
+        runtime.Policy.DryRun = false;
+        runtime.Policy.HostedMode = true;
+        runtime.Policy.AllowedMethods.Clear();
+        runtime.Policy.AllowedMethods.Add("GET");
+        runtime.Policy.AllowedBaseUrls.Add("https://example.com");
+
+        var runner = new TestPlanRunner(
+            new OpenApiStore(),
+            runtime,
+            new StaticHttpClientFactory(new HttpClient(new RedirectToLoopbackHandler())),
+            new FakeTestRunStore(),
+            new SsrfGuard(),
+            NullLogger<TestPlanRunner>.Instance);
+
+        var record = await runner.RunPlanAsync(plan, "default", CancellationToken.None);
+        var result = record.Result.Results.Single();
+
+        Assert.True(result.Blocked);
+        Assert.Contains("Redirect blocked by policy", result.BlockReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+
+    private static TestPlan BuildSimplePlan()
+        => new()
+        {
+            OperationId = "getPet",
+            Method = "GET",
+            PathTemplate = "/pets/{petId}",
+            Cases =
+            [
+                new TestCase
+                {
+                    Name = "Happy",
+                    PathParams = new Dictionary<string, string> { ["petId"] = "1" },
+                    ExpectedStatusCodes = new List<int> { 200 }
+                }
+            ]
+        };
+
     private sealed class FakeTestRunStore : ITestRunStore
     {
         public TestRunRecord? LastRecord { get; private set; }
@@ -117,6 +217,16 @@ public sealed class TestPlanRunnerTests
         }
 
         public HttpClient CreateClient(string name) => _client;
+    }
+
+    private sealed class RedirectToLoopbackHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.Redirect);
+            response.Headers.Location = new Uri("http://127.0.0.1:8080/redirected");
+            return Task.FromResult(response);
+        }
     }
 
     private sealed class StaticResponseHandler : HttpMessageHandler

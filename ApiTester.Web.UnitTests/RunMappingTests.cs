@@ -91,6 +91,7 @@ public class RunMappingTests
             Environment = new TestRunEnvironmentSnapshot("Staging", "https://staging.example.test"),
             PolicySnapshot = new ApiExecutionPolicySnapshot(
                 false,
+                false,
                 new[] { "https://api.example.test" },
                 new[] { "GET", "POST" },
                 true,

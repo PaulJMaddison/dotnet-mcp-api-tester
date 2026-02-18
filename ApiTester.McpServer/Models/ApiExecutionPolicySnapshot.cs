@@ -3,6 +3,7 @@ using ApiTester.McpServer.Services;
 namespace ApiTester.McpServer.Models;
 
 public sealed record ApiExecutionPolicySnapshot(
+    bool HostedMode,
     bool DryRun,
     IReadOnlyList<string> AllowedBaseUrls,
     IReadOnlyList<string> AllowedMethods,
@@ -34,6 +35,7 @@ public sealed record ApiExecutionPolicySnapshot(
             .ToList();
 
         return new ApiExecutionPolicySnapshot(
+            policy.HostedMode,
             policy.DryRun,
             allowedBaseUrls,
             allowedMethods,

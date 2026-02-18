@@ -82,6 +82,20 @@ public sealed class ExecuteTools
         // B) Base URL allowlist (simple prefix match for now, harden later)
         var normalisedBaseUrl = baseUrl.Trim().TrimEnd('/');
 
+        if (policy.HostedMode && policy.AllowedBaseUrls.Count == 0)
+        {
+            _logger.LogWarning("Blocked operation {OperationId} in hosted mode due to empty allowed base URLs", operationId);
+            return JsonSerializer.Serialize(new
+            {
+                blocked = true,
+                reason = "Hosted mode requires at least one allowedBaseUrls entry. Deny by default.",
+                operationId,
+                method,
+                baseUrl = normalisedBaseUrl,
+                url = (string?)null
+            }, JsonDefaults.Default);
+        }
+
         if (policy.AllowedBaseUrls.Count == 0 && !policy.DryRun)
         {
             _logger.LogWarning("Blocked operation {OperationId} due to empty allowed base URLs", operationId);
@@ -189,7 +203,7 @@ public sealed class ExecuteTools
             return JsonSerializer.Serialize(dryRunResult, JsonDefaults.Default);
         }
 
-        var client = _httpClientFactory.CreateClient();
+        var client = _httpClientFactory.CreateClient(TestPlanRunner.HttpClientName);
         client.Timeout = policy.Timeout;
 
         var sw = Stopwatch.StartNew();

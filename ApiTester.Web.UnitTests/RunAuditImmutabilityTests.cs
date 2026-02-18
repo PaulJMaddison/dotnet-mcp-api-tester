@@ -68,6 +68,7 @@ public sealed class RunAuditImmutabilityTests
             Actor = actor,
             Environment = new TestRunEnvironmentSnapshot(environmentName, "https://example.com"),
             PolicySnapshot = new ApiExecutionPolicySnapshot(
+                HostedMode: false,
                 DryRun: true,
                 AllowedBaseUrls: new List<string> { "https://example.com" },
                 AllowedMethods: new List<string> { "GET", "POST" },

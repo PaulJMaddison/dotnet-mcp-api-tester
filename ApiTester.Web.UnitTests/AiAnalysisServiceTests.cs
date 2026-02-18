@@ -142,7 +142,7 @@ public sealed class AiAnalysisServiceTests
             "GET",
             "/thing",
             operation,
-            new ApiExecutionPolicySnapshot(false, Array.Empty<string>(), Array.Empty<string>(), false, false, 30, 1024, 2048, true, false, 0),
+            new ApiExecutionPolicySnapshot(false, false, Array.Empty<string>(), Array.Empty<string>(), false, false, 30, 1024, 2048, true, false, 0),
             run);
     }
 

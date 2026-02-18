@@ -63,7 +63,8 @@ builder.Services.AddScoped<TestPlanRunner>();
 builder.Services.AddHttpClient(TestPlanRunner.HttpClientName)
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
     {
-        UseProxy = false
+        UseProxy = false,
+        AllowAutoRedirect = false
     });
 builder.Services.AddHttpClient();
 

@@ -67,6 +67,7 @@ builder.Services.AddScoped<ApiRuntimeConfig>(sp =>
 
     ApiPolicyDefaults.ApplySafeDefaults(runtime.Policy);
     runtime.Policy.DryRun = options.DryRun ?? false;
+    runtime.Policy.HostedMode = builder.Configuration.GetValue<bool>("Security:HostedMode") || options.HostedMode;
 
     if (options.AllowedBaseUrls.Count > 0)
     {
@@ -106,7 +107,8 @@ builder.Services.AddScoped<TestPlanRunner>();
 builder.Services.AddHttpClient(TestPlanRunner.HttpClientName)
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
     {
-        UseProxy = false
+        UseProxy = false,
+        AllowAutoRedirect = false
     });
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<RunComparisonService>();
@@ -2761,6 +2763,7 @@ async Task<IResult> SuggestImprovementsAiEndpointAsync(
         var (path, method, operation) = match.Value;
         var policy = run.PolicySnapshot ?? new ApiExecutionPolicySnapshot(
             false,
+            false,
             [],
             [],
             true,
@@ -3222,6 +3225,7 @@ static async Task<IResult> NotFoundOrForbiddenAsync(IProjectStore store, ITenant
 
 static ApiPolicyResponse ToPolicyResponse(ApiExecutionPolicy policy)
     => new(
+        policy.HostedMode,
         policy.DryRun,
         policy.AllowedBaseUrls.ToList(),
         policy.AllowedMethods.ToList(),
@@ -3239,6 +3243,9 @@ static bool TryApplyPolicyUpdate(ApiExecutionPolicy policy, ApiPolicyUpdateReque
     error = string.Empty;
 
     var next = ClonePolicy(policy);
+
+    if (request.HostedMode.HasValue)
+        next.HostedMode = request.HostedMode.Value;
 
     if (request.DryRun.HasValue)
         next.DryRun = request.DryRun.Value;
@@ -3342,6 +3349,7 @@ static ApiExecutionPolicy ClonePolicy(ApiExecutionPolicy policy)
 {
     return new ApiExecutionPolicy
     {
+        HostedMode = policy.HostedMode,
         DryRun = policy.DryRun,
         AllowedBaseUrls = policy.AllowedBaseUrls.Select(x => x).ToList(),
         BlockLocalhost = policy.BlockLocalhost,
@@ -3358,6 +3366,7 @@ static ApiExecutionPolicy ClonePolicy(ApiExecutionPolicy policy)
 
 static void ApplyPolicy(ApiExecutionPolicy target, ApiExecutionPolicy source)
 {
+    target.HostedMode = source.HostedMode;
     target.DryRun = source.DryRun;
     target.BlockLocalhost = source.BlockLocalhost;
     target.BlockPrivateNetworks = source.BlockPrivateNetworks;
@@ -3573,19 +3582,41 @@ static async Task<IResult> ImportOpenApiSpecAsync(
         if (!allowed)
             return Results.Problem(title: "OpenAPI URL blocked", detail: reason, statusCode: StatusCodes.Status403Forbidden);
 
-        var client = httpClientFactory.CreateClient();
+        var client = httpClientFactory.CreateClient(TestPlanRunner.HttpClientName);
         client.Timeout = runtime.Policy.Timeout;
 
-        using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, ct);
-        if (!response.IsSuccessStatusCode)
-            return Results.Problem(title: "OpenAPI fetch failed", detail: $"Remote server returned {(int)response.StatusCode}.", statusCode: StatusCodes.Status400BadRequest);
+        using var outboundRequest = new HttpRequestMessage(HttpMethod.Get, uri);
+        using var response = await client.SendAsync(outboundRequest, HttpCompletionOption.ResponseHeadersRead, ct);
 
-        if (response.Content.Headers.ContentLength > WebOpenApiImportLimits.MaxSpecBytes)
+        HttpResponseMessage finalResponse = response;
+        if ((int)response.StatusCode is 301 or 302 or 303 or 307 or 308 && response.Headers.Location is not null)
+        {
+            var redirectUri = response.Headers.Location.IsAbsoluteUri
+                ? response.Headers.Location
+                : new Uri(uri, response.Headers.Location);
+
+            var (redirectAllowed, redirectReason) = await ssrfGuard.CheckAsync(
+                redirectUri,
+                runtime.Policy.BlockLocalhost,
+                runtime.Policy.BlockPrivateNetworks,
+                ct);
+
+            if (!redirectAllowed)
+                return Results.Problem(title: "OpenAPI URL blocked", detail: $"Redirect blocked by policy: {redirectReason}", statusCode: StatusCodes.Status403Forbidden);
+
+            using var redirectRequest = new HttpRequestMessage(HttpMethod.Get, redirectUri);
+            finalResponse = await client.SendAsync(redirectRequest, HttpCompletionOption.ResponseHeadersRead, ct);
+        }
+
+        if (!finalResponse.IsSuccessStatusCode)
+            return Results.Problem(title: "OpenAPI fetch failed", detail: $"Remote server returned {(int)finalResponse.StatusCode}.", statusCode: StatusCodes.Status400BadRequest);
+
+        if (finalResponse.Content.Headers.ContentLength > WebOpenApiImportLimits.MaxSpecBytes)
             return Results.Problem(title: "OpenAPI spec too large", detail: $"Spec must be <= {WebOpenApiImportLimits.MaxSpecBytes} bytes.", statusCode: StatusCodes.Status413PayloadTooLarge);
 
         try
         {
-            specJson = await ReadBodyCappedAsync(response.Content, WebOpenApiImportLimits.MaxSpecBytes, ct);
+            specJson = await ReadBodyCappedAsync(finalResponse.Content, WebOpenApiImportLimits.MaxSpecBytes, ct);
         }
         catch (InvalidOperationException)
         {

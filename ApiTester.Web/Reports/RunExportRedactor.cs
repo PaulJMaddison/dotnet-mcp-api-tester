@@ -17,6 +17,7 @@ public static class RunExportRedactor
         var redactedPolicy = run.PolicySnapshot is null
             ? null
             : new ApiExecutionPolicySnapshot(
+                run.PolicySnapshot.HostedMode,
                 run.PolicySnapshot.DryRun,
                 run.PolicySnapshot.AllowedBaseUrls
                     .Select(url => redactionService.RedactText(url, patterns) ?? url)
