@@ -267,7 +267,7 @@ v1.MapGet("/tokens", async (IApiKeyStore apiKeyStore, HttpContext httpContext, C
 v1.MapPost("/tokens", async (ApiKeyCreateRequest request, IApiTokenService apiTokenService, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredName(request?.Name, RequestValidation.MaxNameLength, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (request.Scopes is null || request.Scopes.Count == 0)
         return InvalidRequest("At least one scope is required.");
@@ -304,7 +304,7 @@ v1.MapPost("/tokens", async (ApiKeyCreateRequest request, IApiTokenService apiTo
 v1.MapPost("/tokens/{id}/revoke", async (string id, IApiKeyStore apiKeyStore, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(id, out var keyId, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
@@ -568,7 +568,7 @@ v1.MapGet("/projects", async (int? pageSize, string? pageToken, int? skip, strin
 v1.MapPost("/projects", async (ProjectCreateRequest request, IProjectStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredName(request?.Name, RequestValidation.MaxNameLength, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
     if (scopeCheck is not null)
@@ -621,7 +621,7 @@ v1.MapPost("/projects/{projectId}/specs/import", ImportOpenApiSpecAsync);
 v1.MapGet("/projects/{projectId}/specs", async (string projectId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
     if (scopeCheck is not null)
@@ -641,7 +641,7 @@ v1.MapGet("/projects/{projectId}/specs", async (string projectId, IOpenApiSpecSt
 v1.MapGet("/projects/{projectId}/specs/{specId}", async (string projectId, string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (!RequestValidation.TryParseGuid(specId, out var specGuid, out var specError))
         return InvalidRequest(specError);
@@ -665,7 +665,7 @@ v1.MapGet("/projects/{projectId}/specs/{specId}", async (string projectId, strin
 v1.MapGet("/projects/{projectId}/specs/diff", async (string projectId, string? from, string? to, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
     if (scopeCheck is not null)
@@ -719,7 +719,7 @@ v1.MapGet("/projects/{projectId}/specs/diff", async (string projectId, string? f
 v1.MapDelete("/projects/{projectId}/specs/{specId}", async (string projectId, string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (!RequestValidation.TryParseGuid(specId, out var specGuid, out var specError))
         return InvalidRequest(specError);
@@ -745,7 +745,7 @@ v1.MapDelete("/projects/{projectId}/specs/{specId}", async (string projectId, st
 v1.MapGet("/projects/{projectId}/operations", async (string projectId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
     if (scopeCheck is not null)
@@ -784,7 +784,7 @@ v1.MapGet("/projects/{projectId}/operations", async (string projectId, IOpenApiS
 v1.MapGet("/projects/{projectId}/operations/describe", async (string projectId, string? operationId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
@@ -879,7 +879,7 @@ v1.MapPut("/runtime/policy", async (ApiPolicyUpdateRequest request, ApiRuntimeCo
         return scopeCheck;
 
     if (!TryApplyPolicyUpdate(runtime.Policy, request, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
@@ -1016,7 +1016,7 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/generate", async (
     CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
@@ -1073,7 +1073,7 @@ v1.MapPost("/projects/{projectId}/testplans/{operationId}/run", async (
     CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
@@ -1224,7 +1224,7 @@ v1.MapGet("/runs", async (string? projectKey, string? operationId, int? pageSize
 v1.MapGet("/runs/{runId}", async (string runId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -1382,7 +1382,7 @@ app.MapGet("/api-keys", async (IApiKeyStore apiKeyStore, HttpContext httpContext
 app.MapPost("/api-keys/{id}/revoke", async (string id, IApiKeyStore apiKeyStore, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(id, out var keyId, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var orgContext = httpContext.GetOrgContext();
     var tenantContext = httpContext.GetTenantContext();
@@ -1441,7 +1441,7 @@ app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, 
 app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryValidateRequiredName(request?.Name, RequestValidation.MaxNameLength, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
     if (scopeCheck is not null)
@@ -1463,7 +1463,7 @@ app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore 
 app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore store, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
     if (scopeCheck is not null)
@@ -1480,7 +1480,7 @@ app.MapGet("/api/projects/{projectId}", async (string projectId, IProjectStore s
 app.MapGet("/api/projects/{projectId}/environments", async (string projectId, IProjectStore projectStore, IEnvironmentStore environmentStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
     if (scopeCheck is not null)
@@ -1499,7 +1499,7 @@ app.MapGet("/api/projects/{projectId}/environments", async (string projectId, IP
 app.MapPost("/api/projects/{projectId}/environments", async (string projectId, EnvironmentCreateRequest request, IProjectStore projectStore, IEnvironmentStore environmentStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (!RequestValidation.TryValidateRequiredName(request?.Name, RequestValidation.MaxEnvironmentNameLength, out var nameError))
         return InvalidRequest(nameError);
@@ -1532,7 +1532,7 @@ app.MapPost("/api/projects/{projectId}/environments", async (string projectId, E
 app.MapGet("/api/projects/{projectId}/environments/{environmentId}", async (string projectId, string environmentId, IProjectStore projectStore, IEnvironmentStore environmentStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (!RequestValidation.TryParseGuid(environmentId, out var envId, out var envError))
         return InvalidRequest(envError);
@@ -1556,7 +1556,7 @@ app.MapGet("/api/projects/{projectId}/environments/{environmentId}", async (stri
 app.MapPut("/api/projects/{projectId}/environments/{environmentId}", async (string projectId, string environmentId, EnvironmentUpdateRequest request, IProjectStore projectStore, IEnvironmentStore environmentStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (!RequestValidation.TryParseGuid(environmentId, out var envId, out var envError))
         return InvalidRequest(envError);
@@ -1595,7 +1595,7 @@ app.MapPut("/api/projects/{projectId}/environments/{environmentId}", async (stri
 app.MapDelete("/api/projects/{projectId}/environments/{environmentId}", async (string projectId, string environmentId, IProjectStore projectStore, IEnvironmentStore environmentStore, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (!RequestValidation.TryParseGuid(environmentId, out var envId, out var envError))
         return InvalidRequest(envError);
@@ -1624,7 +1624,7 @@ app.MapPost("/api/projects/{projectId}/specs/import", ImportOpenApiSpecAsync);
 app.MapGet("/api/projects/{projectId}/openapi", async (string projectId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
     if (scopeCheck is not null)
@@ -1645,7 +1645,7 @@ app.MapGet("/api/projects/{projectId}/openapi", async (string projectId, IOpenAp
 app.MapGet("/api/projects/{projectId}/specs", async (string projectId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
     if (scopeCheck is not null)
@@ -1665,7 +1665,7 @@ app.MapGet("/api/projects/{projectId}/specs", async (string projectId, IOpenApiS
 app.MapGet("/api/projects/{projectId}/specs/{specId}", async (string projectId, string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (!RequestValidation.TryParseGuid(specId, out var specGuid, out var specError))
         return InvalidRequest(specError);
@@ -1689,7 +1689,7 @@ app.MapGet("/api/projects/{projectId}/specs/{specId}", async (string projectId, 
 app.MapGet("/api/projects/{projectId}/specs/diff", async (string projectId, string? from, string? to, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
     if (scopeCheck is not null)
@@ -1744,7 +1744,7 @@ app.MapGet("/api/projects/{projectId}/specs/diff", async (string projectId, stri
 app.MapGet("/api/specs/{specId}", async (string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(specId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
     if (scopeCheck is not null)
@@ -1825,7 +1825,7 @@ app.MapPost("/api/projects/{projectId}/testplans/{operationId}/generate", async 
     CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
@@ -1872,7 +1872,7 @@ app.MapGet("/api/projects/{projectId}/testplans/{operationId}", async (
     CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
@@ -1912,7 +1912,7 @@ app.MapPost("/api/projects/{projectId}/runs/execute/{operationId}", async (
     CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (string.IsNullOrWhiteSpace(operationId))
         return InvalidRequest("operationId is required.");
@@ -2066,7 +2066,7 @@ app.MapGet("/api/runs", async (string? projectKey, string? operationId, int? pag
 app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -2083,7 +2083,7 @@ app.MapGet("/api/runs/{runId}", async (string runId, ITestRunStore store, Subscr
 app.MapGet("/api/runs/{runId}/summary", async (string runId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -2105,7 +2105,7 @@ app.MapGet("/api/runs/{runId}/summary", async (string runId, ITestRunStore store
 app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -2127,7 +2127,7 @@ app.MapGet("/api/runs/{runId}/audit", async (string runId, ITestRunStore store, 
 app.MapGet("/api/runs/{runId}/compliance-report", async (string runId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -2148,7 +2148,7 @@ app.MapGet("/api/runs/{runId}/compliance-report", async (string runId, ITestRunS
 app.MapGet("/api/runs/{runId}/annotations", async (string runId, ITestRunStore runStore, IRunAnnotationStore annotationStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -2171,7 +2171,7 @@ app.MapGet("/api/runs/{runId}/annotations", async (string runId, ITestRunStore r
 app.MapPost("/api/runs/{runId}/annotations", async (string runId, RunAnnotationCreateRequest request, ITestRunStore runStore, IRunAnnotationStore annotationStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (!RequestValidation.TryNormalizeAnnotationNote(request?.Note, out var normalizedNote, out var noteError))
         return InvalidRequest(noteError);
@@ -2201,7 +2201,7 @@ app.MapPost("/api/runs/{runId}/annotations", async (string runId, RunAnnotationC
 app.MapGet("/api/runs/{runId}/annotations/{annotationId}", async (string runId, string annotationId, ITestRunStore runStore, IRunAnnotationStore annotationStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (!RequestValidation.TryParseGuid(annotationId, out var annotationGuid, out var annotationError))
         return InvalidRequest(annotationError);
@@ -2229,7 +2229,7 @@ app.MapGet("/api/runs/{runId}/annotations/{annotationId}", async (string runId, 
 app.MapPut("/api/runs/{runId}/annotations/{annotationId}", async (string runId, string annotationId, RunAnnotationUpdateRequest request, ITestRunStore runStore, IRunAnnotationStore annotationStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (!RequestValidation.TryParseGuid(annotationId, out var annotationGuid, out var annotationError))
         return InvalidRequest(annotationError);
@@ -2265,7 +2265,7 @@ app.MapPut("/api/runs/{runId}/annotations/{annotationId}", async (string runId, 
 app.MapDelete("/api/runs/{runId}/annotations/{annotationId}", async (string runId, string annotationId, ITestRunStore runStore, IRunAnnotationStore annotationStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (!RequestValidation.TryParseGuid(annotationId, out var annotationGuid, out var annotationError))
         return InvalidRequest(annotationError);
@@ -2295,7 +2295,7 @@ app.MapDelete("/api/runs/{runId}/annotations/{annotationId}", async (string runI
 app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITestRunStore store, SubscriptionEnforcementService subscriptions, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (!TryParseReportFormat(format, out var reportFormat, out var formatError))
         return InvalidRequest(formatError);
@@ -2307,7 +2307,7 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
     var tenantContext = httpContext.GetTenantContext();
     var exportGate = await subscriptions.TryConsumeExportAsync(tenantContext.TenantId, ct);
     if (!exportGate.Allowed)
-        return SubscriptionProblem(httpContext, exportGate);
+        return SubscriptionProblemWithContext(httpContext, exportGate);
 
     var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
@@ -2345,7 +2345,7 @@ app.MapGet("/api/runs/{runId}/report", async (string runId, string? format, ITes
 app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, SubscriptionEnforcementService subscriptions, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -2354,7 +2354,7 @@ app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore stor
     var tenantContext = httpContext.GetTenantContext();
     var exportGate = await subscriptions.TryConsumeExportAsync(tenantContext.TenantId, ct);
     if (!exportGate.Allowed)
-        return SubscriptionProblem(httpContext, exportGate);
+        return SubscriptionProblemWithContext(httpContext, exportGate);
 
     var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
@@ -2391,7 +2391,7 @@ app.MapGet("/runs/{runId}/export/junit", async (string runId, ITestRunStore stor
 app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, SubscriptionEnforcementService subscriptions, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -2400,7 +2400,7 @@ app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store
     var tenantContext = httpContext.GetTenantContext();
     var exportGate = await subscriptions.TryConsumeExportAsync(tenantContext.TenantId, ct);
     if (!exportGate.Allowed)
-        return SubscriptionProblem(httpContext, exportGate);
+        return SubscriptionProblemWithContext(httpContext, exportGate);
 
     var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
@@ -2437,7 +2437,7 @@ app.MapGet("/runs/{runId}/export/json", async (string runId, ITestRunStore store
 app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, SubscriptionEnforcementService subscriptions, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -2446,7 +2446,7 @@ app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store,
     var tenantContext = httpContext.GetTenantContext();
     var exportGate = await subscriptions.TryConsumeExportAsync(tenantContext.TenantId, ct);
     if (!exportGate.Allowed)
-        return SubscriptionProblem(httpContext, exportGate);
+        return SubscriptionProblemWithContext(httpContext, exportGate);
 
     var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
@@ -2483,7 +2483,7 @@ app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store,
 app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, IConfiguration configuration, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -2492,7 +2492,7 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
     var tenantContext = httpContext.GetTenantContext();
     var exportGate = await subscriptions.CheckTeamFeatureAccessAsync(tenantContext.TenantId, "Evidence pack export", ct);
     if (!exportGate.Allowed)
-        return SubscriptionProblem(httpContext, exportGate);
+        return SubscriptionProblemWithContext(httpContext, exportGate);
 
     var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
@@ -2541,7 +2541,7 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
 app.MapGet("/api/v1/runs/{runId}/evidence-pack", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, IConfiguration configuration, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -2550,7 +2550,7 @@ app.MapGet("/api/v1/runs/{runId}/evidence-pack", async (string runId, ITestRunSt
     var tenantContext = httpContext.GetTenantContext();
     var exportGate = await subscriptions.CheckTeamFeatureAccessAsync(tenantContext.TenantId, "Evidence pack export", ct);
     if (!exportGate.Allowed)
-        return SubscriptionProblem(httpContext, exportGate);
+        return SubscriptionProblemWithContext(httpContext, exportGate);
 
     var orgContext = httpContext.GetOrgContext();
     var run = await store.GetAsync(tenantContext.TenantId, id);
@@ -2569,43 +2569,6 @@ app.MapGet("/api/v1/runs/{runId}/evidence-pack", async (string runId, ITestRunSt
         .Take(100)
         .ToList();
 
-    var auditJson = JsonSerializer.Serialize(new
-    {
-        redactedRun.RunId,
-        Events = auditSubset
-    }, jsonOptions);
-    var junitExport = RunExportGenerator.GenerateJunit(redactedRun);
-    var csvExport = RunExportGenerator.GenerateCsv(redactedRun);
-    var complianceReport = ComplianceReportBuilder.Build(run, org, auditSubset.Take(25).ToList(), redactionService);
-    var complianceReportJson = JsonSerializer.Serialize(complianceReport, jsonOptions);
-
-    var manifest = JsonSerializer.Serialize(new
-    {
-        generatedUtc = DateTime.UtcNow,
-        runId = redactedRun.RunId,
-        entries = new[]
-        {
-            "manifest.json",
-            "run.json",
-            "policy.json",
-            "audit.json",
-            "compliance-report.json",
-            "exports/junit.xml",
-            "exports/results.csv"
-        }
-    }, jsonOptions);
-
-    using var stream = new MemoryStream();
-    using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true))
-    {
-        AddZipEntry(archive, "manifest.json", manifest);
-        AddZipEntry(archive, "run.json", runJson);
-        AddZipEntry(archive, "policy.json", policyJson);
-        AddZipEntry(archive, "audit.json", auditJson);
-        AddZipEntry(archive, "compliance-report.json", complianceReportJson);
-        AddZipEntry(archive, "exports/junit.xml", junitExport);
-        AddZipEntry(archive, "exports/results.csv", csvExport);
-    }
     var evidencePackBytes = EvidencePackBuilder.BuildZip(
         run,
         org,
@@ -2637,7 +2600,7 @@ app.MapGet("/api/v1/runs/{runId}/evidence-pack", async (string runId, ITestRunSt
 app.MapGet("/api/v1/runs/{runId}/audit", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -2758,7 +2721,7 @@ app.MapGet("/api/runs/{runId}/compare/{baselineRunId}", async (string runId, str
     if (run is null)
         return Results.NotFound();
 
-    var runRetention = ValidateRetention(httpContext, run, retention);
+    var runRetention = ValidateRetentionWithContext(httpContext, run, retention);
     if (runRetention is not null)
         return runRetention;
 
@@ -2822,7 +2785,7 @@ app.MapPost("/api/ai/runs/{runId}/explanation", async (string runId, ITestRunSto
 
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
-        return SubscriptionProblem(httpContext, aiGate);
+        return SubscriptionProblemWithContext(httpContext, aiGate);
 
     await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "run.explanation", ct);
 
@@ -2847,7 +2810,7 @@ async Task<IResult> ExplainAiEndpointAsync(
         return InvalidRequest("Request body is required.");
 
     if (!RequestValidation.TryParseGuid(payload.ProjectId, out var projectId, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (string.IsNullOrWhiteSpace(payload.OperationId))
         return InvalidRequest("operationId is required.");
@@ -2859,7 +2822,7 @@ async Task<IResult> ExplainAiEndpointAsync(
     var tenantContext = httpContext.GetTenantContext();
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
-        return SubscriptionProblem(httpContext, aiGate);
+        return SubscriptionProblemWithContext(httpContext, aiGate);
 
     await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "explain", ct);
 
@@ -2924,7 +2887,7 @@ async Task<IResult> SuggestAiTestsEndpointAsync(
         return InvalidRequest("Request body is required.");
 
     if (!RequestValidation.TryParseGuid(payload.ProjectId, out var projectId, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     if (string.IsNullOrWhiteSpace(payload.OperationId))
         return InvalidRequest("operationId is required.");
@@ -2936,7 +2899,7 @@ async Task<IResult> SuggestAiTestsEndpointAsync(
     var tenantContext = httpContext.GetTenantContext();
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
-        return SubscriptionProblem(httpContext, aiGate);
+        return SubscriptionProblemWithContext(httpContext, aiGate);
 
     await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "suggest-tests", ct);
 
@@ -3004,7 +2967,7 @@ async Task<IResult> SummariseRunAiEndpointAsync(
         return InvalidRequest("Request body is required.");
 
     if (!RequestValidation.TryParseGuid(payload.RunId, out var runId, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -3021,7 +2984,7 @@ async Task<IResult> SummariseRunAiEndpointAsync(
 
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
-        return SubscriptionProblem(httpContext, aiGate);
+        return SubscriptionProblemWithContext(httpContext, aiGate);
 
     await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "summarise-run", ct);
 
@@ -3084,7 +3047,7 @@ async Task<IResult> SuggestImprovementsAiEndpointAsync(
         return InvalidRequest("Request body is required.");
 
     if (!RequestValidation.TryParseGuid(payload.RunId, out var runId, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -3101,7 +3064,7 @@ async Task<IResult> SuggestImprovementsAiEndpointAsync(
 
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
-        return SubscriptionProblem(httpContext, aiGate);
+        return SubscriptionProblemWithContext(httpContext, aiGate);
 
     await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "suggest-improvements", ct);
 
@@ -3168,7 +3131,7 @@ async Task<IResult> ComplianceReportAiEndpointAsync(
         return InvalidRequest("Request body is required.");
 
     if (!RequestValidation.TryParseGuid(payload.RunId, out var runId, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
     if (scopeCheck is not null)
@@ -3185,7 +3148,7 @@ async Task<IResult> ComplianceReportAiEndpointAsync(
 
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
-        return SubscriptionProblem(httpContext, aiGate);
+        return SubscriptionProblemWithContext(httpContext, aiGate);
 
     await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "compliance-report", ct);
 
@@ -3225,7 +3188,7 @@ async Task<IResult> GenerateDocsAiEndpointAsync(
         return InvalidRequest("Request body is required.");
 
     if (!RequestValidation.TryParseGuid(payload.ProjectId, out var projectId, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
     if (scopeCheck is not null)
@@ -3238,7 +3201,7 @@ async Task<IResult> GenerateDocsAiEndpointAsync(
     var tenantContext = httpContext.GetTenantContext();
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
-        return SubscriptionProblem(httpContext, aiGate);
+        return SubscriptionProblemWithContext(httpContext, aiGate);
 
     await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "docs.generate", ct);
 
@@ -3321,7 +3284,7 @@ async Task<IResult> GetGeneratedDocsAsync(
     CancellationToken ct)
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
     if (scopeCheck is not null)
@@ -3469,7 +3432,7 @@ app.MapGet("/projects/{projectId}/docs/generated", GetGeneratedDocsAsync);
 app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpecStore specStore, IProjectStore projectStore, IAiClient aiClient, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(specId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsRead);
     if (scopeCheck is not null)
@@ -3478,7 +3441,7 @@ app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpec
     var tenantContext = httpContext.GetTenantContext();
     var aiGate = await subscriptions.TryConsumeAiAsync(tenantContext.TenantId, ct);
     if (!aiGate.Allowed)
-        return SubscriptionProblem(httpContext, aiGate);
+        return SubscriptionProblemWithContext(httpContext, aiGate);
 
     await RecordAiAuditAsync(httpContext, tenantContext.TenantId, "spec.summary", ct);
 
@@ -3500,7 +3463,7 @@ app.MapPost("/api/ai/specs/{specId}/summary", async (string specId, IOpenApiSpec
 
 app.Run();
 
-static IResult InvalidRequest(HttpContext context, string detail)
+static IResult InvalidRequestWithContext(HttpContext context, string detail)
     => ApiProblemFactory.Result(context, StatusCodes.Status400BadRequest, "InvalidRequest", "Invalid request", detail);
 
 static IResult InvalidRequest(string detail)
@@ -3516,20 +3479,21 @@ static IResult BillingNotConfigured(HttpContext context, IEnumerable<string>? mi
     return ApiProblemFactory.Result(context, StatusCodes.Status501NotImplemented, "BillingNotConfigured", "Billing not configured", detail);
 }
 
-static void AddZipEntry(ZipArchive archive, string name, string content)
-{
-    var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
-    using var entryStream = entry.Open();
-    using var writer = new StreamWriter(entryStream, Encoding.UTF8);
-    writer.Write(content);
-}
-
-
-static IResult SubscriptionProblem(HttpContext context, SubscriptionGateResult result)
-    => ApiProblemFactory.Result(context, result.StatusCode, result.ErrorCode, result.Title, result.Detail);
+static IResult SubscriptionProblemWithContext(HttpContext context, SubscriptionGateResult result)
+    => ApiProblemFactory.Result(context, result.StatusCode, BuildErrorCode(result.Title), result.Title, result.Detail);
 
 static IResult SubscriptionProblem(SubscriptionGateResult result)
     => Results.Problem(title: result.Title, detail: result.Detail, statusCode: result.StatusCode);
+
+
+static string BuildErrorCode(string title)
+{
+    if (string.IsNullOrWhiteSpace(title))
+        return "SubscriptionConstraint";
+
+    var chars = title.Where(char.IsLetterOrDigit).ToArray();
+    return chars.Length == 0 ? "SubscriptionConstraint" : new string(chars);
+}
 
 static void RecordRunExecuted(HttpContext context, string source)
 {
@@ -3566,7 +3530,7 @@ static IResult? ValidateRetention(TestRunRecord run, RetentionWindow retention)
     return null;
 }
 
-static IResult? ValidateRetention(HttpContext context, TestRunRecord run, RetentionWindow retention)
+static IResult? ValidateRetentionWithContext(HttpContext context, TestRunRecord run, RetentionWindow retention)
 {
     if (run.StartedUtc < retention.CutoffUtc)
     {
@@ -3579,8 +3543,6 @@ static IResult? ValidateRetention(HttpContext context, TestRunRecord run, Retent
 static IResult ValidateRetentionOrResult(TestRunRecord run, RetentionWindow retention, object response)
     => ValidateRetention(run, retention) ?? Results.Ok(response);
 
-static IResult ValidateRetentionOrResult(HttpContext context, TestRunRecord run, RetentionWindow retention, object response)
-    => ValidateRetention(context, run, retention) ?? Results.Ok(response);
 
 static async Task<int> GetProjectCountAsync(IProjectStore store, Guid tenantId, CancellationToken ct)
 {
@@ -3875,7 +3837,7 @@ static async Task<IResult> ImportOpenApiSpecAsync(
     CancellationToken ct)
 {
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
-        return InvalidRequest(httpContext, error);
+        return InvalidRequestWithContext(httpContext, error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
     if (scopeCheck is not null)
