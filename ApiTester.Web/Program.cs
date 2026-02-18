@@ -35,6 +35,11 @@ using WebOpenApiImportLimits = ApiTester.Web.OpenApiImportLimits;
 
 var builder = WebApplication.CreateBuilder(args);
 
+if (string.Equals(Environment.GetEnvironmentVariable("E2E"), "true", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Configuration.AddJsonFile("appsettings.E2E.json", optional: true, reloadOnChange: false);
+}
+
 builder.Logging.AddJsonConsole(options =>
 {
     options.IncludeScopes = true;

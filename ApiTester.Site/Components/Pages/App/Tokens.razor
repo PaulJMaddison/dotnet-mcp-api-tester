@@ -10,7 +10,7 @@
 
 <div class="d-flex align-items-center justify-content-between mb-4">
     <div>
-        <h1 class="h3 mb-1">API tokens</h1>
+        <h1 class="h3 mb-1" data-testid="tokens-title">API tokens</h1>
         <p class="text-secondary mb-0">Create and rotate tenant-scoped tokens. Plaintext is shown once.</p>
     </div>
 </div>
@@ -22,9 +22,9 @@
 
 @if (!string.IsNullOrWhiteSpace(_createdToken))
 {
-    <div class="alert alert-warning">
+    <div class="alert alert-warning" data-testid="token-created-alert">
         <strong>Copy now:</strong> this token will not be shown again.
-        <pre class="mt-2 mb-0"><code>@_createdToken</code></pre>
+        <pre class="mt-2 mb-0"><code data-testid="token-created-value">@_createdToken</code></pre>
     </div>
 }
 
@@ -32,14 +32,14 @@
     <div class="card-body">
         <h2 class="h5">Create token</h2>
         <div class="row g-2">
-            <div class="col-md-4"><input class="form-control" @bind="_name" data-hint="Name" /></div>
-            <div class="col-md-6"><input class="form-control" @bind="_scopes" data-hint="Scopes (comma-separated)" /></div>
-            <div class="col-md-2 d-grid"><button class="btn btn-primary" @onclick="CreateAsync">Create</button></div>
+            <div class="col-md-4"><input class="form-control" @bind="_name" data-hint="Name" data-testid="token-name-input" /></div>
+            <div class="col-md-6"><input class="form-control" @bind="_scopes" data-hint="Scopes (comma-separated)" data-testid="token-scopes-input" /></div>
+            <div class="col-md-2 d-grid"><button class="btn btn-primary" @onclick="CreateAsync" data-testid="token-create-button">Create</button></div>
         </div>
     </div>
 </div>
 
-<table class="table table-striped">
+<table class="table table-striped" data-testid="tokens-table">
     <thead>
         <tr>
             <th>Name</th><th>Prefix</th><th>Scopes</th><th>Last used</th><th>Status</th><th></th>
@@ -48,8 +48,8 @@
     <tbody>
     @foreach (var t in _tokens)
     {
-        <tr>
-            <td>@t.Name</td>
+        <tr data-testid="token-row">
+            <td data-testid="token-name">@t.Name</td>
             <td><code>@t.Prefix</code></td>
             <td>@string.Join(", ", t.Scopes)</td>
             <td>@(t.LastUsedUtc?.ToString("u") ?? "Never")</td>
@@ -57,7 +57,7 @@
             <td>
                 @if (!t.RevokedUtc.HasValue)
                 {
-                    <button class="btn btn-sm btn-outline-danger" @onclick="() => RevokeAsync(t.KeyId)">Revoke</button>
+                    <button class="btn btn-sm btn-outline-danger" data-testid="token-revoke-button" @onclick="() => RevokeAsync(t.KeyId)">Revoke</button>
                 }
             </td>
         </tr>
