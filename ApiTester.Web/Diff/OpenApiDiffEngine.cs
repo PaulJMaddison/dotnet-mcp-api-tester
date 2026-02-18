@@ -21,6 +21,7 @@ public static class OpenApiDiffChange
     public const string ResponseCodeAdded = "ResponseCodeAdded";
     public const string ResponseCodeRemoved = "ResponseCodeRemoved";
     public const string ResponseSchemaChanged = "ResponseSchemaChanged";
+    public const string ResponseSchemaChangedUncertain = "ResponseSchemaChangedUncertain";
     public const string NoChanges = "NoChanges";
 }
 
@@ -259,13 +260,34 @@ public static class OpenApiDiffEngine
             if (string.Equals(beforeSignature, afterSignature, StringComparison.Ordinal))
                 continue;
 
+            var schemaChangeClassification = IsSchemaComparisonUncertain(beforeSignature, afterSignature)
+                ? OpenApiDiffClassification.Informational
+                : OpenApiDiffClassification.Breaking;
+            var changeType = schemaChangeClassification == OpenApiDiffClassification.Breaking
+                ? OpenApiDiffChange.ResponseSchemaChanged
+                : OpenApiDiffChange.ResponseSchemaChangedUncertain;
+
             diffs.Add(new OpenApiDiffItem(
-                OpenApiDiffClassification.Breaking,
-                OpenApiDiffChange.ResponseSchemaChanged,
+                schemaChangeClassification,
+                changeType,
                 path,
                 FormatMethod(method),
                 $"Response schema for '{code}' ({contentType}) changed."));
         }
+    }
+
+    private static bool IsSchemaComparisonUncertain(string? beforeSignature, string? afterSignature)
+    {
+        return ContainsUncertainMarker(beforeSignature) || ContainsUncertainMarker(afterSignature);
+    }
+
+    private static bool ContainsUncertainMarker(string? signature)
+    {
+        if (string.IsNullOrEmpty(signature))
+            return false;
+
+        return signature.Contains("depth-limit", StringComparison.Ordinal)
+            || signature.Contains("recursion", StringComparison.Ordinal);
     }
 
     private static Dictionary<string, string> BuildResponseSchemaMap(OpenApiResponse response)
