@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http;
-using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -2467,7 +2466,7 @@ app.MapGet("/runs/{runId}/export/csv", async (string runId, ITestRunStore store,
     return Results.Text(payload, "text/csv; charset=utf-8");
 });
 
-app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
+app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, IConfiguration configuration, HttpContext httpContext, CancellationToken ct) =>
 {
     if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
         return InvalidRequest(error);
@@ -2491,41 +2490,20 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
         return retentionResult;
 
     var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
-    var redactedRun = RunExportRedactor.RedactRun(run, redactionService, org?.RedactionRules);
-    var runJson = RunExportGenerator.GenerateJson(redactedRun, jsonOptions);
-    var policyJson = JsonSerializer.Serialize(new
-    {
-        redactedRun.RunId,
-        redactedRun.PolicySnapshot
-    }, jsonOptions);
-
     var auditEvents = await auditStore.ListAsync(tenantContext.TenantId, 200, null, null, null, ct);
     var auditSubset = auditEvents
         .Where(evt => string.Equals(evt.TargetType, "run", StringComparison.OrdinalIgnoreCase) &&
-                      string.Equals(evt.TargetId, redactedRun.RunId.ToString(), StringComparison.OrdinalIgnoreCase))
+                      string.Equals(evt.TargetId, run.RunId.ToString(), StringComparison.OrdinalIgnoreCase))
         .Take(100)
         .ToList();
-
-    var auditJson = JsonSerializer.Serialize(new
-    {
-        redactedRun.RunId,
-        Events = auditSubset
-    }, jsonOptions);
-    var junitExport = RunExportGenerator.GenerateJunit(redactedRun);
-    var csvExport = RunExportGenerator.GenerateCsv(redactedRun);
-    var complianceReport = ComplianceReportBuilder.Build(run, org, auditSubset.Take(25).ToList(), redactionService);
-    var complianceReportJson = JsonSerializer.Serialize(complianceReport, jsonOptions);
-
-    using var stream = new MemoryStream();
-    using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true))
-    {
-        AddZipEntry(archive, "run.json", runJson);
-        AddZipEntry(archive, "policy.json", policyJson);
-        AddZipEntry(archive, "audit.json", auditJson);
-        AddZipEntry(archive, "compliance-report.json", complianceReportJson);
-        AddZipEntry(archive, "exports/junit.xml", junitExport);
-        AddZipEntry(archive, "exports/results.csv", csvExport);
-    }
+    var evidencePackBytes = EvidencePackBuilder.BuildZip(
+        run,
+        org,
+        auditSubset,
+        redactionService,
+        jsonOptions,
+        DateTime.UtcNow,
+        configuration["Security:EvidenceSigningKey"]);
 
     var exportMetadata = JsonSerializer.Serialize(new
     {
@@ -2543,7 +2521,103 @@ app.MapGet("/runs/{runId}/export/evidence-bundle", async (string runId, ITestRun
         exportMetadata), ct);
 
     RecordExportGenerated(httpContext, "evidence-bundle");
-    return Results.File(stream.ToArray(), "application/zip", $"{redactedRun.RunId}-evidence.zip");
+    return Results.File(evidencePackBytes, "application/zip", $"{run.RunId}-evidence.zip");
+});
+
+app.MapGet("/api/v1/runs/{runId}/evidence-pack", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, IConfiguration configuration, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var tenantContext = httpContext.GetTenantContext();
+    var exportGate = await subscriptions.CheckTeamFeatureAccessAsync(tenantContext.TenantId, "Evidence pack export", ct);
+    if (!exportGate.Allowed)
+        return SubscriptionProblem(exportGate);
+
+    var orgContext = httpContext.GetOrgContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
+    var auditEvents = await auditStore.ListAsync(tenantContext.TenantId, 200, null, null, null, ct);
+    var auditSubset = auditEvents
+        .Where(evt => string.Equals(evt.TargetType, "run", StringComparison.OrdinalIgnoreCase) &&
+                      string.Equals(evt.TargetId, run.RunId.ToString(), StringComparison.OrdinalIgnoreCase))
+        .Take(100)
+        .ToList();
+
+    var evidencePackBytes = EvidencePackBuilder.BuildZip(
+        run,
+        org,
+        auditSubset,
+        redactionService,
+        jsonOptions,
+        DateTime.UtcNow,
+        configuration["Security:EvidenceSigningKey"]);
+
+    var exportMetadata = JsonSerializer.Serialize(new
+    {
+        Format = "evidence-pack"
+    });
+
+    await auditStore.CreateAsync(new AuditEventRecord(
+        Guid.NewGuid(),
+        tenantContext.TenantId,
+        orgContext.UserId,
+        AuditActions.ExportGenerated,
+        "run",
+        run.RunId.ToString(),
+        DateTime.UtcNow,
+        exportMetadata), ct);
+
+    RecordExportGenerated(httpContext, "evidence-pack");
+    return Results.File(evidencePackBytes, "application/zip", $"{run.RunId}-evidence-pack.zip");
+});
+
+app.MapGet("/api/v1/runs/{runId}/audit", async (string runId, ITestRunStore store, IOrganisationStore orgStore, RedactionService redactionService, IAuditEventStore auditStore, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
+{
+    if (!RequestValidation.TryParseGuid(runId, out var id, out var error))
+        return InvalidRequest(error);
+
+    var scopeCheck = RequireScope(httpContext, ApiKeyScopes.RunsRead);
+    if (scopeCheck is not null)
+        return scopeCheck;
+
+    var tenantContext = httpContext.GetTenantContext();
+    var run = await store.GetAsync(tenantContext.TenantId, id);
+    if (run is null)
+        return Results.NotFound();
+
+    var retentionResult = ValidateRetention(run, await subscriptions.GetRetentionWindowAsync(tenantContext.TenantId, ct));
+    if (retentionResult is not null)
+        return retentionResult;
+
+    var org = await orgStore.GetAsync(tenantContext.TenantId, ct);
+    var auditEvents = await auditStore.ListAsync(tenantContext.TenantId, 200, null, null, null, ct);
+    var auditSubset = auditEvents
+        .Where(evt => string.Equals(evt.TargetType, "run", StringComparison.OrdinalIgnoreCase) &&
+                      string.Equals(evt.TargetId, run.RunId.ToString(), StringComparison.OrdinalIgnoreCase))
+        .Take(100)
+        .ToList();
+
+    var response = EvidencePackBuilder.BuildImmutableAudit(
+        run,
+        org,
+        auditSubset,
+        redactionService,
+        jsonOptions,
+        DateTime.UtcNow);
+
+    return Results.Ok(response);
 });
 
 app.MapPost("/api/runs/{runId}/baseline/{baselineRunId}", async (string runId, string baselineRunId, ITestRunStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, CancellationToken ct) =>
@@ -3377,14 +3451,6 @@ app.Run();
 
 static IResult InvalidRequest(string detail)
     => Results.Problem(title: "Invalid request", detail: detail, statusCode: StatusCodes.Status400BadRequest);
-
-static void AddZipEntry(ZipArchive archive, string name, string content)
-{
-    var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
-    using var entryStream = entry.Open();
-    using var writer = new StreamWriter(entryStream, Encoding.UTF8);
-    writer.Write(content);
-}
 
 static IResult SubscriptionProblem(SubscriptionGateResult result)
     => Results.Problem(title: result.Title, detail: result.Detail, statusCode: result.StatusCode);

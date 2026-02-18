@@ -125,7 +125,7 @@ public sealed class BillingEnforcementEndpointsTests
         var run = await SeedRunAsync(factory, project, "op-evidence", DateTime.UtcNow);
 
         var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
-        var response = await client.GetAsync($"/runs/{run.RunId}/export/evidence-bundle");
+        var response = await client.GetAsync($"/api/v1/runs/{run.RunId}/evidence-pack");
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetailsResponse>();
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
