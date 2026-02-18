@@ -30,4 +30,10 @@
     <ProjectReference Include="..\ApiTester.Cli\ApiTester.Cli.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Fixtures/smoke-openapi.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
