@@ -8,5 +8,6 @@ public sealed record ApiKeyRecord(
     string Scopes,
     DateTime? ExpiresUtc,
     DateTime? RevokedUtc,
+    DateTime? LastUsedUtc,
     string Hash,
     string Prefix);

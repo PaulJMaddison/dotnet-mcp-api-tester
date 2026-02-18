@@ -50,6 +50,7 @@ public sealed class SqlApiKeyStore : IApiKeyStore
             Scopes = scopes,
             ExpiresUtc = expiresUtc,
             RevokedUtc = null,
+            LastUsedUtc = null,
             Hash = hash,
             Prefix = prefix
         };
@@ -57,7 +58,7 @@ public sealed class SqlApiKeyStore : IApiKeyStore
         _db.ApiKeys.Add(entity);
         await _db.SaveChangesAsync(ct);
 
-        return new ApiKeyRecord(entity.KeyId, entity.OrganisationId, entity.UserId, entity.Name, entity.Scopes, entity.ExpiresUtc, entity.RevokedUtc, entity.Hash, entity.Prefix);
+        return ToRecord(entity);
     }
 
     public async Task<IReadOnlyList<ApiKeyRecord>> ListAsync(Guid organisationId, CancellationToken ct)
@@ -68,7 +69,7 @@ public sealed class SqlApiKeyStore : IApiKeyStore
         return await _db.ApiKeys.AsNoTracking()
             .Where(x => x.OrganisationId == organisationId)
             .OrderBy(x => x.Name)
-            .Select(x => new ApiKeyRecord(x.KeyId, x.OrganisationId, x.UserId, x.Name, x.Scopes, x.ExpiresUtc, x.RevokedUtc, x.Hash, x.Prefix))
+            .Select(ToRecordExpression())
             .ToListAsync(ct);
     }
 
@@ -79,7 +80,7 @@ public sealed class SqlApiKeyStore : IApiKeyStore
 
         return await _db.ApiKeys.AsNoTracking()
             .Where(x => x.OrganisationId == organisationId && x.KeyId == keyId)
-            .Select(x => new ApiKeyRecord(x.KeyId, x.OrganisationId, x.UserId, x.Name, x.Scopes, x.ExpiresUtc, x.RevokedUtc, x.Hash, x.Prefix))
+            .Select(ToRecordExpression())
             .FirstOrDefaultAsync(ct);
     }
 
@@ -91,10 +92,23 @@ public sealed class SqlApiKeyStore : IApiKeyStore
 
         return await _db.ApiKeys.AsNoTracking()
             .Where(x => x.Prefix == prefix)
-            .Select(x => new ApiKeyRecord(x.KeyId, x.OrganisationId, x.UserId, x.Name, x.Scopes, x.ExpiresUtc, x.RevokedUtc, x.Hash, x.Prefix))
+            .OrderBy(x => x.KeyId)
+            .Select(ToRecordExpression())
             .FirstOrDefaultAsync(ct);
     }
 
+
+    public async Task<IReadOnlyList<ApiKeyRecord>> ListByPrefixAsync(string prefix, CancellationToken ct)
+    {
+        prefix = (prefix ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(prefix))
+            return Array.Empty<ApiKeyRecord>();
+
+        return await _db.ApiKeys.AsNoTracking()
+            .Where(x => x.Prefix == prefix)
+            .Select(ToRecordExpression())
+            .ToListAsync(ct);
+    }
     public async Task<ApiKeyRecord?> RevokeAsync(Guid organisationId, Guid keyId, DateTime revokedUtc, CancellationToken ct)
     {
         if (organisationId == Guid.Empty || keyId == Guid.Empty)
@@ -110,6 +124,26 @@ public sealed class SqlApiKeyStore : IApiKeyStore
             await _db.SaveChangesAsync(ct);
         }
 
-        return new ApiKeyRecord(entity.KeyId, entity.OrganisationId, entity.UserId, entity.Name, entity.Scopes, entity.ExpiresUtc, entity.RevokedUtc, entity.Hash, entity.Prefix);
+        return ToRecord(entity);
     }
+
+    public async Task<ApiKeyRecord?> TouchLastUsedAsync(Guid keyId, DateTime lastUsedUtc, CancellationToken ct)
+    {
+        if (keyId == Guid.Empty)
+            return null;
+
+        var entity = await _db.ApiKeys.FirstOrDefaultAsync(x => x.KeyId == keyId, ct);
+        if (entity is null)
+            return null;
+
+        entity.LastUsedUtc = lastUsedUtc;
+        await _db.SaveChangesAsync(ct);
+        return ToRecord(entity);
+    }
+
+    private static ApiKeyRecord ToRecord(ApiKeyEntity x)
+        => new(x.KeyId, x.OrganisationId, x.UserId, x.Name, x.Scopes, x.ExpiresUtc, x.RevokedUtc, x.LastUsedUtc, x.Hash, x.Prefix);
+
+    private static System.Linq.Expressions.Expression<Func<ApiKeyEntity, ApiKeyRecord>> ToRecordExpression()
+        => x => new ApiKeyRecord(x.KeyId, x.OrganisationId, x.UserId, x.Name, x.Scopes, x.ExpiresUtc, x.RevokedUtc, x.LastUsedUtc, x.Hash, x.Prefix);
 }

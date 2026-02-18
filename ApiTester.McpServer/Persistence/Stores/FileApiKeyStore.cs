@@ -51,7 +51,7 @@ public sealed class FileApiKeyStore : IApiKeyStore
             if (list.Any(k => k.Prefix.Equals(prefix, StringComparison.Ordinal)))
                 throw new InvalidOperationException("API key prefix already exists.");
 
-            var record = new ApiKeyRecord(Guid.NewGuid(), organisationId, userId, name, scopes, expiresUtc, null, hash, prefix);
+            var record = new ApiKeyRecord(Guid.NewGuid(), organisationId, userId, name, scopes, expiresUtc, null, null, hash, prefix);
             list.Add(record);
             await SaveAsync(list, ct);
             return record;
@@ -93,6 +93,17 @@ public sealed class FileApiKeyStore : IApiKeyStore
         return list.FirstOrDefault(k => k.Prefix.Equals(prefix, StringComparison.Ordinal));
     }
 
+
+    public async Task<IReadOnlyList<ApiKeyRecord>> ListByPrefixAsync(string prefix, CancellationToken ct)
+    {
+        prefix = (prefix ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(prefix))
+            return Array.Empty<ApiKeyRecord>();
+
+        var list = await LoadAsync(ct);
+        return list.Where(k => k.Prefix.Equals(prefix, StringComparison.Ordinal)).ToList();
+    }
+
     public async Task<ApiKeyRecord?> RevokeAsync(Guid organisationId, Guid keyId, DateTime revokedUtc, CancellationToken ct)
     {
         if (organisationId == Guid.Empty || keyId == Guid.Empty)
@@ -123,6 +134,33 @@ public sealed class FileApiKeyStore : IApiKeyStore
         }
     }
 
+
+
+    public async Task<ApiKeyRecord?> TouchLastUsedAsync(Guid keyId, DateTime lastUsedUtc, CancellationToken ct)
+    {
+        if (keyId == Guid.Empty)
+            return null;
+
+        await _mutex.WaitAsync(ct);
+        try
+        {
+            var list = await LoadAsync(ct);
+            var record = list.FirstOrDefault(k => k.KeyId == keyId);
+            if (record is null)
+                return null;
+
+            record = record with { LastUsedUtc = lastUsedUtc };
+            var index = list.FindIndex(k => k.KeyId == keyId);
+            if (index >= 0)
+                list[index] = record;
+            await SaveAsync(list, ct);
+            return record;
+        }
+        finally
+        {
+            _mutex.Release();
+        }
+    }
     private async Task<List<ApiKeyRecord>> LoadAsync(CancellationToken ct)
     {
         if (!File.Exists(FilePath))

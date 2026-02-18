@@ -282,9 +282,11 @@ public sealed class ApiTesterDbContext : DbContext
             b.HasKey(x => x.KeyId);
             b.Property(x => x.Name).HasMaxLength(200).IsRequired();
             b.Property(x => x.Scopes).HasMaxLength(400).IsRequired();
-            b.Property(x => x.Hash).HasMaxLength(128).IsRequired();
+            b.Property(x => x.Hash).HasMaxLength(256).IsRequired();
             b.Property(x => x.Prefix).HasMaxLength(32).IsRequired();
-            b.HasIndex(x => x.Prefix).IsUnique();
+            b.Property(x => x.LastUsedUtc);
+            b.HasIndex(x => new { x.OrganisationId, x.Prefix }).IsUnique();
+            b.HasIndex(x => x.Prefix);
             b.HasIndex(x => x.OrganisationId);
             b.HasIndex(x => x.UserId);
 

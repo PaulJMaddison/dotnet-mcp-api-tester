@@ -11,6 +11,10 @@ public interface IApiTesterWebClient
     Task<ApiResult<RunDetailDto>> GetRunDetailAsync(Guid runId, CancellationToken cancellationToken);
     Task<ApiResult<BillingPlanResponse>> GetBillingPlanAsync(CancellationToken cancellationToken);
     Task<ApiResult<AuditListResponse>> GetAuditEventsAsync(int? take, string? action, string? from, string? to, CancellationToken cancellationToken);
+    Task<ApiResult<ApiTokenListResponse>> GetTokensAsync(CancellationToken cancellationToken);
+    Task<ApiResult<ApiTokenCreateResponse>> CreateTokenAsync(ApiTokenCreateRequest request, CancellationToken cancellationToken);
+    Task<ApiResult<ApiTokenDto>> RevokeTokenAsync(Guid id, CancellationToken cancellationToken);
+    Task<ApiResult<MeResponse>> GetMeAsync(CancellationToken cancellationToken);
     string GetAbsoluteUrl(string path);
 }
 
@@ -80,6 +84,18 @@ public sealed class ApiTesterWebClient : IApiTesterWebClient
         return GetAsync<AuditListResponse>(path, cancellationToken);
     }
 
+    public Task<ApiResult<ApiTokenListResponse>> GetTokensAsync(CancellationToken cancellationToken)
+        => GetAsync<ApiTokenListResponse>("/api/v1/tokens", cancellationToken);
+
+    public Task<ApiResult<ApiTokenCreateResponse>> CreateTokenAsync(ApiTokenCreateRequest request, CancellationToken cancellationToken)
+        => PostAsync<ApiTokenCreateRequest, ApiTokenCreateResponse>("/api/v1/tokens", request, cancellationToken);
+
+    public Task<ApiResult<ApiTokenDto>> RevokeTokenAsync(Guid id, CancellationToken cancellationToken)
+        => PostAsync<object, ApiTokenDto>($"/api/v1/tokens/{id}/revoke", new(), cancellationToken);
+
+    public Task<ApiResult<MeResponse>> GetMeAsync(CancellationToken cancellationToken)
+        => GetAsync<MeResponse>("/api/v1/me", cancellationToken);
+
     public string GetAbsoluteUrl(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -105,29 +121,47 @@ public sealed class ApiTesterWebClient : IApiTesterWebClient
         try
         {
             using var response = await _httpClient.GetAsync(requestUri, cancellationToken);
-            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            {
-                _navigationManager.NavigateTo("/app/sign-in", forceLoad: true);
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var details = await response.Content.ReadAsStringAsync(cancellationToken);
-                return ApiResult<T>.Failure(
-                    $"Request failed with {(int)response.StatusCode} {response.ReasonPhrase}.",
-                    details,
-                    (int)response.StatusCode);
-            }
-
-            var payload = await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken);
-            return payload is null
-                ? ApiResult<T>.Failure("ApiTester Web returned an empty response.", null)
-                : ApiResult<T>.Success(payload);
+            return await HandleResponse<T>(response, cancellationToken);
         }
         catch (Exception ex)
         {
             return ApiResult<T>.Failure("Request failed to reach ApiTester Web.", ex.ToString());
         }
+    }
+
+    private async Task<ApiResult<TResponse>> PostAsync<TRequest, TResponse>(string requestUri, TRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync(requestUri, request, cancellationToken);
+            return await HandleResponse<TResponse>(response, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<TResponse>.Failure("Request failed to reach ApiTester Web.", ex.ToString());
+        }
+    }
+
+    private async Task<ApiResult<T>> HandleResponse<T>(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+        {
+            _navigationManager.NavigateTo("/app/sign-in", forceLoad: true);
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var details = await response.Content.ReadAsStringAsync(cancellationToken);
+            return ApiResult<T>.Failure(
+                $"Request failed with {(int)response.StatusCode} {response.ReasonPhrase}.",
+                details,
+                (int)response.StatusCode);
+        }
+
+        var payload = await response.Content.ReadFromJsonAsync<T>(cancellationToken: cancellationToken);
+        return payload is null
+            ? ApiResult<T>.Failure("ApiTester Web returned an empty response.", null)
+            : ApiResult<T>.Success(payload);
     }
 }
 
