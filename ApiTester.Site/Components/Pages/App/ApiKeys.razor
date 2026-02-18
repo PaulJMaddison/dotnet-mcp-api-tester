@@ -1,0 +1,23 @@
+@page "/app/api-keys"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>API keys</PageTitle>
+
+<div class="app-page">
+    <SectionContent SectionName="AppBreadcrumbs">
+        <AppBreadcrumbs Items="@Breadcrumbs" />
+    </SectionContent>
+
+    <div class="app-card app-state">
+        <h1 class="h5 mb-2">API keys</h1>
+        <p class="text-secondary mb-0">API key management will be available here soon.</p>
+    </div>
+</div>
+
+@code {
+    private readonly IReadOnlyList<BreadcrumbItem> Breadcrumbs = new List<BreadcrumbItem>
+    {
+        new("Account", "/app/account"),
+        new("API keys", "/app/api-keys")
+    };
+}

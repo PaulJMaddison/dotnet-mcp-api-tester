@@ -1,13 +1,9 @@
 @page "/app/sign-out"
-@inject ApiTester.Site.Services.IApiKeySession ApiKeySession
 @inject NavigationManager NavigationManager
-
-<PageTitle>Sign out</PageTitle>
 
 @code {
     protected override void OnInitialized()
     {
-        ApiKeySession.ClearApiKey();
-        NavigationManager.NavigateTo("/app/sign-in", forceLoad: true);
+        NavigationManager.NavigateTo("/signout", forceLoad: true);
     }
 }
