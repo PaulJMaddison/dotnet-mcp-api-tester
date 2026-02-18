@@ -9,6 +9,9 @@ public interface IApiTesterWebClient
     Task<ApiResult<ProjectListResponse>> GetProjectsAsync(CancellationToken cancellationToken);
     Task<ApiResult<RunSummaryResponse>> GetRunsAsync(string projectKey, string? operationId, int? take, CancellationToken cancellationToken);
     Task<ApiResult<RunDetailDto>> GetRunDetailAsync(Guid runId, CancellationToken cancellationToken);
+    Task<ApiResult<BillingPlanResponse>> GetBillingPlanAsync(CancellationToken cancellationToken);
+    Task<ApiResult<AuditListResponse>> GetAuditEventsAsync(int? take, string? action, string? from, string? to, CancellationToken cancellationToken);
+    string GetAbsoluteUrl(string path);
 }
 
 public sealed class ApiTesterWebClient : IApiTesterWebClient
@@ -45,6 +48,57 @@ public sealed class ApiTesterWebClient : IApiTesterWebClient
 
     public Task<ApiResult<RunDetailDto>> GetRunDetailAsync(Guid runId, CancellationToken cancellationToken)
         => GetAsync<RunDetailDto>($"/api/runs/{runId}", cancellationToken);
+
+    public Task<ApiResult<BillingPlanResponse>> GetBillingPlanAsync(CancellationToken cancellationToken)
+        => GetAsync<BillingPlanResponse>("/api/v1/billing/plan", cancellationToken);
+
+    public Task<ApiResult<AuditListResponse>> GetAuditEventsAsync(int? take, string? action, string? from, string? to, CancellationToken cancellationToken)
+    {
+        var query = new List<string>();
+
+        if (take is > 0)
+        {
+            query.Add($"take={take.Value}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(action))
+        {
+            query.Add($"action={Uri.EscapeDataString(action)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(from))
+        {
+            query.Add($"from={Uri.EscapeDataString(from)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(to))
+        {
+            query.Add($"to={Uri.EscapeDataString(to)}");
+        }
+
+        var path = query.Count > 0 ? $"/audit?{string.Join("&", query)}" : "/audit";
+        return GetAsync<AuditListResponse>(path, cancellationToken);
+    }
+
+    public string GetAbsoluteUrl(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return _httpClient.BaseAddress?.ToString() ?? string.Empty;
+        }
+
+        if (Uri.TryCreate(path, UriKind.Absolute, out var absoluteUri))
+        {
+            return absoluteUri.ToString();
+        }
+
+        if (_httpClient.BaseAddress is null)
+        {
+            return path;
+        }
+
+        return new Uri(_httpClient.BaseAddress, path).ToString();
+    }
 
     private async Task<ApiResult<T>> GetAsync<T>(string requestUri, CancellationToken cancellationToken)
     {
