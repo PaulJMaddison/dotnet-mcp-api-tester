@@ -14,12 +14,20 @@ namespace ApiTester.Site.Tests;
 
 public sealed class SiteWebApplicationFactory : WebApplicationFactory<Program>
 {
+    private readonly string _databaseDirectory = Path.Combine(Path.GetTempPath(), "apitester-site-tests", Guid.NewGuid().ToString("N"));
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        Directory.CreateDirectory(_databaseDirectory);
+        var leadCaptureDbPath = Path.Combine(_databaseDirectory, "leads.db");
+        var identityDbPath = Path.Combine(_databaseDirectory, "identity.db");
+
         builder.UseEnvironment("Testing");
         builder.UseSetting("Auth:Authority", "https://example.test");
         builder.UseSetting("Auth:ClientId", "test-client");
         builder.UseSetting("Auth:ClientSecret", "test-secret");
+        builder.UseSetting("ConnectionStrings:LeadCapture", $"Data Source={leadCaptureDbPath}");
+        builder.UseSetting("ConnectionStrings:Identity", $"Data Source={identityDbPath}");
 
         builder.ConfigureAppConfiguration((_, config) =>
         {
@@ -27,7 +35,9 @@ public sealed class SiteWebApplicationFactory : WebApplicationFactory<Program>
             {
                 ["Auth:Authority"] = "https://example.test",
                 ["Auth:ClientId"] = "test-client",
-                ["Auth:ClientSecret"] = "test-secret"
+                ["Auth:ClientSecret"] = "test-secret",
+                ["ConnectionStrings:LeadCapture"] = $"Data Source={leadCaptureDbPath}",
+                ["ConnectionStrings:Identity"] = $"Data Source={identityDbPath}"
             });
         });
 
@@ -42,6 +52,32 @@ public sealed class SiteWebApplicationFactory : WebApplicationFactory<Program>
 
             services.AddScoped<AuthenticationStateProvider, HttpContextAuthenticationStateProvider>();
         });
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+
+        if (!disposing)
+        {
+            return;
+        }
+
+        try
+        {
+            if (Directory.Exists(_databaseDirectory))
+            {
+                Directory.Delete(_databaseDirectory, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+            // Best-effort cleanup for temporary test artifacts.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Best-effort cleanup for temporary test artifacts.
+        }
     }
 }
 
