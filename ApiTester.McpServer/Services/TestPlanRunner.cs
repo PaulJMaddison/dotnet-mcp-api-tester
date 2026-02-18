@@ -125,7 +125,7 @@ public sealed class TestPlanRunner
         foreach (var tc in plan.Cases)
         {
             ct.ThrowIfCancellationRequested();
-            results.Add(await RunCaseAsync(plan, tc, ct));
+            results.Add(await RunCaseAsync(plan, tc, policySnapshot, ct));
         }
 
         swTotal.Stop();
@@ -181,19 +181,19 @@ public sealed class TestPlanRunner
         return record;
     }
 
-    private async Task<TestCaseResult> RunCaseAsync(TestPlan plan, TestCase tc, CancellationToken ct)
-        => await RunCaseWithRetriesAsync(plan, tc, ct);
+    private async Task<TestCaseResult> RunCaseAsync(TestPlan plan, TestCase tc, ApiExecutionPolicySnapshot policySnapshot, CancellationToken ct)
+        => await RunCaseWithRetriesAsync(plan, tc, policySnapshot, ct);
 
-    private async Task<TestCaseResult> RunCaseWithRetriesAsync(TestPlan plan, TestCase tc, CancellationToken ct)
+    private async Task<TestCaseResult> RunCaseWithRetriesAsync(TestPlan plan, TestCase tc, ApiExecutionPolicySnapshot policySnapshot, CancellationToken ct)
     {
-        var maxRetries = _cfg.Policy.RetryOnFlake ? Math.Max(0, _cfg.Policy.MaxRetries) : 0;
+        var maxRetries = policySnapshot.RetryOnFlake ? Math.Max(0, policySnapshot.MaxRetries) : 0;
         var attempt = 0;
         var sawFlake = false;
         string? flakeCategory = null;
 
         while (true)
         {
-            var result = await ExecuteCaseAsync(plan, tc, ct);
+            var result = await ExecuteCaseAsync(plan, tc, policySnapshot, ct);
             var classification = ResultClassificationRules.Classify(result);
 
             if (classification == ResultClassification.FlakyExternal)
@@ -219,7 +219,7 @@ public sealed class TestPlanRunner
         }
     }
 
-    private async Task<TestCaseResult> ExecuteCaseAsync(TestPlan plan, TestCase tc, CancellationToken ct)
+    private async Task<TestCaseResult> ExecuteCaseAsync(TestPlan plan, TestCase tc, ApiExecutionPolicySnapshot policySnapshot, CancellationToken ct)
     {
         var missing = ExtractPathParamNames(plan.PathTemplate)
             .Where(p => !tc.PathParams.ContainsKey(p))
@@ -272,7 +272,7 @@ public sealed class TestPlanRunner
             };
         }
 
-        var policyBlock = await PolicyBlockReasonAsync(uri, plan.Method, baseUrl, ct);
+        var policyBlock = await PolicyBlockReasonAsync(uri, plan.Method, baseUrl, policySnapshot, ct);
         if (policyBlock is not null)
         {
             return new TestCaseResult
@@ -288,9 +288,10 @@ public sealed class TestPlanRunner
 
         var client = _httpClientFactory.CreateClient(HttpClientName);
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        if (_cfg.Policy.Timeout > TimeSpan.Zero && _cfg.Policy.Timeout != Timeout.InfiniteTimeSpan)
+        var timeout = TimeSpan.FromSeconds(policySnapshot.TimeoutSeconds);
+        if (timeout > TimeSpan.Zero && timeout != Timeout.InfiniteTimeSpan)
         {
-            timeoutCts.CancelAfter(_cfg.Policy.Timeout);
+            timeoutCts.CancelAfter(timeout);
         }
 
         var requestToken = timeoutCts.Token;
@@ -310,7 +311,7 @@ public sealed class TestPlanRunner
         var sw = Stopwatch.StartNew();
         try
         {
-            using var resp = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, requestToken);
+            using var resp = await SendWithRedirectPolicyAsync(client, req, policySnapshot, requestToken);
             sw.Stop();
 
             var status = (int)resp.StatusCode;
@@ -320,7 +321,7 @@ public sealed class TestPlanRunner
             if (resp.Content is not null)
             {
                 bodyBytes = await resp.Content.ReadAsByteArrayAsync(requestToken);
-                var max = Math.Min(bodyBytes.Length, _cfg.Policy.MaxResponseBodyBytes);
+                var max = Math.Min(bodyBytes.Length, policySnapshot.MaxResponseBodyBytes);
                 snippet = Encoding.UTF8.GetString(bodyBytes, 0, max);
                 if (bodyBytes.Length > max) snippet += "\n... (truncated)";
             }
@@ -329,7 +330,7 @@ public sealed class TestPlanRunner
             var pass = expected.Contains(status);
             var failureReason = pass ? null : $"Expected [{string.Join(", ", expected)}] but got {status}.";
 
-            if (pass && _cfg.Policy.ValidateSchema)
+            if (pass && policySnapshot.ValidateSchema)
             {
                 failureReason = ValidateContract(plan, resp, bodyBytes, status);
                 pass = failureReason is null;
@@ -360,6 +361,20 @@ public sealed class TestPlanRunner
                 DurationMs = sw.ElapsedMilliseconds,
                 Pass = false,
                 FailureReason = "Request timed out."
+            };
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Redirect blocked by policy:", StringComparison.OrdinalIgnoreCase))
+        {
+            sw.Stop();
+            return new TestCaseResult
+            {
+                Name = tc.Name,
+                Blocked = true,
+                BlockReason = ex.Message,
+                Method = plan.Method,
+                Url = uri.ToString(),
+                DurationMs = sw.ElapsedMilliseconds,
+                Pass = false
             };
         }
         catch (HttpRequestException ex)
@@ -640,15 +655,18 @@ public sealed class TestPlanRunner
         return JsonSerializer.Serialize(failure, JsonDefaults.Default);
     }
 
-    private async Task<string?> PolicyBlockReasonAsync(Uri uri, string method, string baseUrl, CancellationToken ct)
+    private async Task<string?> PolicyBlockReasonAsync(Uri uri, string method, string baseUrl, ApiExecutionPolicySnapshot policySnapshot, CancellationToken ct)
     {
-        var allow = _cfg.Policy.AllowedBaseUrls ?? new List<string>();
-        if (allow.Count == 0 && !_cfg.Policy.DryRun)
+        var allow = policySnapshot.AllowedBaseUrls ?? [];
+        if (policySnapshot.HostedMode && allow.Count == 0)
+            return "Hosted mode requires at least one allowedBaseUrl. Deny by default.";
+
+        if (allow.Count == 0 && !policySnapshot.DryRun)
             return "No allowedBaseUrls configured, deny by default.";
 
-        if (_cfg.Policy.AllowedMethods is not null &&
-            _cfg.Policy.AllowedMethods.Count > 0 &&
-            !_cfg.Policy.AllowedMethods.Contains(method, StringComparer.OrdinalIgnoreCase))
+        if (policySnapshot.AllowedMethods is not null &&
+            policySnapshot.AllowedMethods.Count > 0 &&
+            !policySnapshot.AllowedMethods.Contains(method, StringComparer.OrdinalIgnoreCase))
         {
             return $"HTTP method not allowed by policy: {method}";
         }
@@ -666,20 +684,61 @@ public sealed class TestPlanRunner
                 return $"Base URL not allowed by policy: {u}";
         }
 
-        if (_cfg.Policy.BlockLocalhost || _cfg.Policy.BlockPrivateNetworks)
+        if (policySnapshot.BlockLocalhost || policySnapshot.BlockPrivateNetworks)
         {
             var (allowed, reason) = await _ssrfGuard.CheckAsync(
                 uri,
-                _cfg.Policy.BlockLocalhost,
-                _cfg.Policy.BlockPrivateNetworks,
+                policySnapshot.BlockLocalhost,
+                policySnapshot.BlockPrivateNetworks,
                 ct);
 
-            if (!allowed && !_cfg.Policy.DryRun)
+            if (!allowed && !policySnapshot.DryRun)
                 return reason ?? "Blocked by SSRF policy.";
         }
 
         return null;
     }
+
+    private async Task<HttpResponseMessage> SendWithRedirectPolicyAsync(HttpClient client, HttpRequestMessage request, ApiExecutionPolicySnapshot policySnapshot, CancellationToken ct)
+    {
+        var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+
+        if (!IsRedirectStatusCode((int)response.StatusCode) || response.Headers.Location is null)
+            return response;
+
+        var redirectUri = response.Headers.Location.IsAbsoluteUri
+            ? response.Headers.Location
+            : new Uri(request.RequestUri!, response.Headers.Location);
+
+        var redirectBlock = await PolicyBlockReasonAsync(
+            redirectUri,
+            request.Method.Method,
+            $"{redirectUri.Scheme}://{redirectUri.Authority}",
+            policySnapshot,
+            ct);
+
+        if (redirectBlock is not null)
+        {
+            response.Dispose();
+            throw new InvalidOperationException($"Redirect blocked by policy: {redirectBlock}");
+        }
+
+        response.Dispose();
+        using var redirectRequest = new HttpRequestMessage(request.Method, redirectUri);
+        foreach (var header in request.Headers)
+            redirectRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
+
+        if (request.Content is not null)
+        {
+            var body = await request.Content.ReadAsStringAsync(ct);
+            redirectRequest.Content = new StringContent(body, Encoding.UTF8, request.Content.Headers.ContentType?.MediaType ?? "application/json");
+        }
+
+        return await client.SendAsync(redirectRequest, HttpCompletionOption.ResponseHeadersRead, ct);
+    }
+
+    private static bool IsRedirectStatusCode(int statusCode)
+        => statusCode is 301 or 302 or 303 or 307 or 308;
 
     private static (string path, OperationType method, OpenApiOperation op)? FindOperation(OpenApiDocument doc, string operationId)
     {

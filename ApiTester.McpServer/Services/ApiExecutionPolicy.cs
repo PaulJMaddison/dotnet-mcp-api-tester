@@ -2,6 +2,8 @@
 
 public sealed class ApiExecutionPolicy
 {
+    public bool HostedMode { get; set; }
+
     // SAFE SaaS defaults
     public bool DryRun { get; set; } = true;
 
