@@ -75,3 +75,22 @@ Production recommendations:
 - Do not enable body logging in reverse proxies.
 - Route logs to centralized storage with retention and access controls.
 - Treat user-supplied headers and query values as potentially sensitive.
+
+## 6) Security operations references
+
+For security operations and regression guidance, use:
+
+- `docs/security/README.md`
+- `docs/security/threat-model.md`
+- `SECURITY.md`
+
+Run security regression checks locally before release promotion:
+
+```bash
+./scripts/security.sh
+```
+
+```powershell
+pwsh ./scripts/security.ps1
+```
+

@@ -22,6 +22,12 @@ public class UiE2eTests : IClassFixture<E2eFixture>, IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        if (!string.Equals(Environment.GetEnvironmentVariable("RUN_UI_E2E"), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            _skipBrowserTests = true;
+            return;
+        }
+
         _browsersReady = await EnsurePlaywrightBrowsersAsync();
         if (!_browsersReady)
         {

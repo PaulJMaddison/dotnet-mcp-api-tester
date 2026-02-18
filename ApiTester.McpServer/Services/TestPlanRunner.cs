@@ -719,40 +719,64 @@ public sealed class TestPlanRunner
 
     private async Task<HttpResponseMessage> SendWithRedirectPolicyAsync(HttpClient client, HttpRequestMessage request, ApiExecutionPolicySnapshot policySnapshot, CancellationToken ct)
     {
-        var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        const int maxRedirectHops = 5;
 
-        if (!IsRedirectStatusCode((int)response.StatusCode) || response.Headers.Location is null)
-            return response;
-
-        var redirectUri = response.Headers.Location.IsAbsoluteUri
-            ? response.Headers.Location
-            : new Uri(request.RequestUri!, response.Headers.Location);
-
-        var redirectBlock = await PolicyBlockReasonAsync(
-            redirectUri,
-            request.Method.Method,
-            $"{redirectUri.Scheme}://{redirectUri.Authority}",
-            policySnapshot,
-            ct);
-
-        if (redirectBlock is not null)
+        var currentUri = request.RequestUri ?? throw new InvalidOperationException("Request URI is missing.");
+        var visitedUris = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
+            currentUri.AbsoluteUri
+        };
+
+        var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(ct);
+
+        for (var hop = 0; hop <= maxRedirectHops; hop++)
+        {
+            using var currentRequest = new HttpRequestMessage(request.Method, currentUri);
+            foreach (var header in request.Headers)
+                currentRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
+
+            if (body is not null)
+                currentRequest.Content = new StringContent(body, Encoding.UTF8, request.Content?.Headers.ContentType?.MediaType ?? "application/json");
+
+            var response = await client.SendAsync(currentRequest, HttpCompletionOption.ResponseHeadersRead, ct);
+
+            if (!IsRedirectStatusCode((int)response.StatusCode) || response.Headers.Location is null)
+                return response;
+
+            var redirectUri = response.Headers.Location.IsAbsoluteUri
+                ? response.Headers.Location
+                : new Uri(currentUri, response.Headers.Location);
+
+            var redirectBlock = await PolicyBlockReasonAsync(
+                redirectUri,
+                request.Method.Method,
+                $"{redirectUri.Scheme}://{redirectUri.Authority}",
+                policySnapshot,
+                ct);
+
+            if (redirectBlock is not null)
+            {
+                response.Dispose();
+                throw new InvalidOperationException($"Redirect blocked by policy: {redirectBlock}");
+            }
+
+            if (!visitedUris.Add(redirectUri.AbsoluteUri))
+            {
+                response.Dispose();
+                throw new InvalidOperationException("Redirect blocked by policy: Redirect loop detected.");
+            }
+
+            if (hop == maxRedirectHops)
+            {
+                response.Dispose();
+                throw new InvalidOperationException($"Redirect blocked by policy: Redirect limit of {maxRedirectHops} exceeded.");
+            }
+
             response.Dispose();
-            throw new InvalidOperationException($"Redirect blocked by policy: {redirectBlock}");
+            currentUri = redirectUri;
         }
 
-        response.Dispose();
-        using var redirectRequest = new HttpRequestMessage(request.Method, redirectUri);
-        foreach (var header in request.Headers)
-            redirectRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
-
-        if (request.Content is not null)
-        {
-            var body = await request.Content.ReadAsStringAsync(ct);
-            redirectRequest.Content = new StringContent(body, Encoding.UTF8, request.Content.Headers.ContentType?.MediaType ?? "application/json");
-        }
-
-        return await client.SendAsync(redirectRequest, HttpCompletionOption.ResponseHeadersRead, ct);
+        throw new InvalidOperationException($"Redirect blocked by policy: Redirect limit of {maxRedirectHops} exceeded.");
     }
 
     private static bool IsRedirectStatusCode(int statusCode)

@@ -55,6 +55,18 @@ Run all unit/integration tests:
 dotnet test
 ```
 
+Run the security regression suite only:
+
+```bash
+./scripts/security.sh
+```
+
+Windows:
+
+```powershell
+pwsh ./scripts/security.ps1
+```
+
 Run the docker-compose golden path E2E suite:
 
 ```bash
@@ -70,6 +82,11 @@ pwsh ./scripts/e2e.ps1
 Manual QA runbook and fixture data are documented in:
 - `docs/qa/golden-path.md`
 - `docs/qa/test-data.md`
+
+Security docs and threat modeling resources:
+- `docs/security/README.md`
+- `docs/security/threat-model.md`
+- `SECURITY.md`
 
 ## Local run
 
