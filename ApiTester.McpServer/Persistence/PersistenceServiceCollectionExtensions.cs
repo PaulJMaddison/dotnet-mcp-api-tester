@@ -51,6 +51,8 @@ public static class PersistenceServiceCollectionExtensions
             {
                 if (selection.Provider == PersistenceProvider.SqlServer)
                     opt.UseSqlServer(selection.ConnectionString);
+                else if (selection.Provider == PersistenceProvider.PostgreSql)
+                    opt.UseNpgsql(selection.ConnectionString);
             });
 
             services.AddScoped<SqlOpenApiSpecStore>();
@@ -100,17 +102,17 @@ public static class PersistenceServiceCollectionExtensions
             services.AddSingleton<ISubscriptionStore>(sp => sp.GetRequiredService<FileSubscriptionStore>());
         }
 
-        services.AddScoped<ITestRunStore>(sp => UseSqlServer(sp)
+        services.AddScoped<ITestRunStore>(sp => UseSqlPersistence(sp)
             ? sp.GetRequiredService<SqlTestRunStore>()
             : sp.GetRequiredService<FileTestRunStore>());
-        services.AddScoped<IProjectStore>(sp => UseSqlServer(sp)
+        services.AddScoped<IProjectStore>(sp => UseSqlPersistence(sp)
             ? sp.GetRequiredService<SqlProjectStore>()
             : sp.GetRequiredService<FileProjectStore>());
 
         return services;
     }
 
-    private static bool UseSqlServer(IServiceProvider services)
+    private static bool UseSqlPersistence(IServiceProvider services)
     {
         var options = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<PersistenceOptions>>().Value;
         return PersistenceProviderSelector.Select(options).UseSqlProvider;

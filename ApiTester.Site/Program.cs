@@ -126,6 +126,8 @@ using (var scope = app.Services.CreateScope())
     identityDbContext.Database.EnsureCreated();
 }
 
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
 app.MapGet("/signin", async (HttpContext httpContext) =>
 {
     if (httpContext.User.Identity?.IsAuthenticated == true)
