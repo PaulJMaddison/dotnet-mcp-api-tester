@@ -1,4 +1,5 @@
 using ApiTester.Web.Auth;
+using ApiTester.Web.Errors;
 
 namespace ApiTester.Web.AbuseProtection;
 
@@ -23,10 +24,12 @@ public sealed class TenantIpRateLimitMiddleware
             context.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
             context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
 
-            await Results.Problem(
-                    title: "Rate limit exceeded",
-                    detail: $"Too many requests for tenant '{tenantId}' from IP '{ipAddress}' in '{category}' endpoints. Retry after {retryAfterSeconds} seconds.",
-                    statusCode: StatusCodes.Status429TooManyRequests)
+            await ApiProblemFactory.Result(
+                    context,
+                    StatusCodes.Status429TooManyRequests,
+                    "RateLimitExceeded",
+                    "Rate limit exceeded",
+                    $"Too many requests for tenant '{tenantId}' from IP '{ipAddress}' in '{category}' endpoints. Retry after {retryAfterSeconds} seconds.")
                 .ExecuteAsync(context);
             return;
         }

@@ -3,19 +3,27 @@ using ApiTester.McpServer.Models;
 
 namespace ApiTester.McpServer.Services;
 
-public sealed class RedactionService
+public sealed class RedactionService : IRedactor
 {
     private const string RedactedValue = "[REDACTED]";
     private static readonly Regex BearerTokenPattern = new("(?i)(authorization\\s*:\\s*bearer\\s+)[^\\s,;\"]+", RegexOptions.Compiled);
     private static readonly Regex ApiTokenPattern = new("(?i)\\b(x-api-key|api-key|x-auth-token)\\s*:\\s*[^\\s,;\"]+", RegexOptions.Compiled);
 
+
+    private static readonly Regex[] DefaultSensitiveValuePatterns =
+    {
+        new(@"(?i)(token|apikey|api_key|key|sig|signature|access_token)\s*[=:]\s*[^\s,&}]+", RegexOptions.Compiled),
+        new(@"(?i)""(password|secret|token|apiKey|clientSecret|refreshToken)""\s*:\s*""[^""]+""", RegexOptions.Compiled),
+    };
     private static readonly HashSet<string> AuthHeaders = new(StringComparer.OrdinalIgnoreCase)
     {
         "Authorization",
         "Proxy-Authorization",
         "X-Api-Key",
         "Api-Key",
-        "X-Auth-Token"
+        "X-Auth-Token",
+        "Cookie",
+        "Set-Cookie"
     };
 
     public TestPlan RedactPlan(TestPlan plan, IReadOnlyList<string>? patterns)
@@ -98,10 +106,13 @@ public sealed class RedactionService
         if (string.IsNullOrWhiteSpace(text))
             return text;
 
-        if (patterns is null || patterns.Count == 0)
-            return RedactAuthTokenShapes(text);
-
         var redacted = RedactAuthTokenShapes(text);
+
+        foreach (var regex in DefaultSensitiveValuePatterns)
+            redacted = regex.Replace(redacted, RedactedValue);
+
+        if (patterns is null || patterns.Count == 0)
+            return redacted;
         foreach (var regex in BuildPatterns(patterns))
             redacted = regex.Replace(redacted, RedactedValue);
 

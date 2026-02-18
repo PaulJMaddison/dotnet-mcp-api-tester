@@ -32,8 +32,8 @@
     <div class="card-body">
         <h2 class="h5">Create token</h2>
         <div class="row g-2">
-            <div class="col-md-4"><input class="form-control" @bind="_name" placeholder="Name" /></div>
-            <div class="col-md-6"><input class="form-control" @bind="_scopes" placeholder="Scopes (comma-separated)" /></div>
+            <div class="col-md-4"><input class="form-control" @bind="_name" data-hint="Name" /></div>
+            <div class="col-md-6"><input class="form-control" @bind="_scopes" data-hint="Scopes (comma-separated)" /></div>
             <div class="col-md-2 d-grid"><button class="btn btn-primary" @onclick="CreateAsync">Create</button></div>
         </div>
     </div>

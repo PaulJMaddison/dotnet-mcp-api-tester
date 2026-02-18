@@ -1,4 +1,5 @@
 using ApiTester.McpServer.Persistence.Stores;
+using ApiTester.Web.Errors;
 using Microsoft.AspNetCore.Http;
 
 namespace ApiTester.Web.Auth;
@@ -17,13 +18,13 @@ public sealed class ApiKeyAuthMiddleware
         var apiKey = ResolveToken(context);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await ApiProblemFactory.Result(context, StatusCodes.Status401Unauthorized, "ApiTokenMissing", "API token missing", "Provide an API key using Authorization Bearer or X-Api-Key.").ExecuteAsync(context);
             return;
         }
 
         if (!ApiKeyToken.TryGetPrefix(apiKey, out var prefix))
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await ApiProblemFactory.Result(context, StatusCodes.Status401Unauthorized, "ApiTokenInvalid", "Invalid API token", "The provided API token format is invalid.").ExecuteAsync(context);
             return;
         }
 
@@ -31,13 +32,13 @@ public sealed class ApiKeyAuthMiddleware
         var record = candidates.FirstOrDefault(candidate => ApiKeyHasher.Verify(apiKey, candidate.Hash));
         if (record is null)
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await ApiProblemFactory.Result(context, StatusCodes.Status401Unauthorized, "ApiTokenInvalid", "Invalid API token", "No active API token matched the supplied credentials.").ExecuteAsync(context);
             return;
         }
 
         if (!ApiKeyAccessEvaluator.IsActive(record, DateTime.UtcNow))
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            await ApiProblemFactory.Result(context, StatusCodes.Status401Unauthorized, "ApiTokenRevoked", "API token not active", "The provided API token is expired or revoked.").ExecuteAsync(context);
             return;
         }
 

@@ -25,19 +25,19 @@
         <form class="row g-3 align-items-end mt-1" method="get" action="/app/audit">
             <div class="col-12 col-md-3">
                 <label class="form-label" for="audit-action">Action</label>
-                <input class="form-control" id="audit-action" name="action" value="@Action" placeholder="export.generated" />
+                <input class="form-control" id="audit-action" name="action" value="@Action" data-hint="export.generated" />
             </div>
             <div class="col-12 col-md-3">
                 <label class="form-label" for="audit-from">From (UTC)</label>
-                <input class="form-control" id="audit-from" name="from" value="@From" placeholder="2026-01-01T00:00:00Z" />
+                <input class="form-control" id="audit-from" name="from" value="@From" data-hint="2026-01-01T00:00:00Z" />
             </div>
             <div class="col-12 col-md-3">
                 <label class="form-label" for="audit-to">To (UTC)</label>
-                <input class="form-control" id="audit-to" name="to" value="@To" placeholder="2026-01-31T23:59:59Z" />
+                <input class="form-control" id="audit-to" name="to" value="@To" data-hint="2026-01-31T23:59:59Z" />
             </div>
             <div class="col-12 col-md-1">
                 <label class="form-label" for="audit-take">Take</label>
-                <input class="form-control" id="audit-take" name="take" value="@Take" placeholder="50" />
+                <input class="form-control" id="audit-take" name="take" value="@Take" data-hint="50" />
             </div>
             <div class="col-12 col-md-2">
                 <button class="btn btn-primary w-100" type="submit">Apply</button>

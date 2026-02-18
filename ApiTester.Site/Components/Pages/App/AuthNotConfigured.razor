@@ -1,0 +1,21 @@
+@page "/app/auth-not-configured"
+@layout ApiTester.Site.Components.Layout.AppLayout
+
+<PageTitle>Authentication not configured</PageTitle>
+
+<section class="container py-5">
+    <div class="card shadow-sm border-warning-subtle">
+        <div class="card-body p-4">
+            <h1 class="h3 mb-3">Authentication is not configured</h1>
+            <p class="mb-2">
+                This commercial environment requires OpenID Connect (OIDC) before workspace routes can be accessed.
+            </p>
+            <p class="mb-2">
+                Configure <code>Auth:Authority</code>, <code>Auth:ClientId</code>, and <code>Auth:ClientSecret</code> to enable sign-in.
+            </p>
+            <p class="text-secondary mb-0">
+                Development-only bypass (<code>Auth:DevBypass</code>) is supported only in Development and is always disabled in Production.
+            </p>
+        </div>
+    </div>
+</section>
