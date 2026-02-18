@@ -198,6 +198,14 @@ curl -H "X-Api-Key: $API_KEY" \
   "$API_BASE_URL/api/runs/<runId>"
 ```
 
+
+## Deployment and release operations
+
+For production packaging and release hardening guidance, see:
+
+- `docs/deployment.md`
+- `docs/release-checklist.md`
+
 ## Troubleshooting
 
 ### API fails to start with an API key error
