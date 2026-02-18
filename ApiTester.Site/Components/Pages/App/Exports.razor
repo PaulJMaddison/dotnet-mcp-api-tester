@@ -1,0 +1,172 @@
+@page "/app/exports"
+@inject IApiTesterWebClient ApiClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>Exports</PageTitle>
+
+<div class="app-page">
+    <SectionContent SectionName="AppBreadcrumbs">
+        <AppBreadcrumbs Items="@Breadcrumbs" />
+    </SectionContent>
+
+    <div class="app-page-header">
+        <div>
+            <h1 class="h3 mb-1">Exports</h1>
+            <p class="text-secondary mb-0">Download run exports and evidence packs from ApiTester Web.</p>
+        </div>
+    </div>
+
+    <div class="app-card app-filter-bar">
+        <div class="d-flex align-items-center gap-2 text-uppercase small text-secondary">
+            <img src="/assets/runs/run-filter.svg" alt="" aria-hidden="true" width="16" height="16" />
+            <span>Filters</span>
+        </div>
+        <form class="row g-3 align-items-end mt-1" method="get" action="/app/exports">
+            <div class="col-12 col-md-8">
+                <label class="form-label" for="exports-project-key">Project key</label>
+                <input class="form-control" id="exports-project-key" name="projectKey" value="@ProjectKey" placeholder="project-key" />
+            </div>
+            <div class="col-12 col-md-2">
+                <label class="form-label" for="exports-take">Take</label>
+                <input class="form-control" id="exports-take" name="take" value="@Take" placeholder="25" />
+            </div>
+            <div class="col-12 col-md-2">
+                <button class="btn btn-primary w-100" type="submit">Apply</button>
+            </div>
+        </form>
+    </div>
+
+    @if (_isGated)
+    {
+        <div class="app-card app-state app-state-warning">
+            <div>
+                <h2 class="h5 mb-2">Exports are Team-gated</h2>
+                <p class="text-secondary mb-3">Your current plan cannot access export endpoints. Upgrade to Team to enable JSON/CSV/JUnit downloads and evidence bundles for compliance workflows.</p>
+                <a class="btn btn-primary" href="/pricing">Upgrade to Team</a>
+            </div>
+        </div>
+    }
+    else if (_isLoading)
+    {
+        <div class="app-card app-state">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span class="ms-2">Loading exportable runs...</span>
+        </div>
+    }
+    else if (_response?.Error is not null)
+    {
+        <div class="app-card app-state app-state-error">
+            <h2 class="h6">Unable to load exportable runs</h2>
+            <p class="text-secondary">@_response.Error.Message</p>
+            @if (!string.IsNullOrWhiteSpace(_response.Error.Details))
+            {
+                <details>
+                    <summary>View error details</summary>
+                    <pre class="mb-0">@_response.Error.Details</pre>
+                </details>
+            }
+        </div>
+    }
+    else if (_response?.Data is null || _response.Data.Runs.Count == 0)
+    {
+        <div class="app-card app-state">
+            <h2 class="h6">No runs found</h2>
+            <p class="text-secondary mb-0">Use a project key to load runs and download export artifacts.</p>
+        </div>
+    }
+    else
+    {
+        <div class="app-card">
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">Run</th>
+                            <th scope="col">Operation</th>
+                            <th scope="col">Completed</th>
+                            <th scope="col">Exports</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var run in _response.Data.Runs)
+                        {
+                            <tr>
+                                <td>
+                                    <NavLink href="@($"/app/runs/{run.RunId}")">@run.RunId.ToString("N").Substring(0, 8)</NavLink>
+                                    <div class="text-secondary small">@run.RunId</div>
+                                </td>
+                                <td>@run.OperationId</td>
+                                <td>@run.CompletedUtc.ToString("g")</td>
+                                <td>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <a class="btn btn-sm btn-outline-primary" href="@ApiClient.GetAbsoluteUrl($"/runs/{run.RunId}/export/json")" target="_blank" rel="noopener">JSON</a>
+                                        <a class="btn btn-sm btn-outline-primary" href="@ApiClient.GetAbsoluteUrl($"/runs/{run.RunId}/export/csv")" target="_blank" rel="noopener">CSV</a>
+                                        <a class="btn btn-sm btn-outline-primary" href="@ApiClient.GetAbsoluteUrl($"/runs/{run.RunId}/export/junit")" target="_blank" rel="noopener">JUnit</a>
+                                        <a class="btn btn-sm btn-primary" href="@ApiClient.GetAbsoluteUrl($"/runs/{run.RunId}/export/evidence-bundle")" target="_blank" rel="noopener">Evidence pack</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? ProjectKey { get; set; }
+    [SupplyParameterFromQuery] public int? Take { get; set; }
+
+    private ApiResult<RunSummaryResponse>? _response;
+    private bool _isLoading = true;
+    private bool _isGated;
+
+    private IReadOnlyList<BreadcrumbItem> Breadcrumbs => new List<BreadcrumbItem>
+    {
+        new("Exports", "/app/exports")
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _isLoading = true;
+        _isGated = false;
+
+        var plan = await ApiClient.GetBillingPlanAsync(CancellationToken.None);
+        if (plan.Error?.StatusCode == 401)
+        {
+            NavigationManager.NavigateTo("/app/sign-in");
+            return;
+        }
+
+        if (plan.Data is not null && !plan.Data.AuditExportEnabled)
+        {
+            _isLoading = false;
+            _isGated = true;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ProjectKey))
+        {
+            _response = ApiResult<RunSummaryResponse>.Failure("Project key is required to load runs for exports.", null);
+            _isLoading = false;
+            return;
+        }
+
+        _response = await ApiClient.GetRunsAsync(ProjectKey, null, Take, CancellationToken.None);
+        if (_response?.Error?.StatusCode == 401)
+        {
+            NavigationManager.NavigateTo("/app/sign-in");
+            return;
+        }
+
+        if (_response?.Error?.StatusCode == 402 || _response?.Error?.StatusCode == 403)
+        {
+            _isGated = true;
+        }
+
+        _isLoading = false;
+    }
+}

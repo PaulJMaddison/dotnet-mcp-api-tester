@@ -409,6 +409,11 @@ h6 {
     background: #fff5f5;
 }
 
+.app-state-warning {
+    border: 1px solid rgba(251, 191, 36, 0.45);
+    background: #fffbeb;
+}
+
 .app-filter-bar {
     display: flex;
     justify-content: space-between;
