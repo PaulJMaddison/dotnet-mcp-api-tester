@@ -1,0 +1,46 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Smoke Petstore",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://fixture-api:8090"
+    }
+  ],
+  "paths": {
+    "/api/pets": {
+      "get": {
+        "operationId": "listPets",
+        "responses": {
+          "200": {
+            "description": "Pet list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "integer" },
+                          "name": { "type": "string" },
+                          "species": { "type": "string" }
+                        },
+                        "required": ["id", "name", "species"]
+                      }
+                    }
+                  },
+                  "required": ["pets"]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

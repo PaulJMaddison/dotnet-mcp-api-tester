@@ -1,3 +1,4 @@
+using ApiTester.Site.Auth;
 using ApiTester.Site.Data;
 using ApiTester.Site.Services;
 using Microsoft.AspNetCore.Authentication;
@@ -7,6 +8,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var authSection = builder.Configuration.GetSection("Auth");
+var authDevBypass = builder.Environment.IsDevelopment() && authSection.GetValue<bool>("DevBypass");
+var oidcAuthority = authSection["Authority"] ?? string.Empty;
+var oidcClientId = authSection["ClientId"] ?? string.Empty;
+var oidcConfigured = !string.IsNullOrWhiteSpace(oidcAuthority) && !string.IsNullOrWhiteSpace(oidcClientId);
 
 builder.Services.AddRazorComponents();
 builder.Services.AddCascadingAuthenticationState();
@@ -51,39 +58,51 @@ builder.Services
     .AddAuthentication(options =>
     {
         options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = authDevBypass
+            ? DevBypassAuthenticationHandler.Scheme
+            : OpenIdConnectDefaults.AuthenticationScheme;
     })
     .AddCookie(options =>
     {
         options.LoginPath = "/signin";
         options.LogoutPath = "/signout";
-    })
-    .AddOpenIdConnect(options =>
-    {
-        options.Authority = builder.Configuration["Auth:Authority"] ?? string.Empty;
-        options.ClientId = builder.Configuration["Auth:ClientId"] ?? string.Empty;
-        options.ClientSecret = builder.Configuration["Auth:ClientSecret"] ?? string.Empty;
-        options.CallbackPath = builder.Configuration["Auth:CallbackPath"] ?? "/signin-oidc";
-        options.ResponseType = "code";
-        options.SaveTokens = true;
-        options.GetClaimsFromUserInfoEndpoint = true;
-
-        options.Scope.Clear();
-        var configuredScopes = builder.Configuration.GetSection("Auth:Scopes").Get<string[]>() ?? Array.Empty<string>();
-        if (configuredScopes.Length == 0)
-        {
-            options.Scope.Add("openid");
-            options.Scope.Add("profile");
-            options.Scope.Add("email");
-        }
-        else
-        {
-            foreach (var scope in configuredScopes.Where(s => !string.IsNullOrWhiteSpace(s)))
-            {
-                options.Scope.Add(scope);
-            }
-        }
     });
+
+if (authDevBypass)
+{
+    builder.Services.AddAuthentication()
+        .AddScheme<AuthenticationSchemeOptions, DevBypassAuthenticationHandler>(DevBypassAuthenticationHandler.Scheme, _ => { });
+}
+else
+{
+    builder.Services.AddAuthentication()
+        .AddOpenIdConnect(options =>
+        {
+            options.Authority = oidcAuthority;
+            options.ClientId = oidcClientId;
+            options.ClientSecret = authSection["ClientSecret"] ?? string.Empty;
+            options.CallbackPath = authSection["CallbackPath"] ?? "/signin-oidc";
+            options.ResponseType = "code";
+            options.SaveTokens = true;
+            options.GetClaimsFromUserInfoEndpoint = true;
+
+            options.Scope.Clear();
+            var configuredScopes = authSection.GetSection("Scopes").Get<string[]>() ?? Array.Empty<string>();
+            if (configuredScopes.Length == 0)
+            {
+                options.Scope.Add("openid");
+                options.Scope.Add("profile");
+                options.Scope.Add("email");
+            }
+            else
+            {
+                foreach (var scope in configuredScopes.Where(s => !string.IsNullOrWhiteSpace(s)))
+                {
+                    options.Scope.Add(scope);
+                }
+            }
+        });
+}
 
 builder.Services.AddAuthorization();
 
@@ -135,6 +154,17 @@ app.MapGet("/signin", async (HttpContext httpContext) =>
         return Results.Redirect("/app");
     }
 
+    if (authDevBypass)
+    {
+        await httpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            (await httpContext.AuthenticateAsync(DevBypassAuthenticationHandler.Scheme)).Principal!);
+        return Results.Redirect("/app");
+    }
+
+    if (!oidcConfigured)
+        return Results.Problem(title: "Authentication not configured", detail: "OIDC is not configured. Set Auth:Authority and Auth:ClientId, or set Auth:DevBypass=true in Development.", statusCode: StatusCodes.Status503ServiceUnavailable);
+
     await httpContext.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme, new Microsoft.AspNetCore.Authentication.AuthenticationProperties
     {
         RedirectUri = "/app"
@@ -146,10 +176,14 @@ app.MapGet("/signin", async (HttpContext httpContext) =>
 app.MapGet("/signout", async (HttpContext httpContext) =>
 {
     await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    await httpContext.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme, new Microsoft.AspNetCore.Authentication.AuthenticationProperties
+
+    if (!authDevBypass)
     {
-        RedirectUri = "/"
-    });
+        await httpContext.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme, new Microsoft.AspNetCore.Authentication.AuthenticationProperties
+        {
+            RedirectUri = "/"
+        });
+    }
 
     return Results.Empty;
 });
@@ -176,6 +210,13 @@ app.MapPost("/api/leads", async (
 
 app.Use(async (context, next) =>
 {
+    if (context.Request.Path.StartsWithSegments("/app") && !authDevBypass && !oidcConfigured)
+    {
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsync("Authentication is not configured. Set Auth:Authority and Auth:ClientId, or set Auth:DevBypass=true in Development.");
+        return;
+    }
+
     if (context.Request.Path.StartsWithSegments("/app") && context.User.Identity?.IsAuthenticated != true)
     {
         context.Response.Redirect("/signin");

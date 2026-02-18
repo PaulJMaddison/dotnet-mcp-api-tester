@@ -412,8 +412,11 @@ v1.MapGet("/billing/usage", async (IProjectStore projectStore, SubscriptionEnfor
     return Results.Ok(response);
 });
 
-v1.MapPost("/billing/checkout", async (BillingCheckoutRequest request, StripeBillingService stripeBilling, HttpContext httpContext, CancellationToken ct) =>
+v1.MapPost("/billing/checkout", async (BillingCheckoutRequest request, StripeBillingService stripeBilling, IOptions<StripeBillingOptions> stripeOptions, HttpContext httpContext, CancellationToken ct) =>
 {
+    if (!stripeOptions.Value.BillingEnabled)
+        return BillingNotConfigured();
+
     var desired = (request?.Plan ?? string.Empty).Trim();
     if (string.IsNullOrWhiteSpace(desired))
         return InvalidRequest("plan is required.");
@@ -423,15 +426,21 @@ v1.MapPost("/billing/checkout", async (BillingCheckoutRequest request, StripeBil
     return Results.Ok(new BillingCheckoutResponse(url));
 });
 
-v1.MapPost("/billing/portal", async (StripeBillingService stripeBilling, HttpContext httpContext, CancellationToken ct) =>
+v1.MapPost("/billing/portal", async (StripeBillingService stripeBilling, IOptions<StripeBillingOptions> stripeOptions, HttpContext httpContext, CancellationToken ct) =>
 {
+    if (!stripeOptions.Value.BillingEnabled)
+        return BillingNotConfigured();
+
     var tenantContext = httpContext.GetTenantContext();
     var url = await stripeBilling.CreatePortalSessionAsync(tenantContext.TenantId, ct);
     return Results.Ok(new BillingPortalResponse(url));
 });
 
-v1.MapPost("/billing/webhook", async (HttpContext httpContext, StripeBillingService stripeBilling, CancellationToken ct) =>
+v1.MapPost("/billing/webhook", async (HttpContext httpContext, StripeBillingService stripeBilling, IOptions<StripeBillingOptions> stripeOptions, CancellationToken ct) =>
 {
+    if (!stripeOptions.Value.WebhookEnabled)
+        return BillingNotConfigured();
+
     httpContext.Request.EnableBuffering();
     using var reader = new StreamReader(httpContext.Request.Body, Encoding.UTF8, leaveOpen: true);
     var payload = await reader.ReadToEndAsync();
@@ -3451,6 +3460,20 @@ app.Run();
 
 static IResult InvalidRequest(string detail)
     => Results.Problem(title: "Invalid request", detail: detail, statusCode: StatusCodes.Status400BadRequest);
+
+static void AddZipEntry(ZipArchive archive, string name, string content)
+{
+    var entry = archive.CreateEntry(name, CompressionLevel.Optimal);
+    using var entryStream = entry.Open();
+    using var writer = new StreamWriter(entryStream, Encoding.UTF8);
+    writer.Write(content);
+}
+
+static IResult BillingNotConfigured()
+    => Results.Problem(
+        title: "Billing not configured",
+        detail: "Stripe billing is not configured for this environment.",
+        statusCode: StatusCodes.Status501NotImplemented);
 
 static IResult SubscriptionProblem(SubscriptionGateResult result)
     => Results.Problem(title: result.Title, detail: result.Detail, statusCode: result.StatusCode);
