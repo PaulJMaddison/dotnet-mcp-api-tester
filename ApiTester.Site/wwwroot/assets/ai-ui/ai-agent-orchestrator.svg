@@ -1,33 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-label="AI agent orchestrator flow">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#f4f8ff" />
+      <stop offset="0" stop-color="#f5f9ff" />
       <stop offset="1" stop-color="#ffffff" />
     </linearGradient>
+    <linearGradient id="surface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="1" stop-color="#f8fbff" />
+    </linearGradient>
     <linearGradient id="blueGlow" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4ea1ff" />
+      <stop offset="0" stop-color="#479bff" />
       <stop offset="1" stop-color="#0d6efd" />
     </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#1f3d73" flood-opacity="0.14" />
+    </filter>
     <style>
       .frame { fill: url(#bg); }
-      .panel { fill: #fff; stroke: #d4deeb; stroke-width: 2; }
+      .panel { fill: url(#surface); stroke: #d4deeb; stroke-width: 2; filter: url(#shadow); }
       .title { font: 700 30px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #0b1f3a; }
       .subtitle { font: 500 17px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #4f6a85; }
       .nodeTitle { font: 700 18px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #163a63; }
       .nodeText { font: 500 15px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #4f6a85; }
-      .chip { fill: #e8f1ff; stroke: #bfd5f5; stroke-width: 1.5; }
+      .chip { fill: #eaf2ff; stroke: #bfd5f5; stroke-width: 1.5; }
       .chipText { font: 600 12px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #25548b; letter-spacing: .35px; }
-      .line { stroke: #79aef7; stroke-width: 3.5; fill: none; stroke-linecap: round; }
-      .arrow { fill: #79aef7; }
-      .core { fill: url(#blueGlow); }
+      .line { stroke: #5f95e4; stroke-width: 3.5; fill: none; stroke-linecap: round; }
+      .arrow { fill: #5f95e4; }
+      .core { fill: url(#blueGlow); filter: url(#shadow); }
       .coreText { font: 700 18px system-ui, -apple-system, Segoe UI, Roboto, Arial; fill: #fff; }
+      .halo { fill: none; stroke: #bfd5f5; stroke-width: 2; stroke-dasharray: 7 8; }
+      .grid { stroke: #e6eef9; stroke-width: 1; }
     </style>
   </defs>
 
   <rect class="frame" x="0" y="0" width="1200" height="700" rx="30" />
+  <path class="grid" d="M0 160 H1200 M0 320 H1200 M0 480 H1200 M240 0 V700 M480 0 V700 M720 0 V700 M960 0 V700" opacity="0.55" />
 
   <text class="title" x="70" y="95">AI Orchestrator: Prompt → Tools → Evidence</text>
-  <text class="subtitle" x="70" y="130">Asset-only diagram for dashboard cards, docs blocks, and social previews.</text>
+  <text class="subtitle" x="70" y="130">Professional wireflow asset for dashboard cards, docs blocks, and social previews.</text>
 
   <g transform="translate(70,190)">
     <rect class="panel" x="0" y="0" width="250" height="180" rx="16" />
@@ -40,7 +50,8 @@
 
   <g transform="translate(450,180)">
     <circle class="core" cx="140" cy="100" r="92" />
-    <circle cx="140" cy="100" r="108" fill="none" stroke="#bfd5f5" stroke-width="2" stroke-dasharray="7 8" />
+    <circle class="halo" cx="140" cy="100" r="108" />
+    <circle cx="140" cy="100" r="72" fill="none" stroke="#dcebff" stroke-width="2" opacity="0.65" />
     <text class="coreText" x="84" y="94">Agent</text>
     <text class="coreText" x="66" y="120">Orchestrator</text>
   </g>
