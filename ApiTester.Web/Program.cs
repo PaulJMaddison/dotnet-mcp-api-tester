@@ -22,6 +22,7 @@ using ApiTester.Web.Diff;
 using ApiTester.Web.Mapping;
 using ApiTester.Web.Reports;
 using ApiTester.Web.Validation;
+using ApiTester.Web.Jobs;
 using ApiTester.AI;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.Extensions.Options;
@@ -43,6 +44,7 @@ builder.Services.AddApiTesterPersistence(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.Configure<ExecutionOptions>(builder.Configuration.GetSection("Execution"));
+builder.Services.Configure<CleanupJobOptions>(builder.Configuration.GetSection("CleanupJobs"));
 builder.Services.AddSingleton<OpenApiStore>();
 builder.Services.AddSingleton<ProjectContext>();
 builder.Services.AddSingleton<SsrfGuard>();
@@ -122,6 +124,7 @@ builder.Services.AddScoped<AiDocsGenerationService>();
 builder.Services.AddScoped<AiRunSummaryService>();
 builder.Services.AddScoped<AiSuggestTestsService>();
 builder.Services.AddScoped<SubscriptionEnforcementService>();
+builder.Services.AddScoped<RunCleanupCoordinator>();
 builder.Services.AddScoped<OrgContextResolver>();
 builder.Services.AddScoped<IRetentionPruner, RetentionPruner>();
 builder.Services.AddScoped<ITenantContext>(sp =>
@@ -135,6 +138,9 @@ builder.Services.AddScoped<ITenantContext>(sp =>
 
     return new TenantContext(OrgDefaults.DefaultOrganisationId);
 });
+
+builder.Services.AddHostedService<RetentionCleanupHostedService>();
+builder.Services.AddHostedService<ResponseSnippetCleanupHostedService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

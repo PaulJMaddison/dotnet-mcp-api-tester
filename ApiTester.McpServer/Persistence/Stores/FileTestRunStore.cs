@@ -287,6 +287,98 @@ public sealed class FileTestRunStore : ITestRunStore
         return deleted;
     }
 
+
+    public async Task<int> TrimResponseSnippetsAsync(Guid tenantId, int maxSnippetLength, CancellationToken ct)
+    {
+        tenantId = NormalizeTenantId(tenantId);
+        if (maxSnippetLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxSnippetLength), "Maximum snippet length must be greater than zero.");
+
+        var orgDir = OrgPath(tenantId);
+        if (!Directory.Exists(orgDir))
+            return 0;
+
+        var trimmed = 0;
+
+        foreach (var projectDir in Directory.EnumerateDirectories(orgDir))
+        {
+            foreach (var file in Directory.EnumerateFiles(projectDir, "*.json", SearchOption.TopDirectoryOnly))
+            {
+                ct.ThrowIfCancellationRequested();
+                var json = await File.ReadAllTextAsync(file, ct);
+                var record = JsonSerializer.Deserialize<TestRunRecord>(json, JsonDefaults.Default);
+                if (record?.Result?.Results is null || record.Result.Results.Count == 0)
+                    continue;
+
+                var changed = false;
+                var updatedResults = new List<TestCaseResult>(record.Result.Results.Count);
+                foreach (var result in record.Result.Results)
+                {
+                    if (!string.IsNullOrEmpty(result.ResponseSnippet) && result.ResponseSnippet.Length > maxSnippetLength)
+                    {
+                        updatedResults.Add(new TestCaseResult
+                        {
+                            Name = result.Name,
+                            Blocked = result.Blocked,
+                            BlockReason = result.BlockReason,
+                            Url = result.Url,
+                            Method = result.Method,
+                            StatusCode = result.StatusCode,
+                            DurationMs = result.DurationMs,
+                            Pass = result.Pass,
+                            FailureReason = result.FailureReason,
+                            ResponseSnippet = result.ResponseSnippet[..maxSnippetLength],
+                            IsFlaky = result.IsFlaky,
+                            FlakeReasonCategory = result.FlakeReasonCategory,
+                            Classification = result.Classification
+                        });
+                        trimmed++;
+                        changed = true;
+                        continue;
+                    }
+
+                    updatedResults.Add(result);
+                }
+
+                if (!changed)
+                    continue;
+
+                var updatedRecord = new TestRunRecord
+                {
+                    RunId = record.RunId,
+                    OrganisationId = record.OrganisationId,
+                    TenantId = record.TenantId,
+                    Actor = record.Actor,
+                    Environment = record.Environment,
+                    PolicySnapshot = record.PolicySnapshot,
+                    OwnerKey = record.OwnerKey,
+                    ProjectKey = record.ProjectKey,
+                    OperationId = record.OperationId,
+                    SpecId = record.SpecId,
+                    BaselineRunId = record.BaselineRunId,
+                    StartedUtc = record.StartedUtc,
+                    CompletedUtc = record.CompletedUtc,
+                    Result = new TestRunResult
+                    {
+                        OperationId = record.Result.OperationId,
+                        TotalCases = record.Result.TotalCases,
+                        Passed = record.Result.Passed,
+                        Failed = record.Result.Failed,
+                        Blocked = record.Result.Blocked,
+                        TotalDurationMs = record.Result.TotalDurationMs,
+                        ClassificationSummary = record.Result.ClassificationSummary,
+                        Results = updatedResults
+                    }
+                };
+
+                var updated = JsonSerializer.Serialize(updatedRecord, JsonDefaults.Default);
+                await File.WriteAllTextAsync(file, updated, ct);
+            }
+        }
+
+        return trimmed;
+    }
+
     private static string Sanitize(string s)
     {
         var invalid = Path.GetInvalidFileNameChars();
