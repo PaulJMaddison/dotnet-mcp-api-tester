@@ -2,6 +2,7 @@
 using System.Net.Http.Json;
 using System.Net.Http.Headers;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -1172,7 +1173,7 @@ public class ApiEndpointsTests
         Assert.Contains("text/csv", csvResponse.Content.Headers.ContentType?.ToString());
         Assert.StartsWith("case_name,status", csv, StringComparison.OrdinalIgnoreCase);
 
-        var evidenceResponse = await client.GetAsync($"/runs/{run.RunId}/export/evidence-bundle");
+        var evidenceResponse = await client.GetAsync($"/api/v1/runs/{run.RunId}/evidence-pack");
         var evidenceBytes = await evidenceResponse.Content.ReadAsByteArrayAsync();
         Assert.Equal(HttpStatusCode.OK, evidenceResponse.StatusCode);
         Assert.Contains("application/zip", evidenceResponse.Content.Headers.ContentType?.ToString());
@@ -1181,11 +1182,33 @@ public class ApiEndpointsTests
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
         var entryNames = archive.Entries.Select(entry => entry.FullName).ToList();
         Assert.Contains("run.json", entryNames);
-        Assert.Contains("policy.json", entryNames);
+        Assert.Contains("report.md", entryNames);
+        Assert.Contains("report.html", entryNames);
+        Assert.Contains("policy-snapshot.json", entryNames);
         Assert.Contains("audit.json", entryNames);
-        Assert.Contains("compliance-report.json", entryNames);
-        Assert.Contains("exports/junit.xml", entryNames);
-        Assert.Contains("exports/results.csv", entryNames);
+        Assert.Contains("manifest.json", entryNames);
+
+        var manifestJson = await ReadZipEntryAsync(archive, "manifest.json");
+        using var manifestDoc = JsonDocument.Parse(manifestJson);
+        Assert.True(manifestDoc.RootElement.TryGetProperty("createdUtc", out var createdUtcEl));
+        Assert.NotEqual(default, createdUtcEl.GetDateTime());
+
+        var manifest = JsonSerializer.Deserialize<EvidenceManifestDto>(
+            manifestJson,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        Assert.NotNull(manifest);
+        Assert.NotEmpty(manifest!.Files);
+
+        foreach (var file in manifest!.Files)
+        {
+            var contents = await ReadZipEntryAsync(archive, file.Path);
+            Assert.Equal(ComputeSha256(contents), file.Sha256);
+        }
+
+        var auditResponse = await client.GetAsync($"/api/v1/runs/{run.RunId}/audit");
+        Assert.Equal(HttpStatusCode.OK, auditResponse.StatusCode);
+        using var auditDoc = JsonDocument.Parse(await auditResponse.Content.ReadAsStringAsync());
+        Assert.True(auditDoc.RootElement.TryGetProperty("immutableSha256", out _));
     }
 
     [Fact]
@@ -1213,26 +1236,50 @@ public class ApiEndpointsTests
             new[] { secretToken });
 
         var project = await SeedProjectAsync(factory, "EvidenceRedaction", "evidence-redaction");
-        var run = await SeedRunAsync(factory, project, "op-redact", responseSnippet: $"token={secretToken}");
+        var run = await SeedRunAsync(factory, project, "op-redact", responseSnippet: $"Authorization: Bearer {secretToken}");
 
         var client = CreateClient(factory, ApiTesterWebFactory.ApiKeyAlpha);
-        var evidenceResponse = await client.GetAsync($"/runs/{run.RunId}/export/evidence-bundle");
+        var evidenceResponse = await client.GetAsync($"/api/v1/runs/{run.RunId}/evidence-pack");
         var evidenceBytes = await evidenceResponse.Content.ReadAsByteArrayAsync();
 
         Assert.Equal(HttpStatusCode.OK, evidenceResponse.StatusCode);
 
         using var stream = new MemoryStream(evidenceBytes);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-        var runEntry = archive.GetEntry("run.json");
-        Assert.NotNull(runEntry);
+        foreach (var entry in archive.Entries)
+        {
+            if (entry.FullName.EndsWith("/", StringComparison.Ordinal))
+                continue;
 
-        using var entryStream = runEntry!.Open();
-        using var reader = new StreamReader(entryStream);
-        var runJson = await reader.ReadToEndAsync();
+            using var entryStream = entry.Open();
+            using var reader = new StreamReader(entryStream);
+            var text = await reader.ReadToEndAsync();
+            Assert.DoesNotContain(secretToken, text, StringComparison.OrdinalIgnoreCase);
+        }
 
-        Assert.DoesNotContain(secretToken, runJson, StringComparison.OrdinalIgnoreCase);
+        var runJson = await ReadZipEntryAsync(archive, "run.json");
         Assert.Contains("[REDACTED]", runJson, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static async Task<string> ReadZipEntryAsync(ZipArchive archive, string entryName)
+    {
+        var entry = archive.GetEntry(entryName);
+        Assert.NotNull(entry);
+
+        using var stream = entry!.Open();
+        using var reader = new StreamReader(stream);
+        return await reader.ReadToEndAsync();
+    }
+
+    private static string ComputeSha256(string text)
+    {
+        var bytes = Encoding.UTF8.GetBytes(text);
+        return Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+    }
+
+    private sealed record EvidenceManifestDto(DateTime CreatedUtc, IReadOnlyList<EvidenceManifestFileDto> Files);
+
+    private sealed record EvidenceManifestFileDto(string Path, string Sha256);
 
     [Fact]
     public async Task BaselineEndpoints_CreateListAndCompareRuns()

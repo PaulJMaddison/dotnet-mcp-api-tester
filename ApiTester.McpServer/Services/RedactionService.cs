@@ -6,6 +6,8 @@ namespace ApiTester.McpServer.Services;
 public sealed class RedactionService
 {
     private const string RedactedValue = "[REDACTED]";
+    private static readonly Regex BearerTokenPattern = new("(?i)(authorization\\s*:\\s*bearer\\s+)[^\\s,;\"]+", RegexOptions.Compiled);
+    private static readonly Regex ApiTokenPattern = new("(?i)\\b(x-api-key|api-key|x-auth-token)\\s*:\\s*[^\\s,;\"]+", RegexOptions.Compiled);
 
     private static readonly HashSet<string> AuthHeaders = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -95,11 +97,25 @@ public sealed class RedactionService
             return text;
 
         if (patterns is null || patterns.Count == 0)
-            return text;
+            return RedactAuthTokenShapes(text);
 
-        var redacted = text;
+        var redacted = RedactAuthTokenShapes(text);
         foreach (var regex in BuildPatterns(patterns))
             redacted = regex.Replace(redacted, RedactedValue);
+
+        return redacted;
+    }
+
+    private static string RedactAuthTokenShapes(string text)
+    {
+        var redacted = BearerTokenPattern.Replace(text, $"$1{RedactedValue}");
+        redacted = ApiTokenPattern.Replace(redacted, match =>
+        {
+            var separatorIndex = match.Value.IndexOf(':');
+            return separatorIndex > 0
+                ? $"{match.Value[..separatorIndex]}: {RedactedValue}"
+                : RedactedValue;
+        });
 
         return redacted;
     }
