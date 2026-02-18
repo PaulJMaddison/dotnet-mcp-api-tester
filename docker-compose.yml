@@ -1,39 +1,63 @@
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: apitester-db
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: apitester-sqlserver
     restart: unless-stopped
     environment:
-      POSTGRES_DB: apitester
-      POSTGRES_USER: apitester
-      POSTGRES_PASSWORD: apitester
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Your_strong_Passw0rd!}
+    ports:
+      - "1433:1433"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - sqlserver_data:/var/opt/mssql
     networks:
       - apitester
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U apitester -d apitester"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -Q \"SELECT 1\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 35s
+
+  fixture-api:
+    build:
+      context: .
+      dockerfile: ApiTester.SmokeApi/Dockerfile
+    container_name: apitester-fixture-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8090
+    networks:
+      - apitester
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:8090/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 10s
 
-  web:
+  apitester-web:
     build:
       context: .
       dockerfile: ApiTester.Web/Dockerfile
     container_name: apitester-web
     restart: unless-stopped
     depends_on:
-      db:
+      sqlserver:
+        condition: service_healthy
+      fixture-api:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      Persistence__Provider: PostgreSql
-      Persistence__ConnectionString: Host=db;Port=5432;Database=apitester;Username=apitester;Password=apitester
-      Auth__ApiKeys__0: dev-api-key
+      Persistence__Provider: SqlServer
+      Persistence__ConnectionString: Server=sqlserver,1433;Database=ApiTester;User Id=sa;Password=${MSSQL_SA_PASSWORD:-Your_strong_Passw0rd!};Encrypt=False;TrustServerCertificate=True
+      Auth__ApiKeys__0: dev-local-key
       AI__OpenAI__ApiKey: ""
+      Stripe__SecretKey: ""
+      Stripe__WebhookSecret: ""
     ports:
       - "8080:8080"
     networks:
@@ -42,25 +66,26 @@ services:
       test: ["CMD-SHELL", "curl --fail --silent http://localhost:8080/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 20s
+      retries: 20
+      start_period: 25s
 
-  site:
+  apitester-site:
     build:
       context: .
       dockerfile: ApiTester.Site/Dockerfile
     container_name: apitester-site
     restart: unless-stopped
     depends_on:
-      web:
+      apitester-web:
         condition: service_healthy
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8081
-      ApiTesterWeb__BaseUrl: http://web:8080
-      ApiTesterWeb__ApiKey: dev-api-key
+      ApiTesterWeb__BaseUrl: http://apitester-web:8080
+      ApiTesterWeb__ApiKey: dev-local-key
       ConnectionStrings__LeadCapture: Data Source=/app/data/leads.db
       ConnectionStrings__Identity: Data Source=/app/data/identity.db
+      Auth__DevBypass: "true"
       Auth__Authority: ""
       Auth__ClientId: ""
       Auth__ClientSecret: ""
@@ -75,13 +100,13 @@ services:
       test: ["CMD-SHELL", "curl --fail --silent http://localhost:8081/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 20s
+      retries: 20
+      start_period: 25s
 
 networks:
   apitester:
     driver: bridge
 
 volumes:
-  postgres_data:
+  sqlserver_data:
   site_data:
