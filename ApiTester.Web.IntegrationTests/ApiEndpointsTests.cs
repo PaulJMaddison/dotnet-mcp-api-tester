@@ -1408,23 +1408,26 @@ public class ApiEndpointsTests
             entity = new SubscriptionEntity
             {
                 OrganisationId = organisationId,
+                TenantId = organisationId,
                 Plan = subscriptionPlan,
                 Status = SubscriptionStatus.Active,
                 Renews = true,
+                StripeCustomerId = null,
+                StripeSubscriptionId = null,
                 PeriodStartUtc = periodStart,
                 PeriodEndUtc = periodEnd,
-                ProjectsUsed = 0,
-                RunsUsed = 0,
-                AiCallsUsed = 0,
                 UpdatedUtc = now
             };
             db.Subscriptions.Add(entity);
         }
         else
         {
+            entity.TenantId = organisationId;
             entity.Plan = subscriptionPlan;
             entity.Status = SubscriptionStatus.Active;
             entity.Renews = true;
+            entity.StripeCustomerId = null;
+            entity.StripeSubscriptionId = null;
             entity.PeriodStartUtc = periodStart;
             entity.PeriodEndUtc = periodEnd;
             entity.UpdatedUtc = now;
