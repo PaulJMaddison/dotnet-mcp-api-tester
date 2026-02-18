@@ -313,20 +313,20 @@ v1.MapPost("/admin/tenants", async (AdminTenantCreateRequest request, IOrganisat
     if (!RequestValidation.TryValidateRequiredName(request?.Name, out var nameError))
         return InvalidRequest(nameError);
 
-    if (!RequestValidation.TryValidateRequiredKey(request?.Slug, "Slug", out var slugError))
+    if (!RequestValidation.TryValidateRequiredKey(request?.Slug, "Slug", RequestValidation.MaxSlugLength, out var slugError))
         return InvalidRequest(slugError);
 
-    if (!RequestValidation.TryValidateRequiredKey(request?.OwnerExternalId, "OwnerExternalId", out var ownerError))
+    if (!RequestValidation.TryValidateRequiredKey(request?.OwnerExternalId, "OwnerExternalId", RequestValidation.MaxExternalIdLength, out var ownerError))
         return InvalidRequest(ownerError);
 
     var displayName = string.IsNullOrWhiteSpace(request?.OwnerDisplayName)
         ? request.OwnerExternalId
         : request.OwnerDisplayName.Trim();
 
-    if (!RequestValidation.TryValidateRequiredKey(displayName, "OwnerDisplayName", out var displayError))
+    if (!RequestValidation.TryValidateRequiredKey(displayName, "OwnerDisplayName", RequestValidation.MaxDisplayNameLength, out var displayError))
         return InvalidRequest(displayError);
 
-    if (!RequestValidation.TryNormalizeOptionalValue(request?.OwnerEmail, out var email, out var emailError))
+    if (!RequestValidation.TryNormalizeOptionalValue(request?.OwnerEmail, RequestValidation.MaxEmailLength, out var email, out var emailError))
         return InvalidRequest(emailError);
 
     var org = await orgStore.CreateAsync(request!.Name, request.Slug, ct);
@@ -346,7 +346,7 @@ v1.MapPost("/admin/apikeys", async (AdminApiKeyCreateRequest request, IApiKeySto
     if (request is null)
         return InvalidRequest("Request body is required.");
 
-    if (!RequestValidation.TryValidateRequiredName(request.Name, out var nameError))
+    if (!RequestValidation.TryValidateRequiredName(request.Name, RequestValidation.MaxNameLength, out var nameError))
         return InvalidRequest(nameError);
 
     if (!ApiKeyScopes.TryNormalize(request.Scopes, out var normalizedScopes, out var scopeError))
@@ -414,7 +414,7 @@ v1.MapGet("/projects", async (int? pageSize, string? pageToken, int? skip, strin
 
 v1.MapPost("/projects", async (ProjectCreateRequest request, IProjectStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
-    if (!RequestValidation.TryValidateRequiredName(request?.Name, out var error))
+    if (!RequestValidation.TryValidateRequiredName(request?.Name, RequestValidation.MaxNameLength, out var error))
         return InvalidRequest(error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
@@ -1091,7 +1091,7 @@ app.MapPost("/admin/prune", async (IRetentionPruner pruner, HttpContext httpCont
 
 app.MapPost("/api-keys", async (ApiKeyCreateRequest request, IApiKeyStore apiKeyStore, IAuditEventStore auditStore, HttpContext httpContext, CancellationToken ct) =>
 {
-    if (!RequestValidation.TryValidateRequiredName(request?.Name, out var nameError))
+    if (!RequestValidation.TryValidateRequiredName(request?.Name, RequestValidation.MaxNameLength, out var nameError))
         return InvalidRequest(nameError);
 
     if (!ApiKeyScopes.TryNormalize(request?.Scopes, out var normalizedScopes, out var scopeError))
@@ -1211,7 +1211,7 @@ app.MapGet("/api/projects", async (int? pageSize, string? pageToken, int? skip, 
 
 app.MapPost("/api/projects", async (ProjectCreateRequest request, IProjectStore store, SubscriptionEnforcementService subscriptions, HttpContext httpContext, ILogger<Program> logger, CancellationToken ct) =>
 {
-    if (!RequestValidation.TryValidateRequiredName(request?.Name, out var error))
+    if (!RequestValidation.TryValidateRequiredName(request?.Name, RequestValidation.MaxNameLength, out var error))
         return InvalidRequest(error);
 
     var scopeCheck = RequireScope(httpContext, ApiKeyScopes.ProjectsWrite);
@@ -1272,7 +1272,7 @@ app.MapPost("/api/projects/{projectId}/environments", async (string projectId, E
     if (!RequestValidation.TryParseGuid(projectId, out var id, out var error))
         return InvalidRequest(error);
 
-    if (!RequestValidation.TryValidateRequiredName(request?.Name, out var nameError))
+    if (!RequestValidation.TryValidateRequiredName(request?.Name, RequestValidation.MaxEnvironmentNameLength, out var nameError))
         return InvalidRequest(nameError);
 
     if (!RequestValidation.TryNormalizeBaseUrl(request?.BaseUrl, out var normalizedBaseUrl, out var baseUrlError))
@@ -1332,7 +1332,7 @@ app.MapPut("/api/projects/{projectId}/environments/{environmentId}", async (stri
     if (!RequestValidation.TryParseGuid(environmentId, out var envId, out var envError))
         return InvalidRequest(envError);
 
-    if (!RequestValidation.TryValidateRequiredName(request?.Name, out var nameError))
+    if (!RequestValidation.TryValidateRequiredName(request?.Name, RequestValidation.MaxEnvironmentNameLength, out var nameError))
         return InvalidRequest(nameError);
 
     if (!RequestValidation.TryNormalizeBaseUrl(request?.BaseUrl, out var normalizedBaseUrl, out var baseUrlError))

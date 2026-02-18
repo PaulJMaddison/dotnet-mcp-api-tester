@@ -288,9 +288,7 @@ public sealed class SqlTestRunStore : ITestRunStore
         }).ToList();
 
         var itemCount = items.Count;
-        int? nextOffset = request.Offset + itemCount < total
-            ? request.Offset + itemCount
-            : null;
+        int? nextOffset = Paging.CalculateNextOffset(request.Offset, itemCount, total);
 
         return new PagedResult<TestRunRecord>(items, total, nextOffset);
     }

@@ -59,6 +59,28 @@ public class RequestValidationTests
     }
 
     [Fact]
+    public void TryValidateRequiredName_ReturnsError_WhenTooLong()
+    {
+        var value = new string('n', RequestValidation.MaxEnvironmentNameLength + 1);
+
+        var ok = RequestValidation.TryValidateRequiredName(value, RequestValidation.MaxEnvironmentNameLength, out var error);
+
+        Assert.False(ok);
+        Assert.Equal($"Name must be {RequestValidation.MaxEnvironmentNameLength} characters or fewer.", error);
+    }
+
+    [Fact]
+    public void TryValidateRequiredKey_ReturnsError_WhenTooLong()
+    {
+        var value = new string('k', RequestValidation.MaxSlugLength + 1);
+
+        var ok = RequestValidation.TryValidateRequiredKey(value, "Slug", RequestValidation.MaxSlugLength, out var error);
+
+        Assert.False(ok);
+        Assert.Equal($"Slug must be {RequestValidation.MaxSlugLength} characters or fewer.", error);
+    }
+
+    [Fact]
     public void TryParseGuid_ReturnsError_WhenInvalid()
     {
         var ok = RequestValidation.TryParseGuid("not-a-guid", out var parsed, out var error);
@@ -86,6 +108,30 @@ public class RequestValidationTests
         Assert.True(ok);
         Assert.Equal(string.Empty, error);
         Assert.Equal("https://example.com/api", normalized);
+    }
+
+    [Fact]
+    public void TryNormalizeBaseUrl_ReturnsError_WhenTooLong()
+    {
+        var longUrl = $"https://example.com/{new string('a', RequestValidation.MaxBaseUrlLength)}";
+
+        var ok = RequestValidation.TryNormalizeBaseUrl(longUrl, out var normalized, out var error);
+
+        Assert.False(ok);
+        Assert.Equal(string.Empty, normalized);
+        Assert.Equal($"baseUrl must be {RequestValidation.MaxBaseUrlLength} characters or fewer.", error);
+    }
+
+    [Fact]
+    public void TryNormalizeOptionalValue_ReturnsError_WhenTooLong()
+    {
+        var value = new string('x', RequestValidation.MaxEmailLength + 1);
+
+        var ok = RequestValidation.TryNormalizeOptionalValue(value, RequestValidation.MaxEmailLength, out var normalized, out var error);
+
+        Assert.False(ok);
+        Assert.Null(normalized);
+        Assert.Equal($"Value must be {RequestValidation.MaxEmailLength} characters or fewer.", error);
     }
 
     [Fact]
