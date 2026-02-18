@@ -135,6 +135,9 @@ public sealed class BaselineComparisonServiceTests
 
         public Task<int> PruneAsync(Guid tenantId, DateTimeOffset cutoffUtc, CancellationToken ct)
             => Task.FromResult(0);
+
+        public Task<int> TrimResponseSnippetsAsync(Guid tenantId, int maxSnippetLength, CancellationToken ct)
+            => Task.FromResult(0);
     }
 
     private sealed class FakeBaselineStore : IBaselineStore

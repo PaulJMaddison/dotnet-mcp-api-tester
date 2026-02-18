@@ -8,6 +8,31 @@ public sealed record ProjectListResponse(IReadOnlyList<ProjectDto> Projects, Pag
 
 public sealed record RunSummaryResponse(string ProjectKey, IReadOnlyList<RunSummaryDto> Runs, PageMetadata Metadata);
 
+public sealed record BillingPlanResponse(
+    string Plan,
+    string Status,
+    bool Renews,
+    DateTime PeriodStartUtc,
+    DateTime PeriodEndUtc,
+    int RetentionDays,
+    bool AiEnabled,
+    bool AuditExportEnabled,
+    BillingPlanLimits Limits);
+
+public sealed record BillingPlanLimits(int MaxProjects, int MaxRunsPerPeriod, int MaxAiCallsPerPeriod);
+
+public sealed record AuditListResponse(IReadOnlyList<AuditEventDto> Events);
+
+public sealed record AuditEventDto(
+    Guid EventId,
+    Guid OrganisationId,
+    string? Actor,
+    string Action,
+    string TargetType,
+    string TargetId,
+    DateTimeOffset OccurredUtc,
+    string? MetadataJson);
+
 public sealed record RunSummaryDto(
     Guid RunId,
     string ProjectKey,

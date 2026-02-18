@@ -20,4 +20,6 @@ public interface ITestRunStore
         DateTimeOffset? notBeforeUtc = null);
 
     Task<int> PruneAsync(Guid tenantId, DateTimeOffset cutoffUtc, CancellationToken ct);
+
+    Task<int> TrimResponseSnippetsAsync(Guid tenantId, int maxSnippetLength, CancellationToken ct);
 }

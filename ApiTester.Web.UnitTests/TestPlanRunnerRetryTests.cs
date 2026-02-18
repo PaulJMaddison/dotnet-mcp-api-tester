@@ -109,6 +109,7 @@ public class TestPlanRunnerRetryTests
         public Task<PagedResult<TestRunRecord>> ListAsync(Guid tenantId, string projectKey, PageRequest request, SortField sortField, SortDirection direction, string? operationId = null, DateTimeOffset? notBeforeUtc = null)
             => Task.FromResult(new PagedResult<TestRunRecord>(Array.Empty<TestRunRecord>(), 0, null));
         public Task<int> PruneAsync(Guid tenantId, DateTimeOffset cutoffUtc, CancellationToken ct) => Task.FromResult(0);
+        public Task<int> TrimResponseSnippetsAsync(Guid tenantId, int maxSnippetLength, CancellationToken ct) => Task.FromResult(0);
     }
 
     private sealed class SequenceHandler : HttpMessageHandler

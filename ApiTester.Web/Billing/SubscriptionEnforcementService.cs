@@ -154,7 +154,7 @@ public sealed class SubscriptionEnforcementService
         return new SubscriptionGateResult(true, string.Empty, string.Empty, StatusCodes.Status200OK);
     }
 
-    public async Task<SubscriptionGateResult> CheckExportAccessAsync(Guid organisationId, CancellationToken ct)
+    public async Task<SubscriptionGateResult> CheckTeamFeatureAccessAsync(Guid organisationId, string featureName, CancellationToken ct)
     {
         var snapshot = await GetSnapshotAsync(organisationId, ct);
         if (!snapshot.IsActive)
@@ -170,11 +170,16 @@ public sealed class SubscriptionEnforcementService
         {
             return new SubscriptionGateResult(
                 false,
-                "Export not available",
-                $"Export features require a Team subscription. Current plan: {snapshot.Subscription.Plan}.",
+                $"{featureName} not available",
+                $"{featureName} requires a Team subscription. Current plan: {snapshot.Subscription.Plan}.",
                 StatusCodes.Status403Forbidden);
         }
 
         return new SubscriptionGateResult(true, string.Empty, string.Empty, StatusCodes.Status200OK);
+    }
+
+    public async Task<SubscriptionGateResult> CheckExportAccessAsync(Guid organisationId, CancellationToken ct)
+    {
+        return await CheckTeamFeatureAccessAsync(organisationId, "Export", ct);
     }
 }
