@@ -65,7 +65,7 @@
     {
         <div class="app-card">
             <div class="table-responsive">
-                <table class="table align-middle mb-0">
+                <table class="table align-middle mb-0" data-testid="runs-table">
                     <thead>
                         <tr>
                             <th scope="col">Run</th>
@@ -78,7 +78,7 @@
                     <tbody>
                         @foreach (var run in _response.Data.Runs)
                         {
-                            <tr>
+                            <tr data-testid="run-row">
                                 <td>
                                     <NavLink href="@($"/app/runs/{run.RunId}")">@run.RunId.ToString("N").Substring(0, 8)</NavLink>
                                     <div class="text-secondary small">@run.StartedUtc.ToString("g")</div>

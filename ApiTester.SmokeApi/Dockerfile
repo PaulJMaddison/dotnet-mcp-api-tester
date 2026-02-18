@@ -18,7 +18,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
 
-ENV ASPNETCORE_URLS=http://+:8090
-EXPOSE 8090
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "ApiTester.SmokeApi.dll"]

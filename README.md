@@ -55,15 +55,21 @@ Run all unit/integration tests:
 dotnet test
 ```
 
-Run the Playwright E2E suite (UI):
+Run the docker-compose golden path E2E suite:
 
 ```bash
-dotnet build ApiTester.Ui.E2E
-pwsh ./ApiTester.Ui.E2E/bin/Debug/net8.0/playwright.ps1 install
-dotnet test ApiTester.Ui.E2E/ApiTester.Ui.E2E.csproj
+./scripts/e2e.sh
 ```
 
-In CI, ensure the Playwright browsers are installed before executing the E2E project (the `playwright.ps1 install` step above).
+Windows:
+
+```powershell
+pwsh ./scripts/e2e.ps1
+```
+
+Manual QA runbook and fixture data are documented in:
+- `docs/qa/golden-path.md`
+- `docs/qa/test-data.md`
 
 ## Local run
 
