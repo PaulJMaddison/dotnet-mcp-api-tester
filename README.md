@@ -1,5 +1,36 @@
 # Dotnet MCP API Tester
 
+Turn any OpenAPI spec into a repeatable, developer-friendly API testing workflow. Dotnet MCP API Tester helps teams import contracts, generate operation-level test plans, execute runs, and review results from both a REST API and a UI.
+
+## Why teams use Dotnet MCP API Tester
+
+- **Move faster with confidence**: Go from spec import to executable tests in minutes, so API changes are validated early and often.
+- **Unify API testing workflows**: Keep project setup, OpenAPI metadata, test-plan generation, and run history in one place.
+- **Support different environments**: Start locally with file persistence, then scale to SQL-backed persistence without changing your day-to-day flow.
+- **Work how your team works**: Use the API for automation and CI pipelines, or use the UI for interactive exploration and manual verification.
+
+## Who this is for
+
+- **Backend/API engineers** who need fast feedback while building or refactoring endpoints.
+- **QA and test engineers** who want deterministic, repeatable API run history with clear payload/result visibility.
+- **Platform and DevOps teams** looking for a practical API quality gate that can be scripted and integrated into delivery workflows.
+- **Technical leads** who need a shared source of truth for API behavior across contributors.
+
+## Key capabilities at a glance
+
+- Import and version OpenAPI specs per project.
+- Generate operation-scoped test plans.
+- Execute runs and inspect detailed run outputs.
+- Manage projects and runs through both REST endpoints and a Razor Pages UI.
+- Choose between local file storage and EF Core-backed SQL persistence.
+
+## Typical use cases
+
+- Validate new endpoints before merging feature branches.
+- Regression-check critical operations after contract updates.
+- Run smoke and golden-path API checks as part of release readiness.
+- Give non-backend contributors a simple UI for reviewing API behavior.
+
 ## Architecture overview
 
 The solution is split into three main layers:
