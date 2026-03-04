@@ -19,7 +19,7 @@ jobs:
         run: dotnet test -c Release --no-build --logger trx
       - name: Upload trx artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-trx
           path: '**/*.trx'
