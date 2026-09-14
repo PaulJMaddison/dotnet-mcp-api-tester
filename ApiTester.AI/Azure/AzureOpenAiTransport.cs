@@ -20,18 +20,20 @@ public sealed class AzureOpenAiTransport
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _options.ValidateCommon();
     }
 
     public async Task<AzureOpenAiTransportResponse> PostJsonAsync(string relativePath, object payload, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(relativePath))
             throw new ArgumentException("A relative Azure OpenAI path is required.", nameof(relativePath));
+        ArgumentNullException.ThrowIfNull(payload);
 
         EnsureCircuitClosed();
 
         var baseUri = _options.GetApiBaseUri();
         var requestUri = new Uri(baseUri, relativePath.TrimStart('/'));
-        var attempts = Math.Max(1, _options.MaxRetries + 1);
+        var attempts = _options.MaxRetries + 1;
         Exception? lastError = null;
 
         using var activity = ActivitySource.StartActivity("azure.openai.request", ActivityKind.Client);
@@ -46,7 +48,7 @@ public sealed class AzureOpenAiTransport
             activity?.SetTag("ai.retry.attempt", attempt);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(5, _options.TimeoutSeconds)));
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
 
             try
             {
@@ -79,14 +81,14 @@ public sealed class AzureOpenAiTransport
                 }
 
                 if (response.Content.Headers.ContentLength is > 0 &&
-                    response.Content.Headers.ContentLength > Math.Max(1, _options.MaxResponseBytes))
+                    response.Content.Headers.ContentLength > _options.MaxResponseBytes)
                 {
                     throw new InvalidOperationException(
                         $"Azure OpenAI response exceeded the configured maximum of {_options.MaxResponseBytes} bytes.");
                 }
 
                 var bytes = await response.Content.ReadAsByteArrayAsync(timeoutCts.Token).ConfigureAwait(false);
-                if (bytes.Length > Math.Max(1, _options.MaxResponseBytes))
+                if (bytes.Length > _options.MaxResponseBytes)
                 {
                     throw new InvalidOperationException(
                         $"Azure OpenAI response exceeded the configured maximum of {_options.MaxResponseBytes} bytes.");
@@ -175,10 +177,10 @@ public sealed class AzureOpenAiTransport
         lock (_circuitLock)
         {
             _consecutiveFailures++;
-            if (_consecutiveFailures >= Math.Max(1, _options.CircuitBreakerFailureThreshold))
+            if (_consecutiveFailures >= _options.CircuitBreakerFailureThreshold)
             {
                 _circuitOpenedUntil = DateTimeOffset.UtcNow.AddSeconds(
-                    Math.Max(5, _options.CircuitBreakerBreakSeconds));
+                    _options.CircuitBreakerBreakSeconds);
             }
         }
     }
@@ -196,6 +198,8 @@ public sealed class AzureOpenAiTransport
         var delay = response.Headers.RetryAfter?.Delta ?? Backoff(attempt);
         if (delay > TimeSpan.FromSeconds(10))
             delay = TimeSpan.FromSeconds(10);
+        if (delay < TimeSpan.Zero)
+            delay = TimeSpan.Zero;
 
         await Task.Delay(delay, ct).ConfigureAwait(false);
     }
