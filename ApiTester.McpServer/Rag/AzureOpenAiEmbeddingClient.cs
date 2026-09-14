@@ -51,7 +51,7 @@ public sealed class AzureOpenAiEmbeddingClient : IEmbeddingClient
         var index = 0;
         foreach (var value in embedding.EnumerateArray())
         {
-            if (!value.TryGetSingle(out values[index]))
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetSingle(out values[index]))
                 throw new InvalidOperationException("Azure OpenAI returned an invalid embedding value.");
 
             index++;

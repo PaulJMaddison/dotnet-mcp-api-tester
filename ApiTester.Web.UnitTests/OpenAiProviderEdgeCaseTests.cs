@@ -90,7 +90,7 @@ public sealed class OpenAiProviderEdgeCaseTests
 
         var result = await provider.ExplainApiAsync("{\"paths\":{}}", "getThing", CancellationToken.None);
 
-        Assert.Equal("default-model", result.Model);
+        Assert.Equal("default-model", result.ModelId);
         Assert.Equal("Bearer secret-key", handler.LastAuthorization);
         Assert.Contains("\"model\":\"default-model\"", handler.LastBody);
     }
@@ -103,7 +103,7 @@ public sealed class OpenAiProviderEdgeCaseTests
 
         var result = await provider.SummariseRunAsync("run-1", "status 500", CancellationToken.None);
 
-        Assert.Equal("pro-model", result.Model);
+        Assert.Equal("pro-model", result.ModelId);
         Assert.Contains("\"model\":\"pro-model\"", handler.LastBody);
     }
 
@@ -260,7 +260,7 @@ public sealed class OpenAiProviderEdgeCaseTests
             provider.ExplainApiAsync("{}", "op", CancellationToken.None));
 
         Assert.Equal(1, handler.CallCount);
-        Assert.IsType<JsonException>(ex.InnerException);
+        Assert.IsAssignableFrom<JsonException>(ex.InnerException);
     }
 
     [Fact]

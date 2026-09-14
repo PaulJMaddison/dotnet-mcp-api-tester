@@ -58,7 +58,11 @@ public sealed class TextChunker
             var take = Math.Min(_o.MaxCharsPerChunk, remaining);
 
             var candidate = text.Substring(idx, take);
-            var cut = FindBestCut(candidate);
+            // The final candidate already fits. Do not split it merely because it
+            // contains a convenient newline near the end and leave a tiny tail.
+            var cut = remaining <= _o.MaxCharsPerChunk
+                ? candidate.Length
+                : FindBestCut(candidate);
 
             if (cut < _o.MinChunkChars && remaining > _o.MinChunkChars)
                 cut = candidate.Length;

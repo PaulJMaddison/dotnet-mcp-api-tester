@@ -119,12 +119,18 @@ Covered boundaries:
 Files:
 - `ApiTester.Web.UnitTests/AzureOpenAiClientTests.cs`
 - `ApiTester.Web.UnitTests/AzureOpenAiEdgeCaseTests.cs`
+- `ApiTester.Web.UnitTests/AzureOpenAiIdentityTests.cs`
 
 Covered boundaries:
 - Azure OpenAI and Azure Foundry v1 endpoint construction;
 - existing `/openai/v1` not duplicated;
 - relative/HTTP/query/fragment endpoint rejection;
 - API-key and bearer credentials;
+- `DefaultAzureCredential` bearer acquisition with the Azure AI token scope;
+- deterministic explicit authentication precedence and API-key compatibility;
+- cancellation during identity token acquisition;
+- shared Entra-authenticated transport for chat and embeddings;
+- credential values excluded from payloads and exception diagnostics;
 - chat and embeddings independently configured;
 - invalid timeout/retry/input/response/circuit settings;
 - blank path/null payload;

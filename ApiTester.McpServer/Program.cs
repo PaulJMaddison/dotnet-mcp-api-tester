@@ -39,6 +39,9 @@ var azureOpenAi = new AzureOpenAiOptions
     EmbeddingDeployment = FirstNonEmpty(
         builder.Configuration["AzureOpenAI:EmbeddingDeployment"],
         Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")),
+    Authentication = FirstNonEmpty(
+        builder.Configuration["AzureOpenAI:Authentication"],
+        Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTHENTICATION")),
     ApiKey = FirstNonEmpty(
         builder.Configuration["AzureOpenAI:ApiKey"],
         Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY")),
@@ -81,8 +84,9 @@ builder.Services.AddSingleton<IEmbeddingClient>(sp =>
     if (options.IsEmbeddingConfigured)
     {
         logger.LogInformation(
-            "Using Azure OpenAI embedding deployment {EmbeddingDeployment} for RAG retrieval.",
-            options.EmbeddingDeployment);
+            "Using Azure OpenAI embedding deployment {EmbeddingDeployment} for RAG retrieval with {AuthenticationMode} authentication.",
+            options.EmbeddingDeployment,
+            options.GetAuthenticationMode());
 
         return new AzureOpenAiEmbeddingClient(
             sp.GetRequiredService<AzureOpenAiTransport>(),
@@ -112,8 +116,9 @@ builder.Services.AddSingleton<IAiClient>(sp =>
     if (options.IsChatConfigured)
     {
         logger.LogInformation(
-            "Using Azure OpenAI chat deployment {ChatDeployment} for grounded answers.",
-            options.ChatDeployment);
+            "Using Azure OpenAI chat deployment {ChatDeployment} for grounded answers with {AuthenticationMode} authentication.",
+            options.ChatDeployment,
+            options.GetAuthenticationMode());
 
         return new AzureOpenAiClient(
             sp.GetRequiredService<AzureOpenAiTransport>(),

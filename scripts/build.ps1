@@ -16,7 +16,7 @@ function Invoke-Step {
     )
 
     Write-Host "[build] $Label"
-    & $Action
+    & $Action | Out-Host
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
         Write-Host "[build][WARN] '$Label' failed with exit code $exitCode"

@@ -39,12 +39,21 @@ Azure-backed run:
 $env:AZURE_OPENAI_ENDPOINT="https://YOUR-RESOURCE.openai.azure.com"
 $env:AZURE_OPENAI_CHAT_DEPLOYMENT="YOUR-CHAT-DEPLOYMENT"
 $env:AZURE_OPENAI_EMBEDDING_DEPLOYMENT="YOUR-EMBEDDING-DEPLOYMENT"
-$env:AZURE_OPENAI_API_KEY="YOUR-KEY"
+$env:AZURE_OPENAI_AUTHENTICATION="DefaultAzureCredential"
 
 dotnet run --project ApiTester.DemoWorkshop
 ```
 
-Never commit the key.
+Run `az login` locally first. `DefaultAzureCredential` uses the authenticated Azure CLI session for local development and managed/workload identity when hosted in Azure. It obtains short-lived tokens in memory for `https://ai.azure.com/.default`; tokens are never persisted by the application.
+
+API-key authentication remains an explicit fallback for isolated local testing:
+
+```powershell
+$env:AZURE_OPENAI_AUTHENTICATION="ApiKey"
+$env:AZURE_OPENAI_API_KEY="YOUR-KEY"
+```
+
+Never commit the key or put it in a tracked settings file.
 
 ## The 7 files to show
 
@@ -76,7 +85,7 @@ Why: shows production engineering around the model API rather than a one-line SD
 
 Talking points:
 - HTTPS-only Azure endpoint.
-- key or bearer auth without logging credentials.
+- `DefaultAzureCredential`/Entra ID preferred, with explicit API-key or short-lived bearer-token test modes, without logging credentials.
 - explicit timeout/cancellation.
 - retry only for transient failure classes.
 - `Retry-After` support.
@@ -85,7 +94,7 @@ Talking points:
 - errors expose status/request ID, not upstream bodies that might contain sensitive content.
 - observability records safe operational metadata, never prompts/spec bodies or credentials.
 
-Likely challenge: bearer token is static. Answer: it exists for short-lived local verification only. Production should use managed/workload identity with automatic refresh.
+Likely challenge: bearer token is static. Answer: it exists only for short-lived test verification. Normal local and production use `DefaultAzureCredential`, allowing Azure Identity to refresh and cache tokens in memory.
 
 ### 5. `ApiTester.AI/Azure/AzureOpenAiClient.cs`
 
@@ -139,7 +148,7 @@ MCP/API execution is a separate controlled boundary. The LLM does not receive ar
 - `InMemoryVectorStore` is suitable for a local demo, not multi-instance production. It now owns/clones vector state and supports re-embedding when the embedding model changes, but persistence and distributed indexing would be a production concern.
 - The offline `DeterministicHashEmbeddingClient` is lexical feature hashing, not semantic embeddings; Azure embeddings are the real semantic path.
 - `TextChunker` is generic. It now preserves small documents and short final tails, but a production OpenAPI specialist could improve retrieval further by creating operation/schema-aware chunks.
-- A static bearer token is only a local verification option; production identity should refresh automatically.
+- A static bearer token is only a test verification option; `DefaultAzureCredential` is the preferred local and production path.
 - The `AiCostEstimate` for an unknown cloud deployment is deliberately marked unknown rather than fabricating Azure pricing.
 - Prompt-injection instructions are defence-in-depth. Deterministic execution policy is the actual authority boundary.
 

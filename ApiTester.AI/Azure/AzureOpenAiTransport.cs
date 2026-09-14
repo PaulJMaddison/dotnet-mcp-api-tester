@@ -3,24 +3,36 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Azure.Core;
+using Azure.Identity;
 
 namespace ApiTester.AI.Azure;
 
 public sealed class AzureOpenAiTransport
 {
+    public const string AzureAiTokenScope = "https://ai.azure.com/.default";
     public static readonly ActivitySource ActivitySource = new("ApiTester.AI.Azure");
 
     private readonly HttpClient _httpClient;
     private readonly AzureOpenAiOptions _options;
+    private readonly AzureOpenAiAuthenticationMode _authenticationMode;
+    private readonly TokenCredential? _tokenCredential;
     private readonly object _circuitLock = new();
     private int _consecutiveFailures;
     private DateTimeOffset? _circuitOpenedUntil;
 
-    public AzureOpenAiTransport(HttpClient httpClient, AzureOpenAiOptions options)
+    public AzureOpenAiTransport(
+        HttpClient httpClient,
+        AzureOpenAiOptions options,
+        TokenCredential? tokenCredential = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _options.ValidateCommon();
+        _authenticationMode = _options.GetAuthenticationMode();
+        _tokenCredential = _authenticationMode == AzureOpenAiAuthenticationMode.DefaultAzureCredential
+            ? tokenCredential ?? new DefaultAzureCredential()
+            : null;
     }
 
     public async Task<AzureOpenAiTransportResponse> PostJsonAsync(string relativePath, object payload, CancellationToken ct)
@@ -57,7 +69,7 @@ public sealed class AzureOpenAiTransport
                     Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
                 };
 
-                ApplyAuthentication(request);
+                await ApplyAuthenticationAsync(request, timeoutCts.Token).ConfigureAwait(false);
 
                 var stopwatch = Stopwatch.StartNew();
                 using var response = await _httpClient.SendAsync(
@@ -76,8 +88,8 @@ public sealed class AzureOpenAiTransport
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    var requestId = TryGetRequestId(response);
-                    throw new AzureOpenAiRequestException(response.StatusCode, requestId);
+                    var errorRequestId = TryGetRequestId(response);
+                    throw new AzureOpenAiRequestException(response.StatusCode, errorRequestId);
                 }
 
                 if (response.Content.Headers.ContentLength is > 0 &&
@@ -102,6 +114,10 @@ public sealed class AzureOpenAiTransport
 
                 RecordSuccess();
                 return new AzureOpenAiTransportResponse(bytes, (int)stopwatch.ElapsedMilliseconds, requestId);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested && attempt < attempts)
             {
@@ -132,22 +148,33 @@ public sealed class AzureOpenAiTransport
         throw new InvalidOperationException("Azure OpenAI request failed.", lastError);
     }
 
-    private void ApplyAuthentication(HttpRequestMessage request)
+    private async Task ApplyAuthenticationAsync(HttpRequestMessage request, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(_options.BearerToken))
+        if (_authenticationMode == AzureOpenAiAuthenticationMode.DefaultAzureCredential)
+        {
+            var token = await _tokenCredential!.GetTokenAsync(
+                new TokenRequestContext([AzureAiTokenScope]),
+                ct).ConfigureAwait(false);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
+            return;
+        }
+
+        if (_authenticationMode == AzureOpenAiAuthenticationMode.BearerToken &&
+            !string.IsNullOrWhiteSpace(_options.BearerToken))
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.BearerToken.Trim());
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+        if (_authenticationMode == AzureOpenAiAuthenticationMode.ApiKey &&
+            !string.IsNullOrWhiteSpace(_options.ApiKey))
         {
             request.Headers.TryAddWithoutValidation("api-key", _options.ApiKey.Trim());
             return;
         }
 
         throw new InvalidOperationException(
-            "Azure OpenAI credentials are not configured. Set AZURE_OPENAI_API_KEY or AZURE_OPENAI_AUTH_TOKEN.");
+            "Azure OpenAI authentication is not configured. Select DefaultAzureCredential, ApiKey, or BearerToken and provide any credential required by that mode.");
     }
 
     private void EnsureCircuitClosed()

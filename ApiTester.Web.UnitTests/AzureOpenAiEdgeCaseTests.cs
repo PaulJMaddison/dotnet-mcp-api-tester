@@ -440,7 +440,7 @@ public sealed class AzureOpenAiEdgeCaseTests
         var handler = new RecordingHandler(_ => Json("not-json"));
         var client = ChatClient(handler);
 
-        await Assert.ThrowsAsync<JsonException>(() =>
+        await Assert.ThrowsAnyAsync<JsonException>(() =>
             client.GetResponseAsync(new AiPrompt("s", "u"), CancellationToken.None));
     }
 

@@ -2,9 +2,14 @@ namespace ApiTester.AI.Azure;
 
 public sealed class AzureOpenAiOptions
 {
+    public const string DefaultAzureCredentialAuthentication = "DefaultAzureCredential";
+    public const string ApiKeyAuthentication = "ApiKey";
+    public const string BearerTokenAuthentication = "BearerToken";
+
     public string Endpoint { get; init; } = string.Empty;
     public string ChatDeployment { get; init; } = string.Empty;
     public string EmbeddingDeployment { get; init; } = string.Empty;
+    public string Authentication { get; init; } = string.Empty;
     public string ApiKey { get; init; } = string.Empty;
     public string BearerToken { get; init; } = string.Empty;
     public int TimeoutSeconds { get; init; } = 30;
@@ -19,8 +24,13 @@ public sealed class AzureOpenAiOptions
     public int CircuitBreakerFailureThreshold { get; init; } = 4;
     public int CircuitBreakerBreakSeconds { get; init; } = 30;
 
-    public bool HasCredentials =>
-        !string.IsNullOrWhiteSpace(ApiKey) || !string.IsNullOrWhiteSpace(BearerToken);
+    public bool HasCredentials => GetAuthenticationMode() switch
+    {
+        AzureOpenAiAuthenticationMode.DefaultAzureCredential => true,
+        AzureOpenAiAuthenticationMode.ApiKey => !string.IsNullOrWhiteSpace(ApiKey),
+        AzureOpenAiAuthenticationMode.BearerToken => !string.IsNullOrWhiteSpace(BearerToken),
+        _ => false
+    };
 
     public bool IsChatConfigured =>
         HasCredentials && !string.IsNullOrWhiteSpace(Endpoint) && !string.IsNullOrWhiteSpace(ChatDeployment);
@@ -31,6 +41,7 @@ public sealed class AzureOpenAiOptions
     public void ValidateCommon()
     {
         _ = GetApiBaseUri();
+        _ = GetAuthenticationMode();
 
         if (TimeoutSeconds <= 0)
             throw new InvalidOperationException("AzureOpenAI:TimeoutSeconds must be greater than zero.");
@@ -79,4 +90,37 @@ public sealed class AzureOpenAiOptions
 
         return new Uri(value + "/", UriKind.Absolute);
     }
+
+    public AzureOpenAiAuthenticationMode GetAuthenticationMode()
+    {
+        var configured = Authentication?.Trim();
+        if (!string.IsNullOrEmpty(configured))
+        {
+            if (configured.Equals(DefaultAzureCredentialAuthentication, StringComparison.OrdinalIgnoreCase))
+                return AzureOpenAiAuthenticationMode.DefaultAzureCredential;
+            if (configured.Equals(ApiKeyAuthentication, StringComparison.OrdinalIgnoreCase))
+                return AzureOpenAiAuthenticationMode.ApiKey;
+            if (configured.Equals(BearerTokenAuthentication, StringComparison.OrdinalIgnoreCase))
+                return AzureOpenAiAuthenticationMode.BearerToken;
+
+            throw new InvalidOperationException(
+                "AzureOpenAI:Authentication must be DefaultAzureCredential, ApiKey, or BearerToken.");
+        }
+
+        // Backward-compatible behavior for existing local/test configuration.
+        if (!string.IsNullOrWhiteSpace(BearerToken))
+            return AzureOpenAiAuthenticationMode.BearerToken;
+        if (!string.IsNullOrWhiteSpace(ApiKey))
+            return AzureOpenAiAuthenticationMode.ApiKey;
+
+        return AzureOpenAiAuthenticationMode.None;
+    }
+}
+
+public enum AzureOpenAiAuthenticationMode
+{
+    None,
+    DefaultAzureCredential,
+    ApiKey,
+    BearerToken
 }
