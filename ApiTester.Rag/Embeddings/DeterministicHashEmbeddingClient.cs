@@ -1,13 +1,24 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace ApiTester.Rag.Embeddings;
 
+/// <summary>
+/// Dependency-free local fallback for tests and offline demos.
+/// This is feature hashing over normalised terms, not a semantic model embedding.
+/// Texts sharing important API terms therefore remain comparable while production
+/// deployments can replace this implementation with a real embedding provider.
+/// </summary>
 public sealed class DeterministicHashEmbeddingClient : IEmbeddingClient
 {
+    private static readonly Regex TokenPattern = new(
+        @"[A-Za-z0-9_./{}:-]+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private readonly int _dims;
 
-    public DeterministicHashEmbeddingClient(int dims = 256)
+    public DeterministicHashEmbeddingClient(int dims = 512)
     {
         if (dims < 32) throw new ArgumentOutOfRangeException(nameof(dims));
         _dims = dims;
@@ -17,31 +28,72 @@ public sealed class DeterministicHashEmbeddingClient : IEmbeddingClient
     {
         ct.ThrowIfCancellationRequested();
 
-        text ??= string.Empty;
-        var bytes = Encoding.UTF8.GetBytes(text);
-
         var output = new float[_dims];
-        var current = SHA256.HashData(bytes);
+        if (string.IsNullOrWhiteSpace(text))
+            return Task.FromResult(output);
 
-        var i = 0;
-        while (i < _dims)
+        var tokens = TokenPattern.Matches(text.ToLowerInvariant())
+            .Select(match => match.Value)
+            .Where(token => token.Length > 1)
+            .ToArray();
+
+        foreach (var token in tokens)
         {
-            current = SHA256.HashData(current);
-            for (var j = 0; j < current.Length && i < _dims; j++, i++)
+            ct.ThrowIfCancellationRequested();
+            AddFeature(output, token, 1f);
+
+            // API identifiers often carry meaning in their fragments: for example
+            // getCustomerById, /customers/{id}, customer_id and application/json.
+            foreach (var part in SplitIdentifier(token))
             {
-                output[i] = ((current[j] / 255f) * 2f) - 1f;
+                if (!string.Equals(part, token, StringComparison.Ordinal))
+                    AddFeature(output, part, 0.5f);
             }
         }
 
-        var norm = 0f;
-        for (var k = 0; k < output.Length; k++) norm += output[k] * output[k];
-        norm = (float)Math.Sqrt(norm);
+        Normalise(output);
+        return Task.FromResult(output);
+    }
 
-        if (norm > 0f)
+    private void AddFeature(float[] output, string token, float weight)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        var bucket = (int)(BitConverter.ToUInt32(bytes, 0) % (uint)_dims);
+        var sign = (bytes[4] & 1) == 0 ? 1f : -1f;
+        output[bucket] += sign * weight;
+    }
+
+    private static IEnumerable<string> SplitIdentifier(string token)
+    {
+        var buffer = new StringBuilder();
+        foreach (var ch in token)
         {
-            for (var k = 0; k < output.Length; k++) output[k] /= norm;
+            if (char.IsLetterOrDigit(ch))
+            {
+                buffer.Append(ch);
+                continue;
+            }
+
+            if (buffer.Length > 1)
+                yield return buffer.ToString();
+            buffer.Clear();
         }
 
-        return Task.FromResult(output);
+        if (buffer.Length > 1)
+            yield return buffer.ToString();
+    }
+
+    private static void Normalise(float[] vector)
+    {
+        var normSquared = 0f;
+        for (var i = 0; i < vector.Length; i++)
+            normSquared += vector[i] * vector[i];
+
+        if (normSquared <= 0f)
+            return;
+
+        var norm = (float)Math.Sqrt(normSquared);
+        for (var i = 0; i < vector.Length; i++)
+            vector[i] /= norm;
     }
 }
