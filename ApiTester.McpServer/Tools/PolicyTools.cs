@@ -18,7 +18,7 @@ public sealed class PolicyTools
     {
         _cfg = cfg ?? throw new ArgumentNullException(nameof(cfg));
         _auditStore = auditStore ?? throw new ArgumentNullException(nameof(auditStore));
-        _safety = safety ?? new McpSafetyOptions(true);
+        _safety = safety ?? new McpSafetyOptions(false);
     }
 
     [McpServerTool, Description("Get the current API execution policy and whether this server process permits MCP policy mutation.")]
