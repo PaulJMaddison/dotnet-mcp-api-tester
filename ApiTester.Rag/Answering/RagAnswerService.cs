@@ -14,38 +14,30 @@ public sealed class RagAnswerService
 
     public RagAnswerService(IEmbeddingClient embeddings, IVectorStore store, RagPromptBuilder prompt, IChatCompletionClient chat)
     {
-        _embeddings = embeddings ?? throw new ArgumentNullException(nameof(embeddings));
-        _store = store ?? throw new ArgumentNullException(nameof(store));
-        _prompt = prompt ?? throw new ArgumentNullException(nameof(prompt));
-        _chat = chat ?? throw new ArgumentNullException(nameof(chat));
+        _embeddings = embeddings;
+        _store = store;
+        _prompt = prompt;
+        _chat = chat;
     }
 
-    public async Task<RagAnswer> AnswerAsync(Guid projectId, string question, int topK, CancellationToken ct)
+    public async Task<RagAnswer> AnswerAsync(Guid scopeId, string question, int topK, CancellationToken ct)
     {
-        if (projectId == Guid.Empty) throw new ArgumentException("projectId required", nameof(projectId));
-        if (string.IsNullOrWhiteSpace(question)) throw new ArgumentException("question required", nameof(question));
+        if (scopeId == Guid.Empty) throw new ArgumentException("scopeId is required.", nameof(scopeId));
+        if (string.IsNullOrWhiteSpace(question)) throw new ArgumentException("question is required.", nameof(question));
 
-        ct.ThrowIfCancellationRequested();
-        var trimmedQuestion = question.Trim();
-        var qEmbedding = await _embeddings.EmbedAsync(trimmedQuestion, ct).ConfigureAwait(false);
-
+        var queryVector = await _embeddings.EmbedAsync(question.Trim(), ct).ConfigureAwait(false);
         var evidence = await _store.QueryAsync(
-            projectId: projectId,
-            embedding: qEmbedding,
-            topK: Math.Clamp(topK, 1, 20),
+            scopeId,
+            queryVector,
+            Math.Clamp(topK, 1, 20),
             filters: null,
-            ct: ct).ConfigureAwait(false);
+            ct).ConfigureAwait(false);
 
         if (evidence.Count == 0)
-        {
-            return new RagAnswer(
-                "I do not have indexed evidence for this project. Index an OpenAPI specification before asking grounded questions.",
-                evidence);
-        }
+            return new RagAnswer("I do not have indexed OpenAPI evidence for the loaded API.", evidence);
 
-        var userPrompt = _prompt.BuildUserPrompt(trimmedQuestion, evidence);
+        var userPrompt = _prompt.BuildUserPrompt(question.Trim(), evidence);
         var answer = await _chat.CompleteAsync(_prompt.SystemPrompt, userPrompt, ct).ConfigureAwait(false);
-
         return new RagAnswer(answer, evidence);
     }
 }

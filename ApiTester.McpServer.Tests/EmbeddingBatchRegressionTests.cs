@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using ApiTester.AI.Azure;
+using ApiTester.McpServer.Rag;
 using ApiTester.Rag.Embeddings;
 using ApiTester.Rag.Indexing;
 using ApiTester.Rag.Models;
@@ -17,7 +18,9 @@ public sealed class EmbeddingBatchRegressionTests
         var handler = new EmbeddingHandler();
         var options = Options();
         var client = new AzureOpenAiEmbeddingClient(new AzureOpenAiTransport(new HttpClient(handler), options), options);
+
         var result = await client.EmbedBatchAsync(new[] { "one", "two", "three" }, CancellationToken.None);
+
         Assert.Equal(1, handler.CallCount);
         Assert.Equal(3, handler.LastInputCount);
         Assert.Equal(1f, result[0][0]);
@@ -31,7 +34,9 @@ public sealed class EmbeddingBatchRegressionTests
         var embeddings = new SuccessfulBatchEmbeddingClient();
         var store = new RecordingVectorStore();
         var indexer = new RagIndexer(embeddings, store);
+
         await indexer.IndexAsync(new[] { Chunk("a"), Chunk("b"), Chunk("c") }, CancellationToken.None);
+
         Assert.Equal(1, embeddings.BatchCalls);
         Assert.Equal(0, embeddings.SingleCalls);
         Assert.Equal(1, store.UpsertCalls);
@@ -39,11 +44,14 @@ public sealed class EmbeddingBatchRegressionTests
     }
 
     [Fact]
-    public async Task RagIndexer_BatchFailureDoesNotPublishPartialVectors()
+    public async Task RagIndexer_BatchFailure_DoesNotPublishPartialVectors()
     {
         var store = new RecordingVectorStore();
         var indexer = new RagIndexer(new FailingBatchEmbeddingClient(), store);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => indexer.IndexAsync(new[] { Chunk("a"), Chunk("b") }, CancellationToken.None));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            indexer.IndexAsync(new[] { Chunk("a"), Chunk("b") }, CancellationToken.None));
+
         Assert.Equal(0, store.UpsertCalls);
     }
 
@@ -58,8 +66,14 @@ public sealed class EmbeddingBatchRegressionTests
     };
 
     private static RagChunk Chunk(string id) => new(
-        Guid.Parse("11111111-1111-1111-1111-111111111111"), "openapi", "spec", id,
-        $"text-{id}", $"hash-{id}", DateTime.UtcNow, new Dictionary<string, string>());
+        ScopeId: Guid.Parse("11111111-1111-1111-1111-111111111111"),
+        SourceType: "openapi",
+        SourceId: "spec",
+        ChunkId: id,
+        Text: $"text-{id}",
+        ContentHash: $"hash-{id}",
+        CreatedUtc: DateTime.UtcNow,
+        Metadata: new Dictionary<string, string>());
 
     private sealed class EmbeddingHandler : HttpMessageHandler
     {
@@ -72,8 +86,10 @@ public sealed class EmbeddingBatchRegressionTests
             var body = await request.Content!.ReadAsStringAsync(cancellationToken);
             using var document = JsonDocument.Parse(body);
             LastInputCount = document.RootElement.GetProperty("input").GetArrayLength();
+
             var data = Enumerable.Range(0, LastInputCount).Reverse()
                 .Select(index => new { index, embedding = new[] { (float)(index + 1), 0.5f } }).ToArray();
+
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(JsonSerializer.Serialize(new { data }), Encoding.UTF8, "application/json")
@@ -85,11 +101,13 @@ public sealed class EmbeddingBatchRegressionTests
     {
         public int BatchCalls { get; private set; }
         public int SingleCalls { get; private set; }
+
         public Task<float[]> EmbedAsync(string text, CancellationToken ct)
         {
             SingleCalls++;
             return Task.FromResult(new[] { 1f, 0f });
         }
+
         public Task<IReadOnlyList<float[]>> EmbedBatchAsync(IReadOnlyList<string> texts, CancellationToken ct)
         {
             BatchCalls++;
@@ -107,13 +125,15 @@ public sealed class EmbeddingBatchRegressionTests
     {
         public int UpsertCalls { get; private set; }
         public int LastCount { get; private set; }
+
         public Task UpsertAsync(IReadOnlyList<(RagChunk Chunk, float[] Embedding)> items, CancellationToken ct)
         {
             UpsertCalls++;
             LastCount = items.Count;
             return Task.CompletedTask;
         }
-        public Task<IReadOnlyList<RagRetrievedChunk>> QueryAsync(Guid projectId, float[] embedding, int topK, IReadOnlyDictionary<string, string>? filters, CancellationToken ct)
+
+        public Task<IReadOnlyList<RagRetrievedChunk>> QueryAsync(Guid scopeId, float[] embedding, int topK, IReadOnlyDictionary<string, string>? filters, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<RagRetrievedChunk>>(Array.Empty<RagRetrievedChunk>());
     }
 }

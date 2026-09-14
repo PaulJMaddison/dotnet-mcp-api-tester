@@ -7,42 +7,30 @@ public sealed class InMemoryVectorStore : IVectorStore
     private sealed record Stored(RagChunk Chunk, float[] Embedding);
 
     private readonly List<Stored> _items = new();
-    private readonly object _lock = new();
+    private readonly object _gate = new();
 
     public Task UpsertAsync(IReadOnlyList<(RagChunk Chunk, float[] Embedding)> items, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(items);
         ct.ThrowIfCancellationRequested();
-        if (items.Count == 0) return Task.CompletedTask;
 
-        lock (_lock)
+        lock (_gate)
         {
             foreach (var (chunk, embedding) in items)
             {
                 ct.ThrowIfCancellationRequested();
-                if (chunk is null)
-                    throw new ArgumentException("Vector-store items must contain a chunk.", nameof(items));
-                if (embedding is null || embedding.Length == 0)
-                    throw new ArgumentException("Vector-store items must contain a non-empty embedding.", nameof(items));
+                if (chunk is null) throw new ArgumentException("Chunk is required.", nameof(items));
+                if (embedding is null || embedding.Length == 0) throw new ArgumentException("Embedding is required.", nameof(items));
 
                 var ownedEmbedding = embedding.ToArray();
                 var index = _items.FindIndex(x =>
-                    x.Chunk.ProjectId == chunk.ProjectId &&
+                    x.Chunk.ScopeId == chunk.ScopeId &&
                     x.Chunk.ChunkId == chunk.ChunkId);
 
                 if (index >= 0)
-                {
-                    var existing = _items[index];
-                    if (existing.Chunk.ContentHash == chunk.ContentHash &&
-                        existing.Embedding.AsSpan().SequenceEqual(ownedEmbedding))
-                        continue;
-
                     _items[index] = new Stored(chunk, ownedEmbedding);
-                }
                 else
-                {
                     _items.Add(new Stored(chunk, ownedEmbedding));
-                }
             }
         }
 
@@ -50,21 +38,21 @@ public sealed class InMemoryVectorStore : IVectorStore
     }
 
     public Task<IReadOnlyList<RagRetrievedChunk>> QueryAsync(
-        Guid projectId,
+        Guid scopeId,
         float[] embedding,
         int topK,
         IReadOnlyDictionary<string, string>? filters,
         CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (projectId == Guid.Empty) throw new ArgumentException("projectId required", nameof(projectId));
+        if (scopeId == Guid.Empty) throw new ArgumentException("scopeId is required.", nameof(scopeId));
         ArgumentNullException.ThrowIfNull(embedding);
-        if (embedding.Length == 0) throw new ArgumentException("embedding must not be empty", nameof(embedding));
+        if (embedding.Length == 0) throw new ArgumentException("embedding must not be empty.", nameof(embedding));
         if (topK <= 0) throw new ArgumentOutOfRangeException(nameof(topK));
 
         List<Stored> snapshot;
-        lock (_lock)
-            snapshot = _items.Where(x => x.Chunk.ProjectId == projectId).ToList();
+        lock (_gate)
+            snapshot = _items.Where(x => x.Chunk.ScopeId == scopeId).ToList();
 
         if (filters is { Count: > 0 })
             snapshot = snapshot.Where(x => MatchesFilters(x.Chunk, filters)).ToList();
@@ -78,17 +66,11 @@ public sealed class InMemoryVectorStore : IVectorStore
         return Task.FromResult<IReadOnlyList<RagRetrievedChunk>>(results);
     }
 
-    public void Clear(Guid projectId)
+    public void Clear(Guid scopeId)
     {
-        if (projectId == Guid.Empty) return;
-        lock (_lock)
-            _items.RemoveAll(x => x.Chunk.ProjectId == projectId);
-    }
-
-    public void ClearAll()
-    {
-        lock (_lock)
-            _items.Clear();
+        if (scopeId == Guid.Empty) return;
+        lock (_gate)
+            _items.RemoveAll(x => x.Chunk.ScopeId == scopeId);
     }
 
     private static bool MatchesFilters(RagChunk chunk, IReadOnlyDictionary<string, string> filters)
@@ -107,16 +89,10 @@ public sealed class InMemoryVectorStore : IVectorStore
                 continue;
             }
 
-            var found = false;
-            foreach (var (metadataKey, actual) in chunk.Metadata)
-            {
-                if (!metadataKey.Equals(key, StringComparison.OrdinalIgnoreCase)) continue;
-                found = true;
-                if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase)) return false;
-                break;
-            }
-
-            if (!found) return false;
+            if (!chunk.Metadata.Any(pair =>
+                    pair.Key.Equals(key, StringComparison.OrdinalIgnoreCase) &&
+                    pair.Value.Equals(expected, StringComparison.OrdinalIgnoreCase)))
+                return false;
         }
 
         return true;
@@ -125,10 +101,10 @@ public sealed class InMemoryVectorStore : IVectorStore
     private static float CosineSimilarity(float[] a, float[] b)
     {
         if (a.Length != b.Length) throw new InvalidOperationException("Embedding dimension mismatch.");
+
         var dot = 0f;
         var na = 0f;
         var nb = 0f;
-
         for (var i = 0; i < a.Length; i++)
         {
             dot += a[i] * b[i];

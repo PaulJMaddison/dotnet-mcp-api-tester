@@ -3,10 +3,9 @@ using Microsoft.OpenApi.Models;
 namespace ApiTester.McpServer.Services;
 
 public sealed record OpenApiSnapshot(
-    Guid SessionId,
+    Guid ScopeId,
     Guid SourceId,
     OpenApiDocument Document,
-    string RawSpec,
     string? Source,
     string SpecHash,
     DateTime LoadedUtc);
@@ -16,7 +15,10 @@ public sealed class OpenApiStore
     private readonly object _gate = new();
     private OpenApiSnapshot? _snapshot;
 
-    public Guid SessionId { get; } = Guid.NewGuid();
+    public OpenApiSnapshot? Current
+    {
+        get { lock (_gate) return _snapshot; }
+    }
 
     public OpenApiDocument? Document
     {
@@ -34,29 +36,20 @@ public sealed class OpenApiStore
     }
 
     public void SetDocument(
+        Guid scopeId,
+        Guid sourceId,
         OpenApiDocument document,
-        string rawSpec,
         string? source,
         string specHash,
         DateTime loadedUtc)
     {
+        if (scopeId == Guid.Empty) throw new ArgumentException("scopeId is required.", nameof(scopeId));
+        if (sourceId == Guid.Empty) throw new ArgumentException("sourceId is required.", nameof(sourceId));
         ArgumentNullException.ThrowIfNull(document);
-        if (string.IsNullOrWhiteSpace(rawSpec))
-            throw new ArgumentException("rawSpec is required.", nameof(rawSpec));
-        if (string.IsNullOrWhiteSpace(specHash))
-            throw new ArgumentException("specHash is required.", nameof(specHash));
+        if (string.IsNullOrWhiteSpace(specHash)) throw new ArgumentException("specHash is required.", nameof(specHash));
 
         lock (_gate)
-        {
-            _snapshot = new OpenApiSnapshot(
-                SessionId,
-                Guid.NewGuid(),
-                document,
-                rawSpec,
-                source,
-                specHash,
-                loadedUtc);
-        }
+            _snapshot = new OpenApiSnapshot(scopeId, sourceId, document, source, specHash, loadedUtc);
     }
 
     public OpenApiDocument RequireDocument() => RequireSnapshot().Document;
@@ -66,7 +59,7 @@ public sealed class OpenApiStore
         lock (_gate)
         {
             return _snapshot
-                ?? throw new InvalidOperationException("No OpenAPI document loaded. Call api_import_open_api first.");
+                ?? throw new InvalidOperationException("No OpenAPI document loaded. Call api_load_open_api first.");
         }
     }
 

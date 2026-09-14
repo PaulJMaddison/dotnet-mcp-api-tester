@@ -1,73 +1,66 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
-using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Services;
 using ApiTester.Rag.Models;
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
-using Microsoft.OpenApi.Readers;
 
 namespace ApiTester.McpServer.Rag;
 
 /// <summary>
-/// Converts an OpenAPI document into semantic evidence units for retrieval.
-/// Operations, component schemas and security schemes remain intact instead of
-/// being split at arbitrary character offsets.
+/// Converts OpenAPI semantics into retrieval evidence. Chunk boundaries follow
+/// API concepts (operations, schemas and security schemes), not character counts.
 /// </summary>
 public sealed class OpenApiEvidenceBuilder
 {
-    public IReadOnlyList<RagChunk> Build(OpenApiSpecRecord spec)
+    public IReadOnlyList<RagChunk> Build(
+        OpenApiDocument document,
+        Guid scopeId,
+        Guid sourceId,
+        string title,
+        string version,
+        DateTime createdUtc)
     {
-        ArgumentNullException.ThrowIfNull(spec);
-        if (spec.ProjectId == Guid.Empty)
-            throw new ArgumentException("Specification projectId is required.", nameof(spec));
-        if (spec.SpecId == Guid.Empty)
-            throw new ArgumentException("Specification specId is required.", nameof(spec));
-        if (string.IsNullOrWhiteSpace(spec.SpecJson))
-            return Array.Empty<RagChunk>();
-
-        var reader = new OpenApiStringReader();
-        var document = reader.Read(spec.SpecJson, out _);
-        if (document is null)
-            return Array.Empty<RagChunk>();
+        ArgumentNullException.ThrowIfNull(document);
+        if (scopeId == Guid.Empty) throw new ArgumentException("scopeId is required.", nameof(scopeId));
+        if (sourceId == Guid.Empty) throw new ArgumentException("sourceId is required.", nameof(sourceId));
 
         var chunks = new List<RagChunk>();
-        AddOperationChunks(document, spec, chunks);
-        AddSchemaChunks(document, spec, chunks);
-        AddSecurityChunks(document, spec, chunks);
+        AddOperations(document, scopeId, sourceId, title, version, createdUtc, chunks);
+        AddSchemas(document, scopeId, sourceId, title, version, createdUtc, chunks);
+        AddSecurity(document, scopeId, sourceId, title, version, createdUtc, chunks);
         return chunks;
     }
 
-    private static void AddOperationChunks(OpenApiDocument document, OpenApiSpecRecord spec, List<RagChunk> chunks)
+    private static void AddOperations(
+        OpenApiDocument document,
+        Guid scopeId,
+        Guid sourceId,
+        string title,
+        string version,
+        DateTime createdUtc,
+        List<RagChunk> chunks)
     {
         var ordinal = 0;
         foreach (var path in document.Paths.OrderBy(p => p.Key, StringComparer.Ordinal))
+        foreach (var entry in path.Value.Operations.OrderBy(o => o.Key.ToString(), StringComparer.Ordinal))
         {
-            foreach (var operationEntry in path.Value.Operations.OrderBy(o => o.Key.ToString(), StringComparer.Ordinal))
+            var method = entry.Key.ToString().ToUpperInvariant();
+            var operationId = OpenApiOperationIdentity.GetEffectiveOperationId(entry.Key, path.Key, entry.Value);
+            var text = BuildOperationText(document, path.Key, path.Value, method, operationId, entry.Value, title, version);
+            var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                var method = operationEntry.Key.ToString().ToUpperInvariant();
-                var operation = operationEntry.Value;
-                var operationId = OpenApiOperationIdentity.GetEffectiveOperationId(operationEntry.Key, path.Key, operation);
+                ["EvidenceType"] = "operation",
+                ["Title"] = title,
+                ["Version"] = version,
+                ["Method"] = method,
+                ["Path"] = path.Key,
+                ["OperationId"] = operationId
+            };
 
-                var text = BuildOperationText(document, path.Key, path.Value, method, operationId, operation, spec);
-                var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["EvidenceType"] = "operation",
-                    ["Title"] = spec.Title,
-                    ["Version"] = spec.Version,
-                    ["Method"] = method,
-                    ["Path"] = path.Key,
-                    ["OperationId"] = operationId
-                };
-
-                chunks.Add(CreateChunk(
-                    spec,
-                    $"openapi:{spec.SpecId:N}:operation:{ordinal:D4}",
-                    text,
-                    metadata));
-                ordinal++;
-            }
+            chunks.Add(CreateChunk(scopeId, sourceId, $"openapi:{sourceId:N}:operation:{ordinal:D4}", text, createdUtc, metadata));
+            ordinal++;
         }
     }
 
@@ -78,125 +71,94 @@ public sealed class OpenApiEvidenceBuilder
         string method,
         string operationId,
         OpenApiOperation operation,
-        OpenApiSpecRecord spec)
+        string title,
+        string version)
     {
         var sb = new StringBuilder();
         sb.AppendLine("EVIDENCE TYPE: OpenAPI operation");
-        sb.AppendLine($"API: {spec.Title} {spec.Version}".TrimEnd());
+        sb.AppendLine($"API: {title} {version}".TrimEnd());
         sb.AppendLine($"METHOD: {method}");
         sb.AppendLine($"PATH: {path}");
         sb.AppendLine($"OPERATION ID: {operationId}");
-
-        if (!string.IsNullOrWhiteSpace(operation.Summary))
-            sb.AppendLine($"SUMMARY: {operation.Summary.Trim()}");
-        if (!string.IsNullOrWhiteSpace(operation.Description))
-            sb.AppendLine($"DESCRIPTION: {operation.Description.Trim()}");
+        if (!string.IsNullOrWhiteSpace(operation.Summary)) sb.AppendLine($"SUMMARY: {operation.Summary.Trim()}");
+        if (!string.IsNullOrWhiteSpace(operation.Description)) sb.AppendLine($"DESCRIPTION: {operation.Description.Trim()}");
 
         var parameters = MergeParameters(pathItem.Parameters, operation.Parameters);
-        if (parameters.Count > 0)
+        sb.AppendLine(parameters.Count == 0 ? "PARAMETERS: none documented" : "PARAMETERS:");
+        foreach (var parameter in parameters)
         {
-            sb.AppendLine("PARAMETERS:");
-            foreach (var parameter in parameters)
-            {
-                sb.Append("- ")
-                    .Append(parameter.Name)
-                    .Append(" in=")
-                    .Append(parameter.In)
-                    .Append(" required=")
-                    .Append(parameter.Required ? "true" : "false")
-                    .Append(" schema=")
-                    .AppendLine(SummarizeSchema(parameter.Schema));
+            sb.AppendLine($"- {parameter.Name} in={parameter.In} required={(parameter.Required ? "true" : "false")} schema={SummarizeSchema(parameter.Schema)}");
+            if (!string.IsNullOrWhiteSpace(parameter.Description)) sb.AppendLine($"  description: {parameter.Description.Trim()}");
+        }
 
-                if (!string.IsNullOrWhiteSpace(parameter.Description))
-                    sb.AppendLine($"  description: {parameter.Description.Trim()}");
-            }
+        if (operation.RequestBody is null)
+        {
+            sb.AppendLine("REQUEST BODY: none documented");
         }
         else
-        {
-            sb.AppendLine("PARAMETERS: none documented");
-        }
-
-        if (operation.RequestBody is not null)
         {
             sb.AppendLine($"REQUEST BODY: required={operation.RequestBody.Required.ToString().ToLowerInvariant()}");
             foreach (var content in operation.RequestBody.Content.OrderBy(c => c.Key, StringComparer.OrdinalIgnoreCase))
                 sb.AppendLine($"- content-type={content.Key} schema={SummarizeSchema(content.Value.Schema)}");
         }
-        else
-        {
-            sb.AppendLine("REQUEST BODY: none documented");
-        }
 
-        var security = operation.Security is { Count: > 0 }
-            ? operation.Security
-            : document.SecurityRequirements;
+        var security = operation.Security is { Count: > 0 } ? operation.Security : document.SecurityRequirements;
         sb.AppendLine($"SECURITY: {SummarizeSecurityRequirements(security)}");
-
         sb.AppendLine("RESPONSES:");
-        if (operation.Responses.Count == 0)
+        if (operation.Responses.Count == 0) sb.AppendLine("- none documented");
+        foreach (var response in operation.Responses.OrderBy(r => r.Key, StringComparer.Ordinal))
         {
-            sb.AppendLine("- none documented");
-        }
-        else
-        {
-            foreach (var response in operation.Responses.OrderBy(r => r.Key, StringComparer.Ordinal))
-            {
-                sb.Append("- ").Append(response.Key);
-                if (!string.IsNullOrWhiteSpace(response.Value.Description))
-                    sb.Append(" ").Append(response.Value.Description.Trim());
-                sb.AppendLine();
-
-                foreach (var content in response.Value.Content.OrderBy(c => c.Key, StringComparer.OrdinalIgnoreCase))
-                    sb.AppendLine($"  content-type={content.Key} schema={SummarizeSchema(content.Value.Schema)}");
-            }
+            sb.AppendLine($"- {response.Key} {response.Value.Description ?? string.Empty}".TrimEnd());
+            foreach (var content in response.Value.Content.OrderBy(c => c.Key, StringComparer.OrdinalIgnoreCase))
+                sb.AppendLine($"  content-type={content.Key} schema={SummarizeSchema(content.Value.Schema)}");
         }
 
         return sb.ToString().Trim();
     }
 
-    private static void AddSchemaChunks(OpenApiDocument document, OpenApiSpecRecord spec, List<RagChunk> chunks)
+    private static void AddSchemas(
+        OpenApiDocument document,
+        Guid scopeId,
+        Guid sourceId,
+        string title,
+        string version,
+        DateTime createdUtc,
+        List<RagChunk> chunks)
     {
-        if (document.Components?.Schemas is null)
-            return;
-
+        if (document.Components?.Schemas is null) return;
         var ordinal = 0;
-        foreach (var schemaEntry in document.Components.Schemas.OrderBy(s => s.Key, StringComparer.Ordinal))
+        foreach (var schema in document.Components.Schemas.OrderBy(s => s.Key, StringComparer.Ordinal))
         {
-            var sb = new StringBuilder();
-            sb.AppendLine("EVIDENCE TYPE: OpenAPI component schema");
-            sb.AppendLine($"API: {spec.Title} {spec.Version}".TrimEnd());
-            sb.AppendLine($"SCHEMA: {schemaEntry.Key}");
-            sb.AppendLine($"DEFINITION: {SummarizeSchema(schemaEntry.Value, includeProperties: true, preferReference: false)}");
-
+            var text = $"EVIDENCE TYPE: OpenAPI component schema\nAPI: {title} {version}\nSCHEMA: {schema.Key}\nDEFINITION: {SummarizeSchema(schema.Value, true, 0, false)}";
             var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["EvidenceType"] = "schema",
-                ["Title"] = spec.Title,
-                ["Version"] = spec.Version,
-                ["SchemaName"] = schemaEntry.Key
+                ["Title"] = title,
+                ["Version"] = version,
+                ["SchemaName"] = schema.Key
             };
-
-            chunks.Add(CreateChunk(
-                spec,
-                $"openapi:{spec.SpecId:N}:schema:{ordinal:D4}",
-                sb.ToString().Trim(),
-                metadata));
+            chunks.Add(CreateChunk(scopeId, sourceId, $"openapi:{sourceId:N}:schema:{ordinal:D4}", text, createdUtc, metadata));
             ordinal++;
         }
     }
 
-    private static void AddSecurityChunks(OpenApiDocument document, OpenApiSpecRecord spec, List<RagChunk> chunks)
+    private static void AddSecurity(
+        OpenApiDocument document,
+        Guid scopeId,
+        Guid sourceId,
+        string title,
+        string version,
+        DateTime createdUtc,
+        List<RagChunk> chunks)
     {
-        if (document.Components?.SecuritySchemes is null)
-            return;
-
+        if (document.Components?.SecuritySchemes is null) return;
         var ordinal = 0;
         foreach (var entry in document.Components.SecuritySchemes.OrderBy(s => s.Key, StringComparer.Ordinal))
         {
             var scheme = entry.Value;
             var sb = new StringBuilder();
             sb.AppendLine("EVIDENCE TYPE: OpenAPI security scheme");
-            sb.AppendLine($"API: {spec.Title} {spec.Version}".TrimEnd());
+            sb.AppendLine($"API: {title} {version}".TrimEnd());
             sb.AppendLine($"SECURITY SCHEME: {entry.Key}");
             sb.AppendLine($"TYPE: {scheme.Type}");
             if (!string.IsNullOrWhiteSpace(scheme.Scheme)) sb.AppendLine($"SCHEME: {scheme.Scheme}");
@@ -208,66 +170,40 @@ public sealed class OpenApiEvidenceBuilder
             var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["EvidenceType"] = "security",
-                ["Title"] = spec.Title,
-                ["Version"] = spec.Version,
+                ["Title"] = title,
+                ["Version"] = version,
                 ["SecurityScheme"] = entry.Key
             };
-
-            chunks.Add(CreateChunk(
-                spec,
-                $"openapi:{spec.SpecId:N}:security:{ordinal:D4}",
-                sb.ToString().Trim(),
-                metadata));
+            chunks.Add(CreateChunk(scopeId, sourceId, $"openapi:{sourceId:N}:security:{ordinal:D4}", sb.ToString().Trim(), createdUtc, metadata));
             ordinal++;
         }
     }
 
-    private static IReadOnlyList<OpenApiParameter> MergeParameters(
-        IList<OpenApiParameter>? pathParameters,
-        IList<OpenApiParameter>? operationParameters)
+    private static IReadOnlyList<OpenApiParameter> MergeParameters(IList<OpenApiParameter>? path, IList<OpenApiParameter>? operation)
     {
         var merged = new Dictionary<string, OpenApiParameter>(StringComparer.OrdinalIgnoreCase);
-        foreach (var parameter in pathParameters ?? Array.Empty<OpenApiParameter>())
-            merged[$"{parameter.In}:{parameter.Name}"] = parameter;
-        foreach (var parameter in operationParameters ?? Array.Empty<OpenApiParameter>())
-            merged[$"{parameter.In}:{parameter.Name}"] = parameter;
-
-        return merged.Values
-            .OrderBy(p => p.In.ToString(), StringComparer.Ordinal)
-            .ThenBy(p => p.Name, StringComparer.Ordinal)
-            .ToList();
+        foreach (var parameter in path ?? Array.Empty<OpenApiParameter>()) merged[$"{parameter.In}:{parameter.Name}"] = parameter;
+        foreach (var parameter in operation ?? Array.Empty<OpenApiParameter>()) merged[$"{parameter.In}:{parameter.Name}"] = parameter;
+        return merged.Values.OrderBy(p => p.In.ToString(), StringComparer.Ordinal).ThenBy(p => p.Name, StringComparer.Ordinal).ToList();
     }
 
     private static string SummarizeSecurityRequirements(IList<OpenApiSecurityRequirement>? requirements)
     {
-        if (requirements is null || requirements.Count == 0)
-            return "none documented";
-
-        var groups = requirements.Select(requirement =>
-            string.Join(" + ", requirement.Select(entry =>
-            {
-                var name = entry.Key.Reference?.Id;
-                if (string.IsNullOrWhiteSpace(name))
-                    name = !string.IsNullOrWhiteSpace(entry.Key.Scheme) ? entry.Key.Scheme : entry.Key.Type.ToString();
-                var scopes = entry.Value.Count == 0 ? string.Empty : $" scopes=[{string.Join(",", entry.Value)}]";
-                return name + scopes;
-            })));
-
-        return string.Join(" OR ", groups);
+        if (requirements is null || requirements.Count == 0) return "none documented";
+        return string.Join(" OR ", requirements.Select(requirement => string.Join(" + ", requirement.Select(entry =>
+        {
+            var name = entry.Key.Reference?.Id;
+            if (string.IsNullOrWhiteSpace(name)) name = !string.IsNullOrWhiteSpace(entry.Key.Scheme) ? entry.Key.Scheme : entry.Key.Type.ToString();
+            var scopes = entry.Value.Count == 0 ? string.Empty : $" scopes=[{string.Join(",", entry.Value)}]";
+            return name + scopes;
+        }))));
     }
 
-    private static string SummarizeSchema(
-        OpenApiSchema? schema,
-        bool includeProperties = false,
-        int depth = 0,
-        bool preferReference = true)
+    private static string SummarizeSchema(OpenApiSchema? schema, bool includeProperties = false, int depth = 0, bool preferReference = true)
     {
-        if (schema is null)
-            return "unspecified";
-        if (depth > 2)
-            return "...";
-        if (preferReference && !string.IsNullOrWhiteSpace(schema.Reference?.Id))
-            return $"ref={schema.Reference.Id}";
+        if (schema is null) return "unspecified";
+        if (depth > 2) return "...";
+        if (preferReference && !string.IsNullOrWhiteSpace(schema.Reference?.Id)) return $"ref={schema.Reference.Id}";
 
         var parts = new List<string>();
         if (!string.IsNullOrWhiteSpace(schema.Type)) parts.Add($"type={schema.Type}");
@@ -282,14 +218,12 @@ public sealed class OpenApiEvidenceBuilder
         if (!string.IsNullOrWhiteSpace(schema.Pattern)) parts.Add($"pattern={schema.Pattern}");
         if (schema.Enum is { Count: > 0 }) parts.Add($"enum=[{string.Join(",", schema.Enum.Select(FormatOpenApiAny))}]");
         if (schema.Required is { Count: > 0 }) parts.Add($"required=[{string.Join(",", schema.Required)}]");
-
-        if (schema.Items is not null)
-            parts.Add($"items=({SummarizeSchema(schema.Items, includeProperties, depth + 1)})");
+        if (schema.Items is not null) parts.Add($"items=({SummarizeSchema(schema.Items, includeProperties, depth + 1)})");
 
         if (includeProperties && schema.Properties is { Count: > 0 })
         {
             var properties = schema.Properties.OrderBy(p => p.Key, StringComparer.Ordinal)
-                .Select(p => $"{p.Key}({SummarizeSchema(p.Value, includeProperties: false, depth + 1)})");
+                .Select(p => $"{p.Key}({SummarizeSchema(p.Value, false, depth + 1)})");
             parts.Add($"properties=[{string.Join("; ", properties)}]");
         }
 
@@ -308,20 +242,14 @@ public sealed class OpenApiEvidenceBuilder
     };
 
     private static RagChunk CreateChunk(
-        OpenApiSpecRecord spec,
+        Guid scopeId,
+        Guid sourceId,
         string chunkId,
         string text,
-        IReadOnlyDictionary<string, string> metadata) =>
-        new(
-            spec.ProjectId,
-            "openapi",
-            spec.SpecId.ToString(),
-            chunkId,
-            text,
-            ComputeSha256Hex(text),
-            spec.CreatedUtc,
-            metadata);
+        DateTime createdUtc,
+        IReadOnlyDictionary<string, string> metadata)
+        => new(scopeId, "openapi", sourceId.ToString(), chunkId, text, Hash(text), createdUtc, metadata);
 
-    private static string ComputeSha256Hex(string text)
+    private static string Hash(string text)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 }

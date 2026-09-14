@@ -1,12 +1,12 @@
 using ApiTester.AI;
 using ApiTester.AI.Azure;
-using ApiTester.AI.Local;
 using ApiTester.McpServer.Rag;
 using ApiTester.McpServer.Services;
 using ApiTester.McpServer.Tools;
 using ApiTester.Rag.Answering;
 using ApiTester.Rag.Embeddings;
 using ApiTester.Rag.VectorStore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -14,37 +14,18 @@ using ModelContextProtocol.Server;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Logging.AddConsole(o =>
-{
-    o.LogToStandardErrorThreshold = LogLevel.Information;
-});
-
-builder.Services.AddSingleton(AppConfig.Load());
+builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Information);
 builder.Services.AddSingleton(McpSafetyOptions.FromConfiguration(builder.Configuration));
 
-var azureOpenAi = new AzureOpenAiOptions
+var azure = new AzureOpenAiOptions
 {
-    Endpoint = FirstNonEmpty(
-        builder.Configuration["AzureOpenAI:Endpoint"],
-        Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")),
-    ChatDeployment = FirstNonEmpty(
-        builder.Configuration["AzureOpenAI:ChatDeployment"],
-        Environment.GetEnvironmentVariable("AZURE_OPENAI_CHAT_DEPLOYMENT")),
-    EmbeddingDeployment = FirstNonEmpty(
-        builder.Configuration["AzureOpenAI:EmbeddingDeployment"],
-        Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")),
-    Authentication = FirstNonEmpty(
-        builder.Configuration["AzureOpenAI:Authentication"],
-        Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTHENTICATION")),
-    CredentialSource = FirstNonEmpty(
-        builder.Configuration["AzureOpenAI:CredentialSource"],
-        Environment.GetEnvironmentVariable("AZURE_OPENAI_CREDENTIAL_SOURCE")),
-    ApiKey = FirstNonEmpty(
-        builder.Configuration["AzureOpenAI:ApiKey"],
-        Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY")),
-    BearerToken = FirstNonEmpty(
-        builder.Configuration["AzureOpenAI:BearerToken"],
-        Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTH_TOKEN")),
+    Endpoint = FirstNonEmpty(builder.Configuration["AzureOpenAI:Endpoint"], Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")),
+    ChatDeployment = FirstNonEmpty(builder.Configuration["AzureOpenAI:ChatDeployment"], Environment.GetEnvironmentVariable("AZURE_OPENAI_CHAT_DEPLOYMENT")),
+    EmbeddingDeployment = FirstNonEmpty(builder.Configuration["AzureOpenAI:EmbeddingDeployment"], Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")),
+    Authentication = FirstNonEmpty(builder.Configuration["AzureOpenAI:Authentication"], Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTHENTICATION")),
+    CredentialSource = FirstNonEmpty(builder.Configuration["AzureOpenAI:CredentialSource"], Environment.GetEnvironmentVariable("AZURE_OPENAI_CREDENTIAL_SOURCE")),
+    ApiKey = FirstNonEmpty(builder.Configuration["AzureOpenAI:ApiKey"], Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY")),
+    BearerToken = FirstNonEmpty(builder.Configuration["AzureOpenAI:BearerToken"], Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTH_TOKEN")),
     TimeoutSeconds = builder.Configuration.GetValue<int?>("AzureOpenAI:TimeoutSeconds") ?? 30,
     MaxRetries = builder.Configuration.GetValue<int?>("AzureOpenAI:MaxRetries") ?? 2,
     MaxResponseBytes = builder.Configuration.GetValue<int?>("AzureOpenAI:MaxResponseBytes") ?? 1_048_576,
@@ -53,7 +34,10 @@ var azureOpenAi = new AzureOpenAiOptions
     CircuitBreakerFailureThreshold = builder.Configuration.GetValue<int?>("AzureOpenAI:CircuitBreakerFailureThreshold") ?? 4,
     CircuitBreakerBreakSeconds = builder.Configuration.GetValue<int?>("AzureOpenAI:CircuitBreakerBreakSeconds") ?? 30
 };
-builder.Services.AddSingleton(azureOpenAi);
+
+azure.ValidateChat();
+azure.ValidateEmbedding();
+builder.Services.AddSingleton(azure);
 
 builder.Services.AddHttpClient("AzureOpenAI", client => client.Timeout = Timeout.InfiniteTimeSpan);
 builder.Services.AddSingleton(sp => new AzureOpenAiTransport(
@@ -67,53 +51,13 @@ builder.Services.AddSingleton<InMemoryVectorStore>();
 builder.Services.AddSingleton<OpenApiEvidenceBuilder>();
 builder.Services.AddSingleton<OpenApiConstraintTestGenerator>();
 
-builder.Services.AddSingleton<IEmbeddingClient>(sp =>
-{
-    var options = sp.GetRequiredService<AzureOpenAiOptions>();
-    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("ApiTester.Rag.Embeddings");
+builder.Services.AddSingleton<IEmbeddingClient>(sp => new AzureOpenAiEmbeddingClient(
+    sp.GetRequiredService<AzureOpenAiTransport>(),
+    sp.GetRequiredService<AzureOpenAiOptions>()));
 
-    if (options.IsEmbeddingConfigured)
-    {
-        logger.LogInformation(
-            "Using Azure OpenAI embedding deployment {EmbeddingDeployment} with {AuthenticationMode}/{CredentialSource}.",
-            options.EmbeddingDeployment,
-            options.GetAuthenticationMode(),
-            options.GetAuthenticationMode() == AzureOpenAiAuthenticationMode.DefaultAzureCredential
-                ? options.GetCredentialSource()
-                : AzureOpenAiCredentialSource.Default);
-
-        return new AzureOpenAiEmbeddingClient(
-            sp.GetRequiredService<AzureOpenAiTransport>(),
-            options);
-    }
-
-    logger.LogInformation("Azure OpenAI embeddings are not configured; using deterministic lexical feature hashing for local/offline RAG.");
-    return new DeterministicHashEmbeddingClient(512);
-});
-
-builder.Services.AddSingleton<IAiClient>(sp =>
-{
-    var options = sp.GetRequiredService<AzureOpenAiOptions>();
-    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("ApiTester.AI");
-
-    if (options.IsChatConfigured)
-    {
-        logger.LogInformation(
-            "Using Azure OpenAI chat deployment {ChatDeployment} with {AuthenticationMode}/{CredentialSource}.",
-            options.ChatDeployment,
-            options.GetAuthenticationMode(),
-            options.GetAuthenticationMode() == AzureOpenAiAuthenticationMode.DefaultAzureCredential
-                ? options.GetCredentialSource()
-                : AzureOpenAiCredentialSource.Default);
-
-        return new AzureOpenAiClient(
-            sp.GetRequiredService<AzureOpenAiTransport>(),
-            options);
-    }
-
-    logger.LogInformation("Azure OpenAI chat is not configured; using the local grounded client.");
-    return new LocalGroundedAiClient();
-});
+builder.Services.AddSingleton<IAiClient>(sp => new AzureOpenAiClient(
+    sp.GetRequiredService<AzureOpenAiTransport>(),
+    sp.GetRequiredService<AzureOpenAiOptions>()));
 
 builder.Services.AddSingleton<IChatCompletionClient, AiClientChatCompletionClient>();
 builder.Services.AddSingleton<RagRuntime>();

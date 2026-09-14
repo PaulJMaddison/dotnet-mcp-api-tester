@@ -1,41 +1,53 @@
 # .NET MCP API Tester
 
-`dotnet-mcp-api-tester` is a local .NET MCP server for Claude and Codex. Point it at an OpenAPI definition and it parses the contract into meaningful operation, schema and security evidence, embeds that evidence into an in-memory vector index using Azure AI, and exposes MCP tools that let an agent understand and safely test the API.
+A local .NET MCP server for Claude and Codex.
 
-The MCP server itself makes the HTTP calls, so it can test localhost, internal, staging or public APIs that you are authorised to test. Nothing is persisted. Restart the server and the loaded contract, derived vector state, runtime authentication and policy changes disappear.
+Point it at an OpenAPI / Swagger definition. It parses the contract into meaningful **operation, schema and security evidence**, embeds that evidence into an **in-memory vector index using Azure AI**, and exposes MCP tools that let a coding agent understand and safely test the API.
 
-The design is deliberately simple: **the OpenAPI contract decides what is true, deterministic code decides what is mechanically testable and safe, and the LLM handles the reasoning that remains.**
+The MCP server itself makes the HTTP calls, so it can test localhost, internal, staging or public APIs that you are authorised to test. **Nothing is persisted.** There is no database, web UI, SaaS backend or stored test-run history. Restart the MCP process and the loaded API definition, vector index, runtime auth and policy state disappear.
 
-## What it does
+> **The OpenAPI contract decides what is true, deterministic code decides what is mechanically testable and safe, and the LLM handles the reasoning that remains.**
 
-- Loads OpenAPI / Swagger from a local file or URL.
-- Normalises missing operation IDs so every operation has a stable identity.
-- Exposes MCP tools to list and describe operations.
-- Generates deterministic test cases from schema constraints, including boundaries and malformed inputs.
-- Turns operations, component schemas and security schemes into semantic RAG evidence rather than arbitrary text chunks.
-- Uses Azure OpenAI embeddings and chat for the full grounded RAG path; a deterministic local fallback is available when Azure is not configured.
-- Keeps vector state in memory only.
-- Builds dry-run requests before live execution.
-- Applies method, target, request-size, response-size, localhost/private-network and SSRF controls before the server makes HTTP calls.
+## How it works
+
+```text
+OpenAPI / Swagger definition
+          ↓
+parse operations + schemas + security
+          ↓
+custom semantic evidence builder
+          ↓
+Azure OpenAI embeddings (batched)
+          ↓
+in-memory vector index
+          ↓
+Claude / Codex via MCP
+   ├─ list / describe operations
+   ├─ semantic contract search
+   ├─ grounded Azure AI questions
+   ├─ deterministic edge-case generation
+   └─ safe direct HTTP execution
+          ↓
+localhost / dev / staging / public API
+```
+
+The RAG implementation deliberately does **not** split OpenAPI JSON every N characters. `OpenApiEvidenceBuilder` keeps domain boundaries intact: an operation stays an operation, a component schema stays a schema and a security scheme stays a security scheme.
+
+The vector store is intentionally in-process. OpenAPI is the source of truth; vectors are disposable derived state. That means no Pinecone, Elasticsearch, PostgreSQL/pgvector or other vector infrastructure is required.
 
 ## Requirements
 
 - .NET 8 SDK
 - Codex CLI or Claude Code
-- Optional for full AI-backed RAG: an Azure OpenAI resource with a chat deployment and an embedding deployment
-- Azure CLI if you want keyless local Azure authentication
+- Azure OpenAI chat deployment
+- Azure OpenAI embedding deployment
+- Azure credentials (Azure CLI / managed identity / API key / bearer token)
 
-Build it first:
+Azure AI is required. This project intentionally has no mock, local or deterministic AI fallback.
 
-```bash
-dotnet restore
-dotnet build -c Release
-dotnet test -c Release
-```
+## Azure AI configuration
 
-## Azure AI setup
-
-For local development I use Azure CLI credentials rather than putting an API key in the repository:
+For local development, Azure CLI authentication keeps secrets out of the repository:
 
 ```powershell
 az login
@@ -47,17 +59,24 @@ $env:AZURE_OPENAI_AUTHENTICATION='DefaultAzureCredential'
 $env:AZURE_OPENAI_CREDENTIAL_SOURCE='AzureCli'
 ```
 
-On Azure, use `ManagedIdentity` instead of `AzureCli`. An API-key mode is also supported, but do not commit keys or tokens.
+For Azure-hosted use, set `AZURE_OPENAI_CREDENTIAL_SOURCE=ManagedIdentity` instead. API-key and bearer-token authentication are also supported; never commit credentials.
 
-If Azure is not configured, the server still starts and uses deterministic local embedding/chat fallbacks. That is useful for development, but Azure OpenAI is the intended path for the full RAG experience.
-
-## Run it directly
+## Build and test
 
 ```bash
-dotnet run --project ./ApiTester.McpServer/ApiTester.McpServer.csproj
+dotnet restore DotnetMcpApiTester.sln
+dotnet build DotnetMcpApiTester.sln -c Release
+dotnet test DotnetMcpApiTester.sln -c Release
 ```
 
-It is a stdio MCP server, so normally Codex or Claude Code starts this process for you.
+The solution deliberately contains only:
+
+```text
+ApiTester.McpServer
+ApiTester.Rag
+ApiTester.AI
+ApiTester.McpServer.Tests
+```
 
 ## Connect it to Codex
 
@@ -67,13 +86,13 @@ From the repository root:
 codex mcp add api-tester -- dotnet run --project ./ApiTester.McpServer/ApiTester.McpServer.csproj
 ```
 
-Check it is registered:
+Then check the registration:
 
 ```bash
 codex mcp list
 ```
 
-Codex also supports MCP configuration in `~/.codex/config.toml` or a project-scoped `.codex/config.toml`:
+Equivalent Codex config:
 
 ```toml
 [mcp_servers.api-tester]
@@ -81,7 +100,7 @@ command = "dotnet"
 args = ["run", "--project", "./ApiTester.McpServer/ApiTester.McpServer.csproj"]
 ```
 
-If you use a project-scoped config, run Codex from the repository so the relative project path resolves correctly.
+Start Codex from the repository when using the relative project path.
 
 ## Connect it to Claude Code
 
@@ -91,62 +110,64 @@ From the repository root:
 claude mcp add api-tester -- dotnet run --project ./ApiTester.McpServer/ApiTester.McpServer.csproj
 ```
 
-Check it is registered:
+Check it:
 
 ```bash
 claude mcp get api-tester
 claude mcp list
 ```
 
-Use `--scope user` if you want the server available across Claude Code projects instead of only the current project.
+Use `--scope user` if you want the MCP server available across Claude Code projects rather than only the current project.
 
-## Typical workflow
+## Core MCP workflow
 
-Once the MCP server is connected, ask the agent to do the following:
+Loading an API is one operation. `api_load_open_api` downloads or reads the definition, parses it, creates semantic evidence, gets Azure embeddings and swaps in the new in-memory index only after indexing succeeds.
 
-1. Load an OpenAPI file or URL with `api_import_open_api`.
-2. Inspect the contract with `api_list_operations` and `api_describe_operation`.
-3. Generate deterministic edge cases with `api_generate_test_plan`.
-4. Build the semantic in-memory index with `api_rag_index`.
-5. Ask grounded questions with `api_rag_ask`.
-6. Inspect the execution policy with `api_get_policy`.
-7. Set a target base URL or bearer token if the contract does not already contain what is needed.
-8. Use `api_call_operation` in dry-run mode first.
-9. Only enable live execution for an API and methods you intentionally want the agent to test.
+Typical flow:
 
-Example prompt:
+```text
+api_load_open_api
+      ↓
+api_list_operations / api_describe_operation
+      ↓
+api_search_contract / api_ask_contract
+      ↓
+api_generate_test_plan
+      ↓
+api_get_policy
+      ↓
+api_call_operation (dry-run first)
+      ↓
+live API call when explicitly allowed
+```
 
-> Load `./openapi.json`, show me the available operations, generate edge cases for `getWidgetById`, index the contract, explain the documented response behaviour using only retrieved OpenAPI evidence, then dry-run the request. Do not make a live HTTP call until I approve it.
+Useful prompt:
 
-## Testing localhost and internal APIs
+> Load `./openapi.json`. Show me the available operations, find the endpoint for retrieving orders, generate the edge cases for that operation and dry-run the requests. Use only the OpenAPI contract as documented truth and do not make a live call until I approve it.
 
-The server can call localhost and private-network targets, but the safe default is to block them. This is intentional because MCP tools are agent-callable.
+Another example:
 
-Policy mutation is also disabled by default. For a supervised local test where you explicitly want the connected agent to loosen the policy, start the MCP process with:
+> Load this Swagger definition and test the documented boundary cases for `getWidgetById`. Explain any mismatch between the contract and the actual response.
+
+## Safety
+
+Execution starts in **dry-run** mode and live calls are deny-by-default until an allowed base URL is configured. Localhost and private networks are blocked by default as well.
+
+Policy mutation through MCP is disabled unless a human enables it before process startup:
 
 ```powershell
 $env:APITESTER_MCP_ALLOW_POLICY_MUTATION='true'
 ```
 
-Then allow only the base URL and methods you actually need, for example `http://127.0.0.1:5055` and `GET`. Link-local metadata addresses remain blocked.
+Use that only for a supervised development session. Then allow only the target URL and HTTP methods you actually want the agent to exercise. Link-local metadata addresses remain blocked.
 
-Leave `APITESTER_MCP_ALLOW_POLICY_MUTATION` unset for normal use.
+Bearer tokens and base-URL overrides live only in the process. They are not stored anywhere.
 
-## Local smoke API
+## Why in memory?
 
-`ApiTester.SmokeApi` is a small controlled API for exercising the MCP server without pointing it at a real system:
+An API definition normally produces hundreds or a few thousand evidence chunks, not millions. A linear in-memory cosine-similarity scan is therefore simple, fast and cheap for this use case.
 
-```bash
-dotnet run --project ./ApiTester.SmokeApi/ApiTester.SmokeApi.csproj
-```
-
-Use its generated OpenAPI document as a safe end-to-end target while developing or demonstrating the server.
-
-## State model
-
-There is no database, run-history store, tenant model, web UI or hosted SaaS layer in this branch. The current OpenAPI contract, vector index, runtime target, bearer token and execution policy all live inside the MCP process. Stop the process and that state is gone.
-
-That is intentional: this repository is an MCP API-testing tool, not a platform around one.
+More importantly, the vector index is not valuable state. It can always be recreated from the OpenAPI contract. Persisting it would add hosting cost, credentials, network I/O, patching, backup and additional security surface without providing much value to a local developer MCP tool.
 
 ## Licence
 

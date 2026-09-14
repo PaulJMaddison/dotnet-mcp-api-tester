@@ -1,7 +1,7 @@
-﻿namespace ApiTester.Rag.Models;
+namespace ApiTester.Rag.Models;
 
 public sealed record RagChunk(
-    Guid ProjectId,
+    Guid ScopeId,
     string SourceType,
     string SourceId,
     string ChunkId,
