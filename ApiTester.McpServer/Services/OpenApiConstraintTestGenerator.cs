@@ -52,29 +52,21 @@ public sealed class OpenApiConstraintTestGenerator
         var found = FindOperation(document, operationId.Trim())
             ?? throw new InvalidOperationException($"operationId not found: {operationId}");
 
-        var mergedParameters = MergeParameters(found.PathItem.Parameters, found.Operation.Parameters);
-        var descriptors = mergedParameters.Select(ToDescriptor).ToList();
+        var parameters = MergeParameters(found.PathItem.Parameters, found.Operation.Parameters);
+        var descriptors = parameters.Select(p => ToDescriptor(p, document)).ToList();
         var cases = new List<GeneratedApiTestCase>();
 
-        foreach (var parameter in mergedParameters)
-            AddParameterCases(parameter, cases);
+        foreach (var parameter in parameters)
+            AddParameterCases(parameter, document, cases);
 
-        AddRequestBodyCases(found.Operation.RequestBody, cases);
+        AddRequestBodyCases(found.Operation.RequestBody, document, cases);
 
-        if (found.Path.Contains('{') && mergedParameters.All(p => p.In != ParameterLocation.Path))
-        {
-            cases.Add(Case(
-                "contract-consistency",
-                found.Path,
-                "Path template contains placeholders but no OpenAPI path parameters are declared."));
-        }
+        if (found.Path.Contains('{') && parameters.All(p => p.In != ParameterLocation.Path))
+            cases.Add(Case("contract-consistency", found.Path, "Path template contains placeholders but no OpenAPI path parameters are declared."));
 
         var responses = found.Operation.Responses
             .OrderBy(r => r.Key, StringComparer.Ordinal)
-            .ToDictionary(
-                r => r.Key,
-                r => r.Value.Description ?? string.Empty,
-                StringComparer.Ordinal);
+            .ToDictionary(r => r.Key, r => r.Value.Description ?? string.Empty, StringComparer.Ordinal);
 
         return new GeneratedOperationTestPlan(
             found.OperationId,
@@ -88,69 +80,33 @@ public sealed class OpenApiConstraintTestGenerator
             Deduplicate(cases));
     }
 
-    private static void AddParameterCases(OpenApiParameter parameter, List<GeneratedApiTestCase> cases)
+    private static void AddParameterCases(OpenApiParameter parameter, OpenApiDocument document, List<GeneratedApiTestCase> cases)
     {
-        var schema = parameter.Schema ?? new OpenApiSchema();
+        var schema = ResolveSchema(parameter.Schema, document);
         var target = $"{parameter.In}:{parameter.Name}";
 
         if (parameter.Required)
-        {
-            cases.Add(Case(
-                "required",
-                target,
-                $"Omit required parameter '{parameter.Name}'.",
-                parameter.Name,
-                null));
-        }
+            cases.Add(Case("required", target, $"Omit required parameter '{parameter.Name}'.", parameter.Name, null));
+        else
+            cases.Add(Case("optional", target, $"Omit optional parameter '{parameter.Name}'.", parameter.Name, null));
 
         if (schema.Nullable)
-        {
-            cases.Add(Case(
-                "nullable",
-                target,
-                $"Send explicit null for nullable parameter '{parameter.Name}'.",
-                parameter.Name,
-                "null"));
-        }
-        else if (!parameter.Required)
-        {
-            cases.Add(Case(
-                "optional",
-                target,
-                $"Omit optional parameter '{parameter.Name}'.",
-                parameter.Name,
-                null));
-        }
+            cases.Add(Case("nullable", target, $"Send explicit null for nullable parameter '{parameter.Name}'.", parameter.Name, "null"));
 
         switch ((schema.Type ?? string.Empty).ToLowerInvariant())
         {
-            case "integer":
-                AddNumericCases(parameter.Name, target, schema, cases, integral: true);
-                break;
-            case "number":
-                AddNumericCases(parameter.Name, target, schema, cases, integral: false);
-                break;
+            case "integer": AddNumericCases(parameter.Name, target, schema, cases, integral: true); break;
+            case "number": AddNumericCases(parameter.Name, target, schema, cases, integral: false); break;
             case "boolean":
                 cases.Add(Case("boolean", target, $"Use true for '{parameter.Name}'.", parameter.Name, "true"));
                 cases.Add(Case("boolean", target, $"Use false for '{parameter.Name}'.", parameter.Name, "false"));
                 cases.Add(Case("wrong-type", target, $"Use a non-boolean value for '{parameter.Name}'.", parameter.Name, "not-a-boolean"));
                 break;
-            case "array":
-                AddArrayCases(parameter.Name, target, schema, cases);
-                break;
-            default:
-                AddStringCases(parameter.Name, target, schema, cases);
-                break;
+            case "array": AddArrayCases(parameter.Name, target, schema, cases); break;
+            default: AddStringCases(parameter.Name, target, schema, cases); break;
         }
 
-        if (schema.Enum is { Count: > 0 })
-        {
-            foreach (var value in schema.Enum.Select(FormatAny))
-                cases.Add(Case("enum-valid", target, $"Use documented enum value '{value}' for '{parameter.Name}'.", parameter.Name, value));
-
-            cases.Add(Case("enum-invalid", target, $"Use an undocumented enum value for '{parameter.Name}'.", parameter.Name, "__invalid_enum_value__"));
-            cases.Add(Case("enum-case", target, $"Change the casing of a documented enum value for '{parameter.Name}' where meaningful.", parameter.Name, ToggleCase(FormatAny(schema.Enum[0]))));
-        }
+        AddEnumCases(parameter.Name, target, schema, cases);
     }
 
     private static void AddNumericCases(string name, string target, OpenApiSchema schema, List<GeneratedApiTestCase> cases, bool integral)
@@ -167,18 +123,18 @@ public sealed class OpenApiConstraintTestGenerator
 
         if (schema.Minimum is not null)
         {
-            var min = schema.Minimum.Value;
-            cases.Add(Case("minimum", target, $"Use documented minimum for '{name}'.", name, FormatDecimal(min)));
-            cases.Add(Case("below-minimum", target, $"Use a value just below the documented minimum for '{name}'.", name, FormatDecimal(min - (integral ? 1m : 0.01m))));
-            cases.Add(Case("above-minimum", target, $"Use a value just above the documented minimum for '{name}'.", name, FormatDecimal(min + (integral ? 1m : 0.01m))));
+            var step = integral ? 1m : 0.01m;
+            cases.Add(Case("below-minimum", target, $"Use a value just below minimum {schema.Minimum.Value} for '{name}'.", name, FormatDecimal(schema.Minimum.Value - step)));
+            cases.Add(Case("minimum", target, $"Use exact minimum for '{name}'.", name, FormatDecimal(schema.Minimum.Value)));
+            cases.Add(Case("above-minimum", target, $"Use a value just above minimum for '{name}'.", name, FormatDecimal(schema.Minimum.Value + step)));
         }
 
         if (schema.Maximum is not null)
         {
-            var max = schema.Maximum.Value;
-            cases.Add(Case("maximum", target, $"Use documented maximum for '{name}'.", name, FormatDecimal(max)));
-            cases.Add(Case("below-maximum", target, $"Use a value just below the documented maximum for '{name}'.", name, FormatDecimal(max - (integral ? 1m : 0.01m))));
-            cases.Add(Case("above-maximum", target, $"Use a value just above the documented maximum for '{name}'.", name, FormatDecimal(max + (integral ? 1m : 0.01m))));
+            var step = integral ? 1m : 0.01m;
+            cases.Add(Case("below-maximum", target, $"Use a value just below maximum for '{name}'.", name, FormatDecimal(schema.Maximum.Value - step)));
+            cases.Add(Case("maximum", target, $"Use exact maximum for '{name}'.", name, FormatDecimal(schema.Maximum.Value)));
+            cases.Add(Case("above-maximum", target, $"Use a value just above maximum {schema.Maximum.Value} for '{name}'.", name, FormatDecimal(schema.Maximum.Value + step)));
         }
     }
 
@@ -191,8 +147,7 @@ public sealed class OpenApiConstraintTestGenerator
         if (schema.MinLength is not null)
         {
             var min = schema.MinLength.Value;
-            if (min > 0)
-                cases.Add(Case("below-min-length", target, $"Use length {min - 1} for '{name}'.", name, new string('a', min - 1)));
+            if (min > 0) cases.Add(Case("below-min-length", target, $"Use length {min - 1} for '{name}'.", name, new string('a', min - 1)));
             cases.Add(Case("min-length", target, $"Use exact minLength {min} for '{name}'.", name, new string('a', min)));
             cases.Add(Case("above-min-length", target, $"Use length {min + 1} for '{name}'.", name, new string('a', min + 1)));
         }
@@ -200,18 +155,46 @@ public sealed class OpenApiConstraintTestGenerator
         if (schema.MaxLength is not null)
         {
             var max = schema.MaxLength.Value;
-            if (max > 0)
-                cases.Add(Case("below-max-length", target, $"Use length {max - 1} for '{name}'.", name, new string('b', max - 1)));
+            if (max > 0) cases.Add(Case("below-max-length", target, $"Use length {max - 1} for '{name}'.", name, new string('b', max - 1)));
             cases.Add(Case("max-length", target, $"Use exact maxLength {max} for '{name}'.", name, new string('b', max)));
             cases.Add(Case("above-max-length", target, $"Use length {max + 1} for '{name}'.", name, new string('b', max + 1)));
         }
 
         if (!string.IsNullOrWhiteSpace(schema.Pattern))
-        {
-            cases.Add(Case("pattern-invalid", target, $"Use a value intended not to match documented pattern '{schema.Pattern}' for '{name}'.", name, "__pattern_mismatch__"));
-        }
+            cases.Add(Case("pattern-invalid", target, $"Use a value intended not to match pattern '{schema.Pattern}' for '{name}'.", name, "__pattern_mismatch__"));
 
         AddFormatCases(name, target, schema.Format, cases);
+    }
+
+    private static void AddArrayCases(string name, string target, OpenApiSchema schema, List<GeneratedApiTestCase> cases)
+    {
+        cases.Add(Case("array-empty", target, $"Use an empty array for '{name}'.", name, "[]"));
+        cases.Add(Case("wrong-type", target, $"Use a scalar instead of an array for '{name}'.", name, "not-an-array"));
+
+        if (schema.MinItems is not null)
+        {
+            var min = schema.MinItems.Value;
+            if (min > 0) cases.Add(Case("below-min-items", target, $"Use {min - 1} item(s) for '{name}'.", name, ArrayOf(min - 1)));
+            cases.Add(Case("min-items", target, $"Use exact minItems {min} for '{name}'.", name, ArrayOf(min)));
+            cases.Add(Case("above-min-items", target, $"Use {min + 1} item(s) for '{name}'.", name, ArrayOf(min + 1)));
+        }
+
+        if (schema.MaxItems is not null)
+        {
+            var max = schema.MaxItems.Value;
+            if (max > 0) cases.Add(Case("below-max-items", target, $"Use {max - 1} item(s) for '{name}'.", name, ArrayOf(max - 1)));
+            cases.Add(Case("max-items", target, $"Use exact maxItems {max} for '{name}'.", name, ArrayOf(max)));
+            cases.Add(Case("above-max-items", target, $"Use {max + 1} item(s) for '{name}'.", name, ArrayOf(max + 1)));
+        }
+    }
+
+    private static void AddEnumCases(string name, string target, OpenApiSchema schema, List<GeneratedApiTestCase> cases)
+    {
+        if (schema.Enum is not { Count: > 0 }) return;
+        foreach (var value in schema.Enum.Select(FormatAny))
+            cases.Add(Case("enum-valid", target, $"Use documented enum value '{value}' for '{name}'.", name, value));
+        cases.Add(Case("enum-invalid", target, $"Use an undocumented enum value for '{name}'.", name, "__invalid_enum_value__"));
+        cases.Add(Case("enum-case", target, $"Change casing of a documented enum value for '{name}' where meaningful.", name, ToggleCase(FormatAny(schema.Enum[0]))));
     }
 
     private static void AddFormatCases(string name, string target, string? format, List<GeneratedApiTestCase> cases)
@@ -242,82 +225,50 @@ public sealed class OpenApiConstraintTestGenerator
         }
     }
 
-    private static void AddArrayCases(string name, string target, OpenApiSchema schema, List<GeneratedApiTestCase> cases)
+    private static void AddRequestBodyCases(OpenApiRequestBody? body, OpenApiDocument document, List<GeneratedApiTestCase> cases)
     {
-        cases.Add(Case("array-empty", target, $"Use an empty array for '{name}'.", name, "[]"));
-        cases.Add(Case("wrong-type", target, $"Use a scalar instead of an array for '{name}'.", name, "not-an-array"));
-
-        if (schema.MinItems is not null)
-        {
-            var min = schema.MinItems.Value;
-            if (min > 0) cases.Add(Case("below-min-items", target, $"Use {min - 1} item(s) for '{name}'.", name, ArrayOf(min - 1)));
-            cases.Add(Case("min-items", target, $"Use exact minItems {min} for '{name}'.", name, ArrayOf(min)));
-            cases.Add(Case("above-min-items", target, $"Use {min + 1} item(s) for '{name}'.", name, ArrayOf(min + 1)));
-        }
-
-        if (schema.MaxItems is not null)
-        {
-            var max = schema.MaxItems.Value;
-            if (max > 0) cases.Add(Case("below-max-items", target, $"Use {max - 1} item(s) for '{name}'.", name, ArrayOf(max - 1)));
-            cases.Add(Case("max-items", target, $"Use exact maxItems {max} for '{name}'.", name, ArrayOf(max)));
-            cases.Add(Case("above-max-items", target, $"Use {max + 1} item(s) for '{name}'.", name, ArrayOf(max + 1)));
-        }
-    }
-
-    private static void AddRequestBodyCases(OpenApiRequestBody? body, List<GeneratedApiTestCase> cases)
-    {
-        if (body is null)
-            return;
-
-        if (body.Required)
-            cases.Add(Case("required-body", "requestBody", "Omit the required request body."));
+        if (body is null) return;
+        if (body.Required) cases.Add(Case("required-body", "requestBody", "Omit the required request body."));
 
         foreach (var content in body.Content)
         {
-            var schema = content.Value.Schema;
-            if (schema is null)
-                continue;
-
+            var schema = ResolveSchema(content.Value.Schema, document);
             foreach (var required in schema.Required ?? new HashSet<string>())
-            {
-                cases.Add(Case(
-                    "required-body-property",
-                    $"requestBody:{required}",
-                    $"Omit required request-body property '{required}' for content type '{content.Key}'."));
-            }
+                cases.Add(Case("required-body-property", $"requestBody:{required}", $"Omit required request-body property '{required}' for content type '{content.Key}'."));
 
             foreach (var property in schema.Properties ?? new Dictionary<string, OpenApiSchema>())
-                AddBodyPropertyCases(property.Key, property.Value, content.Key, cases);
+                AddBodyPropertyCases(property.Key, ResolveSchema(property.Value, document), content.Key, document, cases);
         }
     }
 
-    private static void AddBodyPropertyCases(string name, OpenApiSchema schema, string contentType, List<GeneratedApiTestCase> cases)
+    private static void AddBodyPropertyCases(string name, OpenApiSchema schema, string contentType, OpenApiDocument document, List<GeneratedApiTestCase> cases)
     {
-        var target = $"requestBody.{name}";
-        var synthetic = new OpenApiParameter
-        {
-            Name = name,
-            In = ParameterLocation.Query,
-            Required = false,
-            Schema = schema
-        };
+        var synthetic = new OpenApiParameter { Name = name, In = ParameterLocation.Query, Required = false, Schema = schema };
         var before = cases.Count;
-        AddParameterCases(synthetic, cases);
+        AddParameterCases(synthetic, document, cases);
         for (var i = before; i < cases.Count; i++)
         {
             var current = cases[i];
             cases[i] = current with
             {
-                Target = target,
-                Description = current.Description.Replace($"parameter '{name}'", $"request-body property '{name}'", StringComparison.Ordinal)
-                    + $" Content-Type: {contentType}."
+                Target = $"requestBody.{name}",
+                Description = current.Description.Replace($"parameter '{name}'", $"request-body property '{name}'", StringComparison.Ordinal) + $" Content-Type: {contentType}."
             };
         }
     }
 
-    private static GeneratedParameterDescriptor ToDescriptor(OpenApiParameter parameter)
+    private static OpenApiSchema ResolveSchema(OpenApiSchema? schema, OpenApiDocument document)
     {
-        var schema = parameter.Schema ?? new OpenApiSchema();
+        if (schema is null) return new OpenApiSchema();
+        var id = schema.Reference?.Id;
+        if (!string.IsNullOrWhiteSpace(id) && document.Components?.Schemas is not null && document.Components.Schemas.TryGetValue(id, out var resolved))
+            return resolved;
+        return schema;
+    }
+
+    private static GeneratedParameterDescriptor ToDescriptor(OpenApiParameter parameter, OpenApiDocument document)
+    {
+        var schema = ResolveSchema(parameter.Schema, document);
         return new GeneratedParameterDescriptor(
             parameter.Name,
             parameter.In.ToString(),
@@ -338,21 +289,9 @@ public sealed class OpenApiConstraintTestGenerator
     private static OperationMatch? FindOperation(OpenApiDocument document, string operationId)
     {
         foreach (var path in document.Paths)
-        {
-            foreach (var operation in path.Value.Operations)
-            {
-                if (string.Equals(operation.Value.OperationId, operationId, StringComparison.OrdinalIgnoreCase))
-                {
-                    return new OperationMatch(
-                        operation.Value.OperationId ?? operationId,
-                        operation.Key.ToString().ToUpperInvariant(),
-                        path.Key,
-                        path.Value,
-                        operation.Value);
-                }
-            }
-        }
-
+        foreach (var operation in path.Value.Operations)
+            if (string.Equals(operation.Value.OperationId, operationId, StringComparison.OrdinalIgnoreCase))
+                return new OperationMatch(operation.Value.OperationId ?? operationId, operation.Key.ToString().ToUpperInvariant(), path.Key, path.Value, operation.Value);
         return null;
     }
 
@@ -366,12 +305,10 @@ public sealed class OpenApiConstraintTestGenerator
 
     private static IReadOnlyList<GeneratedApiTestCase> Deduplicate(IEnumerable<GeneratedApiTestCase> cases)
         => cases.GroupBy(c => $"{c.Category}|{c.Target}|{string.Join(";", c.Inputs.Select(i => $"{i.Key}={i.Value}"))}", StringComparer.Ordinal)
-            .Select(g => g.First())
-            .ToList();
+            .Select(g => g.First()).ToList();
 
     private static GeneratedApiTestCase Case(string category, string target, string description)
         => new(category, target, description, new Dictionary<string, string?>());
-
     private static GeneratedApiTestCase Case(string category, string target, string description, string inputName, string? value)
         => new(category, target, description, new Dictionary<string, string?> { [inputName] = value });
 
@@ -390,10 +327,5 @@ public sealed class OpenApiConstraintTestGenerator
     private static string ToggleCase(string value) => string.Concat(value.Select(ch => char.IsLetter(ch) ? (char.IsUpper(ch) ? char.ToLowerInvariant(ch) : char.ToUpperInvariant(ch)) : ch));
     private static string ArrayOf(int count) => "[" + string.Join(",", Enumerable.Range(0, Math.Max(0, count)).Select(i => $"\"item-{i + 1}\"")) + "]";
 
-    private sealed record OperationMatch(
-        string OperationId,
-        string Method,
-        string Path,
-        OpenApiPathItem PathItem,
-        OpenApiOperation Operation);
+    private sealed record OperationMatch(string OperationId, string Method, string Path, OpenApiPathItem PathItem, OpenApiOperation Operation);
 }
