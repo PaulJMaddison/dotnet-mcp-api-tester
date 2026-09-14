@@ -11,7 +11,11 @@ public sealed class AzureOpenAiOptions
     public int MaxRetries { get; init; } = 2;
     public int MaxResponseBytes { get; init; } = 1_048_576;
     public int MaxInputChars { get; init; } = 120_000;
-    public int MaxCompletionTokens { get; init; } = 1_500;
+
+    // Leave unset by default because Azure Foundry v1 can front model families
+    // with different generation controls. Enable only after choosing a deployment.
+    public int MaxCompletionTokens { get; init; }
+
     public int CircuitBreakerFailureThreshold { get; init; } = 4;
     public int CircuitBreakerBreakSeconds { get; init; } = 30;
 
