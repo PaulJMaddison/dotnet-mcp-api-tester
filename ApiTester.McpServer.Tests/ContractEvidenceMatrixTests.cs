@@ -25,7 +25,7 @@ public sealed class ContractEvidenceMatrixTests
         """);
 
         var chunks = Build(document);
-        var operation = Assert.Single(chunks.Where(c => c.Metadata["EvidenceType"] == "operation"));
+        var operation = Assert.Single(chunks, c => c.Metadata["EvidenceType"] == "operation");
 
         Assert.Contains("METHOD: GET", operation.Text);
         Assert.Contains("PATH: /orders/{id}", operation.Text);
@@ -50,7 +50,7 @@ public sealed class ContractEvidenceMatrixTests
         }
         """);
 
-        var operation = Assert.Single(Build(document).Where(c => c.Metadata["EvidenceType"] == "operation"));
+        var operation = Assert.Single(Build(document), c => c.Metadata["EvidenceType"] == "operation");
 
         Assert.Contains("q in=Query", operation.Text);
         Assert.Contains("type=integer", operation.Text);
@@ -76,7 +76,7 @@ public sealed class ContractEvidenceMatrixTests
         }
         """);
 
-        var order = Assert.Single(Build(document).Where(c => c.Metadata.TryGetValue("SchemaName", out var name) && name == "Order"));
+        var order = Assert.Single(Build(document), c => c.Metadata.TryGetValue("SchemaName", out var name) && name == "Order");
 
         Assert.Contains("required=[name,customer]", order.Text);
         Assert.Contains("minLength=1", order.Text);
