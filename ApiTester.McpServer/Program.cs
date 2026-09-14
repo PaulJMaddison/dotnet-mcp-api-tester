@@ -35,8 +35,14 @@ var azure = new AzureOpenAiOptions
     CircuitBreakerBreakSeconds = builder.Configuration.GetValue<int?>("AzureOpenAI:CircuitBreakerBreakSeconds") ?? 30
 };
 
-azure.ValidateChat();
-azure.ValidateEmbedding();
+var azureStartup = AzureOpenAiStartupValidation.Validate(azure);
+if (!azureStartup.IsValid)
+{
+    Console.Error.WriteLine(azureStartup.ErrorMessage);
+    Environment.ExitCode = 2;
+    return;
+}
+
 builder.Services.AddSingleton(azure);
 
 builder.Services.AddHttpClient("AzureOpenAI", client => client.Timeout = Timeout.InfiniteTimeSpan);
