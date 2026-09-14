@@ -1,4 +1,4 @@
-﻿using ApiTester.Rag.Embeddings;
+using ApiTester.Rag.Embeddings;
 using ApiTester.Rag.Models;
 using ApiTester.Rag.Prompting;
 using ApiTester.Rag.VectorStore;
@@ -14,10 +14,10 @@ public sealed class RagAnswerService
 
     public RagAnswerService(IEmbeddingClient embeddings, IVectorStore store, RagPromptBuilder prompt, IChatCompletionClient chat)
     {
-        _embeddings = embeddings;
-        _store = store;
-        _prompt = prompt;
-        _chat = chat;
+        _embeddings = embeddings ?? throw new ArgumentNullException(nameof(embeddings));
+        _store = store ?? throw new ArgumentNullException(nameof(store));
+        _prompt = prompt ?? throw new ArgumentNullException(nameof(prompt));
+        _chat = chat ?? throw new ArgumentNullException(nameof(chat));
     }
 
     public async Task<RagAnswer> AnswerAsync(Guid projectId, string question, int topK, CancellationToken ct)
@@ -25,7 +25,9 @@ public sealed class RagAnswerService
         if (projectId == Guid.Empty) throw new ArgumentException("projectId required", nameof(projectId));
         if (string.IsNullOrWhiteSpace(question)) throw new ArgumentException("question required", nameof(question));
 
-        var qEmbedding = await _embeddings.EmbedAsync(question, ct).ConfigureAwait(false);
+        ct.ThrowIfCancellationRequested();
+        var trimmedQuestion = question.Trim();
+        var qEmbedding = await _embeddings.EmbedAsync(trimmedQuestion, ct).ConfigureAwait(false);
 
         var evidence = await _store.QueryAsync(
             projectId: projectId,
@@ -41,7 +43,7 @@ public sealed class RagAnswerService
                 evidence);
         }
 
-        var userPrompt = _prompt.BuildUserPrompt(question, evidence);
+        var userPrompt = _prompt.BuildUserPrompt(trimmedQuestion, evidence);
         var answer = await _chat.CompleteAsync(_prompt.SystemPrompt, userPrompt, ct).ConfigureAwait(false);
 
         return new RagAnswer(answer, evidence);
