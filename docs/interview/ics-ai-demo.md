@@ -2,6 +2,8 @@
 
 This guide is deliberately narrow. The goal is to explain one coherent engineering path in 10–15 minutes rather than tour the whole repository.
 
+For the full test inventory and final verification commands, see `docs/interview/ics-ai-test-matrix.md`.
+
 ## One-sentence product story
 
 Give the system an OpenAPI contract; it turns that contract into a controlled API-testing surface and can answer developer questions using project-scoped retrieved evidence instead of allowing the model to invent API behaviour.
@@ -50,7 +52,7 @@ Never commit the key.
 
 Why: this is the application boundary. It shows project-scoped indexing and asking, returns retrieval evidence separately from the generated answer, and keeps the model away from arbitrary execution.
 
-Talking point: "The model answer is not my only observable. I return the retrieved chunk IDs, source and similarity score so retrieval can be debugged independently."
+Talking point: "The model answer is not my only observable. I return the retrieved chunk IDs, source and similarity score so retrieval can be debugged independently. Project and tenant context are enforced again when records are consumed, not trusted solely to the persistence query."
 
 Likely challenge: the current vector store is in-memory. Answer: correct; this is a demo/local implementation behind `IVectorStore`. Production scale would use a durable/vector service without changing the answer service contract.
 
@@ -64,7 +66,7 @@ Talking point: "No evidence means no model call. I would rather return an explic
 
 Why: demonstrates grounding and prompt-injection awareness.
 
-Talking point: "An OpenAPI description is external/untrusted content. The prompt explicitly treats evidence as data even if somebody has put instruction-like text into an API description."
+Talking point: "An OpenAPI description is external/untrusted content. The prompt explicitly treats evidence as data even if somebody has put instruction-like text into an API description. It also explicitly forbids inventing parameters, request fields, auth and error behaviour."
 
 Trade-off: prompt-level controls are defence-in-depth, not a security boundary by themselves. Network/tool permissions remain deterministic application policy.
 
@@ -81,6 +83,7 @@ Talking points:
 - response-size bound.
 - circuit breaker.
 - errors expose status/request ID, not upstream bodies that might contain sensitive content.
+- observability records safe operational metadata, never prompts/spec bodies or credentials.
 
 Likely challenge: bearer token is static. Answer: it exists for short-lived local verification only. Production should use managed/workload identity with automatic refresh.
 
@@ -96,17 +99,18 @@ Why: proves retrieval can use a real Azure embedding deployment rather than a wo
 
 Talking point: "Chat and embeddings are independently configurable. If I have chat but no embedding deployment the system remains usable and clearly reports that it has fallen back to deterministic lexical feature hashing."
 
-### 7. Tests: `ApiTester.Rag.Tests/RagGroundingTests.cs` and `ApiTester.Web.UnitTests/AzureOpenAiClientTests.cs`
+### 7. Tests: use the test matrix rather than showing one happy-path test
 
-Why: finish with evidence.
+Start with `docs/interview/ics-ai-test-matrix.md`, then open two or three representative tests rather than scrolling through the entire suite.
 
-Show:
-- local retrieval ranks shared API terms ahead of unrelated terms;
-- instruction-like content inside evidence remains inside the untrusted-data boundary;
-- zero evidence avoids a model call;
-- Azure v1 endpoint/deployment/API-key contract;
-- embeddings response parsing;
-- 429 retry behaviour.
+Good examples:
+- `ApiTester.Rag.Tests/OpenApiContextContractTests.cs` — proves path/query/header/body variables, required/optional flags, auth, errors and source identity survive into grounded context without cross-project leakage.
+- `ApiTester.Web.UnitTests/RagToolsContextTests.cs` — proves invalid IDs, missing context, project switching, project/tenant fail-closed checks and two-project isolation at the MCP boundary.
+- `ApiTester.Web.UnitTests/AzureOpenAiEdgeCaseTests.cs` — proves the external model dependency is bounded around auth, retries, cancellation, malformed responses, vector failures, response sizes and circuit breaking.
+
+Useful line to say:
+
+"I test context as data with identity and boundaries, not just the final generated string. That means project IDs, spec IDs, parameter names, required flags, auth information and retrieved evidence are independently verifiable before the model answer is trusted."
 
 ## Architecture to draw verbally
 
@@ -132,9 +136,9 @@ MCP/API execution is a separate controlled boundary. The LLM does not receive ar
 
 ## Important trade-offs to acknowledge before they find them
 
-- `InMemoryVectorStore` is suitable for a local demo, not multi-instance production.
+- `InMemoryVectorStore` is suitable for a local demo, not multi-instance production. It now owns/clones vector state and supports re-embedding when the embedding model changes, but persistence and distributed indexing would be a production concern.
 - The offline `DeterministicHashEmbeddingClient` is lexical feature hashing, not semantic embeddings; Azure embeddings are the real semantic path.
-- `TextChunker` is generic. A production OpenAPI specialist could improve retrieval further by creating operation/schema-aware chunks.
+- `TextChunker` is generic. It now preserves small documents and short final tails, but a production OpenAPI specialist could improve retrieval further by creating operation/schema-aware chunks.
 - A static bearer token is only a local verification option; production identity should refresh automatically.
 - The `AiCostEstimate` for an unknown cloud deployment is deliberately marked unknown rather than fabricating Azure pricing.
 - Prompt-injection instructions are defence-in-depth. Deterministic execution policy is the actual authority boundary.
@@ -144,6 +148,8 @@ MCP/API execution is a separate controlled boundary. The LLM does not receive ar
 - Why keep `IAiClient` and `IEmbeddingClient` separate?
 - Why fail closed when no evidence exists?
 - Why expose retrieved evidence to the caller?
+- Why enforce project/tenant context both in persistence and again at the consumption boundary?
+- What happens when the embedding model changes but source content does not?
 - Why not let the agent call arbitrary URLs itself?
 - How would the in-memory vector store change at production scale?
 - Where would managed identity fit?
@@ -151,4 +157,4 @@ MCP/API execution is a separate controlled boundary. The LLM does not receive ar
 
 ## Suggested closing line
 
-"The model is intentionally the least trusted part of the design. OpenAPI is the source evidence, retrieval is visible, model calls are bounded, and execution remains application policy. That means I can change models or hosting providers without giving up the engineering controls around them."
+"The model is intentionally the least trusted part of the design. OpenAPI is the source evidence, retrieval is visible, context identity is enforced, model calls are bounded, and execution remains application policy. That means I can change models or hosting providers without giving up the engineering controls around them."
