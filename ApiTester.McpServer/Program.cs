@@ -27,6 +27,7 @@ builder.Logging.AddConsole(o =>
 
 var appConfig = AppConfig.Load(builder.Configuration);
 builder.Services.AddSingleton(appConfig);
+builder.Services.AddSingleton(McpSafetyOptions.FromConfiguration(builder.Configuration));
 
 var azureOpenAi = new AzureOpenAiOptions
 {
@@ -75,6 +76,8 @@ builder.Services.AddSingleton<SsrfGuard>();
 builder.Services.AddSingleton<EvalRunner>();
 builder.Services.AddSingleton<ProjectContext>();
 builder.Services.AddSingleton<InMemoryVectorStore>();
+builder.Services.AddSingleton<OpenApiEvidenceBuilder>();
+builder.Services.AddSingleton<OpenApiConstraintTestGenerator>();
 
 builder.Services.AddSingleton<IEmbeddingClient>(sp =>
 {
@@ -94,16 +97,9 @@ builder.Services.AddSingleton<IEmbeddingClient>(sp =>
     }
 
     if (!string.IsNullOrWhiteSpace(options.Endpoint) || !string.IsNullOrWhiteSpace(options.EmbeddingDeployment))
-    {
-        logger.LogWarning(
-            "Azure OpenAI embeddings are only partially configured; using deterministic lexical feature hashing. " +
-            "Set Endpoint, EmbeddingDeployment and credentials to enable real embeddings.");
-    }
+        logger.LogWarning("Azure OpenAI embeddings are only partially configured; using deterministic lexical feature hashing. Set Endpoint, EmbeddingDeployment and credentials to enable real embeddings.");
     else
-    {
-        logger.LogInformation(
-            "Azure OpenAI embeddings are not configured; using deterministic lexical feature hashing for local/offline RAG.");
-    }
+        logger.LogInformation("Azure OpenAI embeddings are not configured; using deterministic lexical feature hashing for local/offline RAG.");
 
     return new DeterministicHashEmbeddingClient(512);
 });
@@ -126,15 +122,9 @@ builder.Services.AddSingleton<IAiClient>(sp =>
     }
 
     if (!string.IsNullOrWhiteSpace(options.Endpoint) || !string.IsNullOrWhiteSpace(options.ChatDeployment))
-    {
-        logger.LogWarning(
-            "Azure OpenAI chat is only partially configured; using the local grounded client. " +
-            "Set Endpoint, ChatDeployment and credentials to enable Azure chat.");
-    }
+        logger.LogWarning("Azure OpenAI chat is only partially configured; using the local grounded client. Set Endpoint, ChatDeployment and credentials to enable Azure chat.");
     else
-    {
         logger.LogInformation("Azure OpenAI chat is not configured; using the local grounded client.");
-    }
 
     return new LocalGroundedAiClient();
 });
@@ -144,13 +134,8 @@ builder.Services.AddSingleton<RagRuntime>();
 
 // IMPORTANT: scoped because it uses ITestRunStore which may be SQL (DbContext scoped)
 builder.Services.AddScoped<TestPlanRunner>();
-
 builder.Services.AddHttpClient(TestPlanRunner.HttpClientName)
-    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
-    {
-        UseProxy = false,
-        AllowAutoRedirect = false
-    });
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { UseProxy = false, AllowAutoRedirect = false });
 builder.Services.AddHttpClient();
 
 builder.Services.AddApiTesterPersistence(builder.Configuration);

@@ -16,6 +16,29 @@ public sealed class DescribeTools
         _store = store;
     }
 
+    [McpServerTool, Description("List operations in the loaded OpenAPI document with operation ID, method, path and summary.")]
+    public object ApiListOperations()
+    {
+        var doc = _store.RequireDocument();
+
+        var operations = doc.Paths
+            .OrderBy(path => path.Key, StringComparer.Ordinal)
+            .SelectMany(path => path.Value.Operations
+                .OrderBy(operation => operation.Key.ToString(), StringComparer.Ordinal)
+                .Select(operation => new
+                {
+                    operationId = string.IsNullOrWhiteSpace(operation.Value.OperationId)
+                        ? $"{operation.Key}:{path.Key}"
+                        : operation.Value.OperationId,
+                    method = operation.Key.ToString().ToUpperInvariant(),
+                    path = path.Key,
+                    summary = operation.Value.Summary ?? string.Empty
+                }))
+            .ToList();
+
+        return new { count = operations.Count, operations };
+    }
+
     [McpServerTool, Description("Describe an OpenAPI operation (method, path, params, request body, responses, security) by operationId.")]
     public object ApiDescribeOperation(string operationId)
     {

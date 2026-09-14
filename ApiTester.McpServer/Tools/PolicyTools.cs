@@ -12,14 +12,16 @@ public sealed class PolicyTools
 {
     private readonly ApiRuntimeConfig _cfg;
     private readonly IAuditEventStore _auditStore;
+    private readonly McpSafetyOptions _safety;
 
-    public PolicyTools(ApiRuntimeConfig cfg, IAuditEventStore auditStore)
+    public PolicyTools(ApiRuntimeConfig cfg, IAuditEventStore auditStore, McpSafetyOptions? safety = null)
     {
-        _cfg = cfg;
-        _auditStore = auditStore;
+        _cfg = cfg ?? throw new ArgumentNullException(nameof(cfg));
+        _auditStore = auditStore ?? throw new ArgumentNullException(nameof(auditStore));
+        _safety = safety ?? new McpSafetyOptions(false);
     }
 
-    [McpServerTool, Description("Get the current API execution policy.")]
+    [McpServerTool, Description("Get the current API execution policy and whether this server process permits MCP policy mutation.")]
     public object ApiGetPolicy()
     {
         return new
@@ -34,38 +36,45 @@ public sealed class PolicyTools
             blockLocalhost = _cfg.Policy.BlockLocalhost,
             blockPrivateNetworks = _cfg.Policy.BlockPrivateNetworks,
             retryOnFlake = _cfg.Policy.RetryOnFlake,
-            maxRetries = _cfg.Policy.MaxRetries
+            maxRetries = _cfg.Policy.MaxRetries,
+            mcpPolicyMutationEnabled = _safety.AllowPolicyMutation
         };
     }
 
-    [McpServerTool, Description("Reset the API execution policy to safe defaults (deny-by-default + dryRun).")]
+    [McpServerTool, Description("Reset the API execution policy to safe defaults (deny-by-default + dryRun). This action only tightens controls.")]
     public async Task<object> ApiResetPolicy()
     {
         ApiPolicyDefaults.ApplySafeDefaults(_cfg.Policy);
         await RecordPolicyAuditAsync(AuditActions.PolicyReset, CancellationToken.None);
         return new { ok = true, policy = ApiGetPolicy() };
-
     }
-  
-    
+
     [McpServerTool, Description("Reset runtime state: clears base URL + auth + resets policy to safe defaults.")]
     public async Task<object> ApiResetRuntime()
     {
-        _cfg.ResetRuntime(); // single call, single source of truth
-
+        _cfg.ResetRuntime();
         await RecordPolicyAuditAsync(AuditActions.PolicyReset, CancellationToken.None);
         return new
         {
             ok = true,
-            baseUrl = _cfg.BaseUrl,         // should be null
-            bearerToken = _cfg.BearerToken, // should be null
+            baseUrl = _cfg.BaseUrl,
+            bearerToken = _cfg.BearerToken,
             policy = ApiGetPolicy()
         };
     }
 
-    [McpServerTool, Description("Update the API execution policy. Pass policyJson as a JSON object string.")]
+    [McpServerTool, Description("Update the API execution policy. Disabled by default unless the server process was started with MCP policy mutation explicitly enabled.")]
     public async Task<object> ApiSetPolicy(string policyJson)
     {
+        if (!_safety.AllowPolicyMutation)
+        {
+            return new
+            {
+                isError = true,
+                error = "MCP policy mutation is disabled for this server process. A human operator must enable McpSafety:AllowPolicyMutation or APITESTER_MCP_ALLOW_POLICY_MUTATION before startup."
+            };
+        }
+
         try
         {
             using var doc = JsonDocument.Parse(policyJson);
@@ -74,7 +83,6 @@ public sealed class PolicyTools
             if (root.ValueKind != JsonValueKind.Object)
                 throw new InvalidOperationException("policyJson must be a JSON object.");
 
-            // Start from current policy, patch fields from JSON
             var next = ClonePolicy(_cfg.Policy);
 
             if (root.TryGetProperty("dryRun", out var dryRun))
@@ -86,8 +94,7 @@ public sealed class PolicyTools
                 foreach (var m in methods.EnumerateArray())
                 {
                     var s = (m.GetString() ?? "").Trim();
-                    if (!string.IsNullOrWhiteSpace(s))
-                        next.AllowedMethods.Add(s);
+                    if (!string.IsNullOrWhiteSpace(s)) next.AllowedMethods.Add(s);
                 }
             }
 
@@ -97,31 +104,18 @@ public sealed class PolicyTools
                 foreach (var u in urls.EnumerateArray())
                 {
                     var s = (u.GetString() ?? "").Trim();
-                    if (string.IsNullOrWhiteSpace(s))
-                        continue;
-
-                    // normalise: trim + remove trailing slash
+                    if (string.IsNullOrWhiteSpace(s)) continue;
                     s = s.TrimEnd('/');
-
-                    // basic validation: must be absolute http/https URI
                     if (!Uri.TryCreate(s, UriKind.Absolute, out var uri) ||
                         (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-                    {
                         throw new InvalidOperationException($"Invalid allowedBaseUrl: {s}. Must be absolute http/https URL.");
-                    }
-
                     next.AllowedBaseUrls.Add(s);
                 }
             }
 
             if (root.TryGetProperty("timeoutSeconds", out var timeoutSeconds))
             {
-                var seconds = timeoutSeconds.GetInt32();
-
-                // clamp to sane range for now
-                if (seconds < 1) seconds = 1;
-                if (seconds > 60) seconds = 60;
-
+                var seconds = Math.Clamp(timeoutSeconds.GetInt32(), 1, 60);
                 next.Timeout = TimeSpan.FromSeconds(seconds);
             }
 
@@ -139,31 +133,19 @@ public sealed class PolicyTools
                 next.MaxResponseBodyBytes = v;
             }
 
-            if (root.TryGetProperty("validateSchema", out var validateSchema))
-                next.ValidateSchema = validateSchema.GetBoolean();
-
-            if (root.TryGetProperty("blockLocalhost", out var blockLocalhost))
-                next.BlockLocalhost = blockLocalhost.GetBoolean();
-
-            if (root.TryGetProperty("blockPrivateNetworks", out var blockPrivate))
-                next.BlockPrivateNetworks = blockPrivate.GetBoolean();
-
-            if (root.TryGetProperty("retryOnFlake", out var retryOnFlake))
-                next.RetryOnFlake = retryOnFlake.GetBoolean();
+            if (root.TryGetProperty("validateSchema", out var validateSchema)) next.ValidateSchema = validateSchema.GetBoolean();
+            if (root.TryGetProperty("blockLocalhost", out var blockLocalhost)) next.BlockLocalhost = blockLocalhost.GetBoolean();
+            if (root.TryGetProperty("blockPrivateNetworks", out var blockPrivate)) next.BlockPrivateNetworks = blockPrivate.GetBoolean();
+            if (root.TryGetProperty("retryOnFlake", out var retryOnFlake)) next.RetryOnFlake = retryOnFlake.GetBoolean();
 
             if (root.TryGetProperty("maxRetries", out var maxRetries))
             {
                 var retries = maxRetries.GetInt32();
-                if (retries < 0)
-                    throw new InvalidOperationException("maxRetries must be >= 0.");
+                if (retries < 0) throw new InvalidOperationException("maxRetries must be >= 0.");
                 next.MaxRetries = retries;
             }
 
-            // Final sanity: if dryRun=false and allow list empty, that’s deny-by-default, which is fine.
-            // But do not allow blank methods list, default to GET if cleared accidentally.
-            if (next.AllowedMethods.Count == 0)
-                next.AllowedMethods.Add("GET");
-
+            if (next.AllowedMethods.Count == 0) next.AllowedMethods.Add("GET");
             ApplyPolicy(next);
 
             await RecordPolicyAuditAsync(AuditActions.PolicySet, CancellationToken.None);
@@ -188,36 +170,30 @@ public sealed class PolicyTools
         _cfg.Policy.MaxRetries = policy.MaxRetries;
 
         _cfg.Policy.AllowedMethods.Clear();
-        foreach (var m in policy.AllowedMethods)
-            _cfg.Policy.AllowedMethods.Add(m);
+        foreach (var m in policy.AllowedMethods) _cfg.Policy.AllowedMethods.Add(m);
 
         _cfg.Policy.AllowedBaseUrls.Clear();
-        foreach (var u in policy.AllowedBaseUrls)
-            _cfg.Policy.AllowedBaseUrls.Add(u);
+        foreach (var u in policy.AllowedBaseUrls) _cfg.Policy.AllowedBaseUrls.Add(u);
     }
 
-    private static ApiExecutionPolicy ClonePolicy(ApiExecutionPolicy p)
+    private static ApiExecutionPolicy ClonePolicy(ApiExecutionPolicy p) => new()
     {
-        return new ApiExecutionPolicy
-        {
-            DryRun = p.DryRun,
-            AllowedBaseUrls = p.AllowedBaseUrls.Select(x => x).ToList(),
-            BlockLocalhost = p.BlockLocalhost,
-            BlockPrivateNetworks = p.BlockPrivateNetworks,
-            AllowedMethods = new HashSet<string>(p.AllowedMethods, StringComparer.OrdinalIgnoreCase),
-            Timeout = p.Timeout,
-            MaxRequestBodyBytes = p.MaxRequestBodyBytes,
-            MaxResponseBodyBytes = p.MaxResponseBodyBytes,
-            ValidateSchema = p.ValidateSchema,
-            RetryOnFlake = p.RetryOnFlake,
-            MaxRetries = p.MaxRetries
-        };
-    }
+        DryRun = p.DryRun,
+        AllowedBaseUrls = p.AllowedBaseUrls.Select(x => x).ToList(),
+        BlockLocalhost = p.BlockLocalhost,
+        BlockPrivateNetworks = p.BlockPrivateNetworks,
+        AllowedMethods = new HashSet<string>(p.AllowedMethods, StringComparer.OrdinalIgnoreCase),
+        Timeout = p.Timeout,
+        MaxRequestBodyBytes = p.MaxRequestBodyBytes,
+        MaxResponseBodyBytes = p.MaxResponseBodyBytes,
+        ValidateSchema = p.ValidateSchema,
+        RetryOnFlake = p.RetryOnFlake,
+        MaxRetries = p.MaxRetries
+    };
 
     private async Task RecordPolicyAuditAsync(string action, CancellationToken ct)
     {
         var metadataJson = JsonSerializer.Serialize(ApiGetPolicy());
-
         await _auditStore.CreateAsync(new AuditEventRecord(
             Guid.NewGuid(),
             OrgDefaults.DefaultOrganisationId,

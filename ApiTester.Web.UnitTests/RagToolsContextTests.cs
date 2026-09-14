@@ -20,12 +20,14 @@ public sealed class RagToolsContextTests
         var runtime = Runtime();
         var context = new ProjectContext();
         var specs = new FakeOpenApiSpecStore();
+        var evidence = new OpenApiEvidenceBuilder();
         var logger = NullLogger<RagTools>.Instance;
 
-        Assert.Throws<ArgumentNullException>(() => new RagTools(null!, context, specs, logger));
-        Assert.Throws<ArgumentNullException>(() => new RagTools(runtime, null!, specs, logger));
-        Assert.Throws<ArgumentNullException>(() => new RagTools(runtime, context, null!, logger));
-        Assert.Throws<ArgumentNullException>(() => new RagTools(runtime, context, specs, null!));
+        Assert.Throws<ArgumentNullException>(() => new RagTools(null!, context, specs, evidence, logger));
+        Assert.Throws<ArgumentNullException>(() => new RagTools(runtime, null!, specs, evidence, logger));
+        Assert.Throws<ArgumentNullException>(() => new RagTools(runtime, context, null!, evidence, logger));
+        Assert.Throws<ArgumentNullException>(() => new RagTools(runtime, context, specs, null!, logger));
+        Assert.Throws<ArgumentNullException>(() => new RagTools(runtime, context, specs, evidence, null!));
     }
 
     [Theory]
@@ -312,6 +314,7 @@ public sealed class RagToolsContextTests
             runtime,
             context ?? new ProjectContext(),
             specs ?? new FakeOpenApiSpecStore(),
+            new OpenApiEvidenceBuilder(),
             NullLogger<RagTools>.Instance);
     }
 

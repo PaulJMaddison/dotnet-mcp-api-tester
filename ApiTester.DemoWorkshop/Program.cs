@@ -7,6 +7,8 @@ Console.WriteLine();
 
 var externalSpec = GetArg(args, "--spec");
 var externalQuestion = GetArg(args, "--question");
+var fullDemo = args.Contains("--full-demo", StringComparer.OrdinalIgnoreCase);
+var policyCheckOnly = args.Contains("--policy-check-only", StringComparer.OrdinalIgnoreCase);
 var topK = int.TryParse(GetArg(args, "--top-k"), out var parsedTopK)
     ? Math.Clamp(parsedTopK, 1, 20)
     : 8;
@@ -172,11 +174,53 @@ Require(tools, "api_import_open_api");
 Require(tools, "api_rag_index_project");
 Require(tools, "api_rag_ask");
 
+if (policyCheckOnly)
+{
+    Require(tools, "api_get_policy");
+    Require(tools, "api_set_policy");
+    Require(tools, "api_reset_runtime");
+
+    var initialPolicy = await CallToolAsync("api_get_policy", new { });
+    PrintStep("Policy at process start", initialPolicy);
+    var mutationAttempt = await CallToolAsync("api_set_policy", new
+    {
+        policyJson = "{\"dryRun\":true,\"allowedMethods\":[\"GET\"],\"allowedBaseUrls\":[\"http://127.0.0.1:5055\"],\"blockLocalhost\":false,\"blockPrivateNetworks\":false}"
+    });
+    PrintStep("Policy mutation attempt", mutationAttempt);
+    var reset = await CallToolAsync("api_reset_runtime", new { });
+    PrintStep("Runtime reset", reset);
+    StopServer(proc);
+    return;
+}
+
+if (fullDemo)
+{
+    foreach (var requiredTool in new[]
+    {
+        "api_list_operations", "api_describe_operation", "api_generate_test_plan",
+        "api_get_policy", "api_set_policy", "api_set_base_url", "api_call_operation",
+        "api_run_test_plan", "api_reset_runtime"
+    })
+    {
+        Require(tools, requiredTool);
+    }
+
+    var initialPolicy = await CallToolAsync("api_get_policy", new { });
+    PrintStep("0b) Initial execution policy", initialPolicy);
+
+    var fixturePolicy = await CallToolAsync("api_set_policy", new
+    {
+        policyJson = "{\"dryRun\":true,\"allowedMethods\":[\"GET\",\"POST\"],\"allowedBaseUrls\":[\"http://127.0.0.1:5055\"],\"blockLocalhost\":false,\"blockPrivateNetworks\":false,\"timeoutSeconds\":10}"
+    });
+    PrintStep("0c) Fixture-scoped dry-run policy", fixturePolicy);
+    EnsureOkIfPresent(fixturePolicy, "Fixture policy");
+}
+
 var ping = await CallToolAsync("api_ping", new { });
 PrintStep("1) Ping", ping);
 EnsureOkIfPresent(ping, "Ping");
 
-var created = await CallToolAsync("api_create_project", new { name = "Grounded API Demo" });
+var created = await CallToolAsync("api_create_project", new { name = fullDemo ? "ICS Interview Demo" : "Grounded API Demo" });
 PrintStep("2) Create project", created);
 EnsureOkIfPresent(created, "Create project");
 
@@ -245,6 +289,20 @@ var imported = await CallToolAsync("api_import_open_api", new { specUrlOrPath = 
 PrintStep("3) Import OpenAPI", imported);
 EnsureOkIfPresent(imported, "Import OpenAPI");
 
+if (fullDemo)
+{
+    var operations = await CallToolAsync("api_list_operations", new { });
+    PrintStep("3b) List operations", operations);
+
+    foreach (var operationId in new[] { "getWidgetById", "createWidget" })
+    {
+        var description = await CallToolAsync("api_describe_operation", new { operationId });
+        PrintStep($"3c) Describe {operationId}", description);
+        var plan = await CallToolAsync("api_generate_test_plan", new { operationId });
+        PrintStep($"3d) Deterministic plan for {operationId}", plan);
+    }
+}
+
 var indexed = await CallToolAsync("api_rag_index_project", new { projectId = projectId.ToString() });
 PrintStep("4) RAG index", indexed);
 EnsureOkIfPresent(indexed, "RAG index");
@@ -266,7 +324,43 @@ var asked = await CallToolAsync("api_rag_ask", new
 PrintStep("5) Grounded RAG answer", asked);
 EnsureOkIfPresent(asked, "RAG ask");
 
-if (tools.Contains("api_eval_run", StringComparer.OrdinalIgnoreCase))
+if (fullDemo)
+{
+    var baseUrl = await CallToolAsync("api_set_base_url", new { baseUrl = "http://127.0.0.1:5055" });
+    PrintStep("6) Set fixture base URL", baseUrl);
+
+    foreach (var idValue in new[] { 0, 1, 10000 })
+    {
+        var dryRun = await CallToolAsync("api_call_operation", new
+        {
+            operationId = "getWidgetById",
+            pathParamsJson = JsonSerializer.Serialize(new { id = idValue })
+        });
+        PrintStep($"6b) Dry-run getWidgetById id={idValue}", dryRun);
+    }
+
+    var livePolicy = await CallToolAsync("api_set_policy", new
+    {
+        policyJson = "{\"dryRun\":false,\"allowedMethods\":[\"GET\",\"POST\"],\"allowedBaseUrls\":[\"http://127.0.0.1:5055\"],\"blockLocalhost\":false,\"blockPrivateNetworks\":false,\"timeoutSeconds\":10}"
+    });
+    PrintStep("7) Fixture-scoped live policy", livePolicy);
+    EnsureOkIfPresent(livePolicy, "Live fixture policy");
+
+    foreach (var idValue in new[] { 0, 1, 10000 })
+    {
+        var liveCall = await CallToolAsync("api_call_operation", new
+        {
+            operationId = "getWidgetById",
+            pathParamsJson = JsonSerializer.Serialize(new { id = idValue })
+        });
+        PrintStep($"7b) Live getWidgetById id={idValue}", liveCall);
+    }
+
+    var reset = await CallToolAsync("api_reset_runtime", new { });
+    PrintStep("8) Runtime reset", reset);
+}
+
+if (!fullDemo && tools.Contains("api_eval_run", StringComparer.OrdinalIgnoreCase))
 {
     var eval = await CallToolAsync("api_eval_run", new { projectId = projectId.ToString() });
     PrintStep("6) Eval run", eval);
@@ -275,8 +369,7 @@ if (tools.Contains("api_eval_run", StringComparer.OrdinalIgnoreCase))
 
 try
 {
-    if (!proc.HasExited)
-        proc.Kill(entireProcessTree: true);
+    StopServer(proc);
 }
 catch
 {
@@ -309,4 +402,10 @@ static string? GetArg(string[] arguments, string name)
     }
 
     return null;
+}
+
+static void StopServer(Process process)
+{
+    if (!process.HasExited)
+        process.Kill(entireProcessTree: true);
 }

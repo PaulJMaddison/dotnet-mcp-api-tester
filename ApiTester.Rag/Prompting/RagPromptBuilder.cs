@@ -58,7 +58,7 @@ Output format (use these headings exactly):
         sb.AppendLine("Cite [chunk:...] for every factual API claim.");
         sb.AppendLine();
         sb.AppendLine("If the question asks for code examples:");
-        sb.AppendLine("- Use generic placeholders for base URL (for example https://api.example.com) unless evidence provides a real one.");
+        sb.AppendLine("- If evidence does not provide a base URL, use only the documented relative path and explicitly say the base URL is not present in the evidence. Never invent or substitute a placeholder hostname.");
         sb.AppendLine("- For auth, show headers only when evidence specifies the scheme.");
         sb.AppendLine("- Do not add query parameters unless they exist in evidence.");
 
