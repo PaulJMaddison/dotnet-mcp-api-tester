@@ -28,6 +28,40 @@ public sealed class AzureOpenAiOptions
     public bool IsEmbeddingConfigured =>
         HasCredentials && !string.IsNullOrWhiteSpace(Endpoint) && !string.IsNullOrWhiteSpace(EmbeddingDeployment);
 
+    public void ValidateCommon()
+    {
+        _ = GetApiBaseUri();
+
+        if (TimeoutSeconds <= 0)
+            throw new InvalidOperationException("AzureOpenAI:TimeoutSeconds must be greater than zero.");
+        if (MaxRetries < 0)
+            throw new InvalidOperationException("AzureOpenAI:MaxRetries must not be negative.");
+        if (MaxResponseBytes <= 0)
+            throw new InvalidOperationException("AzureOpenAI:MaxResponseBytes must be greater than zero.");
+        if (MaxInputChars <= 0)
+            throw new InvalidOperationException("AzureOpenAI:MaxInputChars must be greater than zero.");
+        if (CircuitBreakerFailureThreshold <= 0)
+            throw new InvalidOperationException("AzureOpenAI:CircuitBreakerFailureThreshold must be greater than zero.");
+        if (CircuitBreakerBreakSeconds <= 0)
+            throw new InvalidOperationException("AzureOpenAI:CircuitBreakerBreakSeconds must be greater than zero.");
+    }
+
+    public void ValidateChat()
+    {
+        ValidateCommon();
+        if (!IsChatConfigured)
+            throw new InvalidOperationException(
+                "Azure OpenAI chat is not fully configured. Endpoint, ChatDeployment and credentials are required.");
+    }
+
+    public void ValidateEmbedding()
+    {
+        ValidateCommon();
+        if (!IsEmbeddingConfigured)
+            throw new InvalidOperationException(
+                "Azure OpenAI embeddings are not fully configured. Endpoint, EmbeddingDeployment and credentials are required.");
+    }
+
     public Uri GetApiBaseUri()
     {
         if (!Uri.TryCreate(Endpoint?.Trim(), UriKind.Absolute, out var endpoint))
@@ -35,6 +69,9 @@ public sealed class AzureOpenAiOptions
 
         if (!string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Azure OpenAI endpoint must use HTTPS.");
+
+        if (!string.IsNullOrEmpty(endpoint.Query) || !string.IsNullOrEmpty(endpoint.Fragment))
+            throw new InvalidOperationException("AzureOpenAI:Endpoint must not contain a query string or fragment.");
 
         var value = endpoint.ToString().TrimEnd('/');
         if (!value.EndsWith("/openai/v1", StringComparison.OrdinalIgnoreCase))
