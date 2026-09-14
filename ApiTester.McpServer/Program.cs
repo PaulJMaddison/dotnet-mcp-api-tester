@@ -1,4 +1,4 @@
-﻿using ApiTester.AI;
+using ApiTester.AI;
 using ApiTester.AI.Azure;
 using ApiTester.AI.Local;
 using ApiTester.McpServer.Evals;
@@ -20,8 +20,6 @@ var builder = Host.CreateApplicationBuilder(args);
 
 builder.Logging.AddConsole(o =>
 {
-    // MCP stdio uses stdout for protocol messages.
-    // Send logs to stderr or you'll corrupt the JSON-RPC stream.
     o.LogToStandardErrorThreshold = LogLevel.Information;
 });
 
@@ -43,6 +41,9 @@ var azureOpenAi = new AzureOpenAiOptions
     Authentication = FirstNonEmpty(
         builder.Configuration["AzureOpenAI:Authentication"],
         Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTHENTICATION")),
+    CredentialSource = FirstNonEmpty(
+        builder.Configuration["AzureOpenAI:CredentialSource"],
+        Environment.GetEnvironmentVariable("AZURE_OPENAI_CREDENTIAL_SOURCE")),
     ApiKey = FirstNonEmpty(
         builder.Configuration["AzureOpenAI:ApiKey"],
         Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY")),
@@ -61,15 +62,12 @@ builder.Services.AddSingleton(azureOpenAi);
 
 builder.Services.AddHttpClient("AzureOpenAI", client =>
 {
-    // Per-request timeout is controlled by AzureOpenAiTransport so cancellation
-    // remains explicit and retry attempts get a fresh timeout window.
     client.Timeout = Timeout.InfiniteTimeSpan;
 });
 builder.Services.AddSingleton(sp => new AzureOpenAiTransport(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("AzureOpenAI"),
     sp.GetRequiredService<AzureOpenAiOptions>()));
 
-// Core services
 builder.Services.AddSingleton<OpenApiStore>();
 builder.Services.AddSingleton<ApiRuntimeConfig>();
 builder.Services.AddSingleton<SsrfGuard>();
@@ -87,9 +85,12 @@ builder.Services.AddSingleton<IEmbeddingClient>(sp =>
     if (options.IsEmbeddingConfigured)
     {
         logger.LogInformation(
-            "Using Azure OpenAI embedding deployment {EmbeddingDeployment} for RAG retrieval with {AuthenticationMode} authentication.",
+            "Using Azure OpenAI embedding deployment {EmbeddingDeployment} with {AuthenticationMode}/{CredentialSource}.",
             options.EmbeddingDeployment,
-            options.GetAuthenticationMode());
+            options.GetAuthenticationMode(),
+            options.GetAuthenticationMode() == AzureOpenAiAuthenticationMode.DefaultAzureCredential
+                ? options.GetCredentialSource()
+                : AzureOpenAiCredentialSource.Default);
 
         return new AzureOpenAiEmbeddingClient(
             sp.GetRequiredService<AzureOpenAiTransport>(),
@@ -112,9 +113,12 @@ builder.Services.AddSingleton<IAiClient>(sp =>
     if (options.IsChatConfigured)
     {
         logger.LogInformation(
-            "Using Azure OpenAI chat deployment {ChatDeployment} for grounded answers with {AuthenticationMode} authentication.",
+            "Using Azure OpenAI chat deployment {ChatDeployment} with {AuthenticationMode}/{CredentialSource}.",
             options.ChatDeployment,
-            options.GetAuthenticationMode());
+            options.GetAuthenticationMode(),
+            options.GetAuthenticationMode() == AzureOpenAiAuthenticationMode.DefaultAzureCredential
+                ? options.GetCredentialSource()
+                : AzureOpenAiCredentialSource.Default);
 
         return new AzureOpenAiClient(
             sp.GetRequiredService<AzureOpenAiTransport>(),
@@ -132,7 +136,6 @@ builder.Services.AddSingleton<IAiClient>(sp =>
 builder.Services.AddSingleton<IChatCompletionClient, AiClientChatCompletionClient>();
 builder.Services.AddSingleton<RagRuntime>();
 
-// IMPORTANT: scoped because it uses ITestRunStore which may be SQL (DbContext scoped)
 builder.Services.AddScoped<TestPlanRunner>();
 builder.Services.AddHttpClient(TestPlanRunner.HttpClientName)
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { UseProxy = false, AllowAutoRedirect = false });
