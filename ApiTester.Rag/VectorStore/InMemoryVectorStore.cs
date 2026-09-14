@@ -1,4 +1,4 @@
-﻿using ApiTester.Rag.Models;
+using ApiTester.Rag.Models;
 
 namespace ApiTester.Rag.VectorStore;
 
@@ -11,6 +11,7 @@ public sealed class InMemoryVectorStore : IVectorStore
 
     public Task UpsertAsync(IReadOnlyList<(RagChunk Chunk, float[] Embedding)> items, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(items);
         ct.ThrowIfCancellationRequested();
         if (items.Count == 0) return Task.CompletedTask;
 
@@ -18,20 +19,35 @@ public sealed class InMemoryVectorStore : IVectorStore
         {
             foreach (var (chunk, embedding) in items)
             {
+                ct.ThrowIfCancellationRequested();
+                if (chunk is null)
+                    throw new ArgumentException("Vector-store items must contain a chunk.", nameof(items));
+                if (embedding is null || embedding.Length == 0)
+                    throw new ArgumentException("Vector-store items must contain a non-empty embedding.", nameof(items));
+
+                // Own the vector state. Callers must not be able to mutate indexed
+                // retrieval behaviour after the upsert returns.
+                var ownedEmbedding = embedding.ToArray();
                 var idx = _items.FindIndex(x =>
                     x.Chunk.ProjectId == chunk.ProjectId &&
                     x.Chunk.ChunkId == chunk.ChunkId);
 
                 if (idx >= 0)
                 {
-                    if (_items[idx].Chunk.ContentHash == chunk.ContentHash)
+                    var existing = _items[idx];
+                    if (existing.Chunk.ContentHash == chunk.ContentHash &&
+                        existing.Embedding.AsSpan().SequenceEqual(ownedEmbedding))
+                    {
                         continue;
+                    }
 
-                    _items[idx] = new Stored(chunk, embedding);
+                    // Replace even when content is unchanged if the embedding changed.
+                    // This supports re-indexing after an embedding-model migration.
+                    _items[idx] = new Stored(chunk, ownedEmbedding);
                 }
                 else
                 {
-                    _items.Add(new Stored(chunk, embedding));
+                    _items.Add(new Stored(chunk, ownedEmbedding));
                 }
             }
         }
@@ -47,6 +63,9 @@ public sealed class InMemoryVectorStore : IVectorStore
         CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        if (projectId == Guid.Empty) throw new ArgumentException("projectId required", nameof(projectId));
+        ArgumentNullException.ThrowIfNull(embedding);
+        if (embedding.Length == 0) throw new ArgumentException("embedding must not be empty", nameof(embedding));
         if (topK <= 0) throw new ArgumentOutOfRangeException(nameof(topK));
 
         List<Stored> snapshot;
@@ -69,22 +88,33 @@ public sealed class InMemoryVectorStore : IVectorStore
 
     private static bool MatchesFilters(RagChunk chunk, IReadOnlyDictionary<string, string> filters)
     {
-        foreach (var (k, v) in filters)
+        foreach (var (key, expected) in filters)
         {
-            if (k.Equals("SourceType", StringComparison.OrdinalIgnoreCase))
+            if (key.Equals("SourceType", StringComparison.OrdinalIgnoreCase))
             {
-                if (!chunk.SourceType.Equals(v, StringComparison.OrdinalIgnoreCase)) return false;
+                if (!chunk.SourceType.Equals(expected, StringComparison.OrdinalIgnoreCase)) return false;
                 continue;
             }
 
-            if (k.Equals("SourceId", StringComparison.OrdinalIgnoreCase))
+            if (key.Equals("SourceId", StringComparison.OrdinalIgnoreCase))
             {
-                if (!chunk.SourceId.Equals(v, StringComparison.OrdinalIgnoreCase)) return false;
+                if (!chunk.SourceId.Equals(expected, StringComparison.OrdinalIgnoreCase)) return false;
                 continue;
             }
 
-            if (!chunk.Metadata.TryGetValue(k, out var actual)) return false;
-            if (!actual.Equals(v, StringComparison.OrdinalIgnoreCase)) return false;
+            var found = false;
+            foreach (var (metadataKey, actual) in chunk.Metadata)
+            {
+                if (!metadataKey.Equals(key, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                found = true;
+                if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
+                    return false;
+                break;
+            }
+
+            if (!found) return false;
         }
 
         return true;
