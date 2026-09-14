@@ -1,4 +1,3 @@
-@"
 # Visual Studio
 .vs/
 *.user
@@ -8,6 +7,14 @@
 bin/
 obj/
 .nuget/
+artifacts/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+secrets.json
 
 # Rider / JetBrains
 .idea/
@@ -15,6 +22,7 @@ obj/
 # OS
 .DS_Store
 Thumbs.db
-"@ | Out-File -Encoding utf8 .gitignore
-/ApiTester.McpServer/run-history/default
+
+# Local application data
+/ApiTester.McpServer/run-history/default/
 /ApiTester.Site/Properties/launchSettings.json

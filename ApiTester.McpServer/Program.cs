@@ -40,13 +40,13 @@ builder.Services.AddSingleton<IEmbeddingClient>(_ => new DeterministicHashEmbedd
 builder.Services.AddSingleton<IAiClient>(sp =>
 {
     var cfg = sp.GetRequiredService<IConfiguration>();
+    var provider = cfg["AI:Provider"];
+    var options = cfg.GetSection(AzureOpenAiOptions.SectionName).Get<AzureOpenAiOptions>() ?? new AzureOpenAiOptions();
 
-    var endpoint = cfg["AzureOpenAI:Endpoint"];
-    var deployment = cfg["AzureOpenAI:ChatDeployment"];
-
-    if (!string.IsNullOrWhiteSpace(endpoint) && !string.IsNullOrWhiteSpace(deployment))
+    if (string.Equals(provider, "AzureOpenAI", StringComparison.OrdinalIgnoreCase) && options.IsConfigured)
     {
-        return new AzureOpenAiClient();
+        var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+        return new AzureOpenAiClient(httpClientFactory.CreateClient(nameof(AzureOpenAiClient)), options);
     }
 
     return new LocalGroundedAiClient();

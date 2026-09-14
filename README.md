@@ -78,6 +78,8 @@ dotnet build -c Release
 dotnet test -c Release
 ```
 
+Azure OpenAI is configured keylessly through Microsoft Entra ID. See [Azure OpenAI and secret storage](docs/azure-openai.md) for local `az login`, managed identity, Key Vault, and ignored `.env` guidance.
+
 ## Testing
 
 Run all unit/integration tests:

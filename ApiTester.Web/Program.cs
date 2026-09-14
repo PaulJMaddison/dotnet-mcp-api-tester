@@ -26,6 +26,8 @@ using ApiTester.Web.AbuseProtection;
 using ApiTester.Web.Jobs;
 using ApiTester.Web.Errors;
 using ApiTester.AI;
+using ApiTester.AI.Azure;
+using ApiTester.AI.Local;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -119,13 +121,32 @@ builder.Services.AddHttpClient(TestPlanRunner.HttpClientName)
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<RunComparisonService>();
 builder.Services.AddScoped<BaselineComparisonService>();
-builder.Services.AddSingleton<IAiClient, NullAiClient>();
+builder.Services.AddSingleton<IAiClient>(sp =>
+{
+    var provider = builder.Configuration["AI:Provider"];
+    var options = builder.Configuration.GetSection(AzureOpenAiOptions.SectionName).Get<AzureOpenAiOptions>() ?? new AzureOpenAiOptions();
+
+    if (string.Equals(provider, "AzureOpenAI", StringComparison.OrdinalIgnoreCase) && options.IsConfigured)
+    {
+        var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+        return new AzureOpenAiClient(httpClientFactory.CreateClient(nameof(AzureOpenAiClient)), options);
+    }
+
+    if (string.Equals(provider, "Local", StringComparison.OrdinalIgnoreCase))
+        return new LocalGroundedAiClient();
+
+    return new NullAiClient();
+});
 builder.Services.Configure<AiRateLimitOptions>(builder.Configuration.GetSection("AI:RateLimits"));
 builder.Services.Configure<OpenAiProviderOptions>(builder.Configuration.GetSection("AI:OpenAI"));
 builder.Services.AddSingleton<AiRateLimiter>();
 builder.Services.AddHttpClient(nameof(OpenAiProvider));
 builder.Services.AddSingleton<IAiProvider>(sp =>
 {
+    var provider = builder.Configuration["AI:Provider"];
+    if (string.Equals(provider, "AzureOpenAI", StringComparison.OrdinalIgnoreCase))
+        return new AzureOpenAiProvider(sp.GetRequiredService<IAiClient>());
+
     var options = sp.GetRequiredService<IOptions<OpenAiProviderOptions>>().Value;
     var configuredKey = string.IsNullOrWhiteSpace(options.ApiKey)
         ? builder.Configuration["AI:OpenAI:ApiKey"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY")
