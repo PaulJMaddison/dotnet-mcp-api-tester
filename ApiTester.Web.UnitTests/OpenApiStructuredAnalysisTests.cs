@@ -71,7 +71,6 @@ public sealed class OpenApiStructuredAnalysisTests
         Assert.Contains(plan.Parameters, p => p.Name == "customerId" && p.Location == "Path" && p.Required);
         Assert.Contains(plan.Parameters, p => p.Name == "dryRun" && p.Location == "Query" && !p.Required);
         Assert.Contains(plan.Parameters, p => p.Name == "X-Correlation-Id" && p.Location == "Header");
-
         Assert.Contains(plan.TestCases, c => c.Category == "required" && c.Target == "Path:customerId");
         Assert.Contains(plan.TestCases, c => c.Category == "format-invalid" && c.Target == "Path:customerId");
         Assert.Contains(plan.TestCases, c => c.Category == "boolean" && c.Target == "Query:dryRun");
@@ -109,12 +108,15 @@ public sealed class OpenApiStructuredAnalysisTests
     [Fact]
     public void ConstraintGenerator_IsDeterministicForSameContract()
     {
-        var first = GeneratePlan();
-        var second = GeneratePlan();
-
-        Assert.Equal(first.Parameters, second.Parameters);
-        Assert.Equal(first.TestCases, second.TestCases);
+        var first = Normalize(GeneratePlan());
+        var second = Normalize(GeneratePlan());
+        Assert.Equal(first, second);
     }
+
+    private static string[] Normalize(GeneratedOperationTestPlan plan) =>
+        plan.Parameters.Select(p => $"P|{p.Location}|{p.Name}|{p.Required}|{p.Type}|{p.Format}|{p.Minimum}|{p.Maximum}|{p.MinLength}|{p.MaxLength}|{string.Join(',', p.EnumValues)}")
+            .Concat(plan.TestCases.Select(c => $"T|{c.Category}|{c.Target}|{c.Description}|{string.Join(';', c.Inputs.OrderBy(i => i.Key).Select(i => $"{i.Key}={i.Value}"))}"))
+            .ToArray();
 
     private static GeneratedOperationTestPlan GeneratePlan()
     {
@@ -142,38 +144,19 @@ public sealed class OpenApiStructuredAnalysisTests
       "paths": {
         "/customers/{customerId}/payments": {
           "parameters": [
-            {
-              "name": "customerId",
-              "in": "path",
-              "required": true,
-              "schema": { "type": "string", "format": "uuid" }
-            }
+            { "name": "customerId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
           ],
           "post": {
             "operationId": "createPayment",
             "summary": "Create a payment",
             "description": "Creates a payment for the selected customer.",
             "parameters": [
-              {
-                "name": "dryRun",
-                "in": "query",
-                "required": false,
-                "schema": { "type": "boolean" }
-              },
-              {
-                "name": "X-Correlation-Id",
-                "in": "header",
-                "required": false,
-                "schema": { "type": "string", "minLength": 8, "maxLength": 64 }
-              }
+              { "name": "dryRun", "in": "query", "required": false, "schema": { "type": "boolean" } },
+              { "name": "X-Correlation-Id", "in": "header", "required": false, "schema": { "type": "string", "minLength": 8, "maxLength": 64 } }
             ],
             "requestBody": {
               "required": true,
-              "content": {
-                "application/json": {
-                  "schema": { "$ref": "#/components/schemas/CreatePaymentRequest" }
-                }
-              }
+              "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreatePaymentRequest" } } }
             },
             "security": [{ "bearerAuth": [] }],
             "responses": {
@@ -185,11 +168,7 @@ public sealed class OpenApiStructuredAnalysisTests
       },
       "components": {
         "securitySchemes": {
-          "bearerAuth": {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT"
-          }
+          "bearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" }
         },
         "schemas": {
           "CreatePaymentRequest": {
