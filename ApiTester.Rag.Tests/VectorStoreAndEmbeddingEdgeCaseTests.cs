@@ -69,6 +69,14 @@ public sealed class VectorStoreAndEmbeddingEdgeCaseTests
     }
 
     [Fact]
+    public async Task Store_NullUpsertCollection_Throws()
+    {
+        var store = new InMemoryVectorStore();
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            store.UpsertAsync(null!, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Store_EmptyUpsert_IsNoOp()
     {
         var store = new InMemoryVectorStore();
@@ -79,14 +87,74 @@ public sealed class VectorStoreAndEmbeddingEdgeCaseTests
     }
 
     [Fact]
-    public async Task Store_SameChunkAndSameHash_DoesNotReplaceExistingEmbedding()
+    public async Task Store_NullChunkInUpsert_Throws()
+    {
+        var store = new InMemoryVectorStore();
+        IReadOnlyList<(RagChunk Chunk, float[] Embedding)> items =
+            new (RagChunk, float[])[] { (null!, new float[] { 1, 0 }) };
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.UpsertAsync(items, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Store_NullOrEmptyEmbeddingInUpsert_Throws()
+    {
+        var store = new InMemoryVectorStore();
+        var chunk = Chunk(Guid.NewGuid(), "c1", "hash", "customer");
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.UpsertAsync(new[] { (chunk, (float[])null!) }, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.UpsertAsync(new[] { (chunk, Array.Empty<float>()) }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Store_SameChunkSameHashAndSameEmbedding_IsIdempotent()
     {
         var projectId = Guid.NewGuid();
         var store = new InMemoryVectorStore();
         var chunk = Chunk(projectId, "c1", "same-hash", "customer");
 
         await store.UpsertAsync(new[] { (chunk, new float[] { 1, 0 }) }, CancellationToken.None);
-        await store.UpsertAsync(new[] { (chunk with { Text = "changed text but same content hash" }, new float[] { 0, 1 }) }, CancellationToken.None);
+        await store.UpsertAsync(new[] { (chunk, new float[] { 1, 0 }) }, CancellationToken.None);
+
+        var results = await store.QueryAsync(projectId, new float[] { 1, 0 }, 10, null, CancellationToken.None);
+
+        Assert.Single(results);
+        Assert.Equal("c1", results[0].Chunk.ChunkId);
+        Assert.Equal(1f, results[0].Score, 5);
+    }
+
+    [Fact]
+    public async Task Store_SameChunkAndSameHash_ReplacesChangedEmbeddingForModelMigration()
+    {
+        var projectId = Guid.NewGuid();
+        var store = new InMemoryVectorStore();
+        var original = Chunk(projectId, "c1", "same-hash", "customer");
+        var reembedded = original with { Text = "customer" };
+
+        await store.UpsertAsync(new[] { (original, new float[] { 1, 0 }) }, CancellationToken.None);
+        await store.UpsertAsync(new[] { (reembedded, new float[] { 0, 1 }) }, CancellationToken.None);
+
+        var againstOldVector = await store.QueryAsync(projectId, new float[] { 1, 0 }, 1, null, CancellationToken.None);
+        var againstNewVector = await store.QueryAsync(projectId, new float[] { 0, 1 }, 1, null, CancellationToken.None);
+
+        Assert.Equal(0f, againstOldVector[0].Score, 5);
+        Assert.Equal(1f, againstNewVector[0].Score, 5);
+    }
+
+    [Fact]
+    public async Task Store_ClonesEmbeddingSoCallerMutationCannotChangeIndexedState()
+    {
+        var projectId = Guid.NewGuid();
+        var store = new InMemoryVectorStore();
+        var chunk = Chunk(projectId, "c1", "hash", "customer");
+        var callerOwned = new float[] { 1, 0 };
+
+        await store.UpsertAsync(new[] { (chunk, callerOwned) }, CancellationToken.None);
+        callerOwned[0] = 0;
+        callerOwned[1] = 1;
 
         var results = await store.QueryAsync(projectId, new float[] { 1, 0 }, 1, null, CancellationToken.None);
 
@@ -133,6 +201,27 @@ public sealed class VectorStoreAndEmbeddingEdgeCaseTests
         Assert.Single(b);
         Assert.Equal("alpha", a[0].Chunk.Text);
         Assert.Equal("beta", b[0].Chunk.Text);
+    }
+
+    [Fact]
+    public async Task Store_QueryRejectsEmptyProjectId()
+    {
+        var store = new InMemoryVectorStore();
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.QueryAsync(Guid.Empty, new float[] { 1 }, 1, null, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Store_QueryRejectsNullOrEmptyEmbedding()
+    {
+        var store = new InMemoryVectorStore();
+        var projectId = Guid.NewGuid();
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            store.QueryAsync(projectId, null!, 1, null, CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.QueryAsync(projectId, Array.Empty<float>(), 1, null, CancellationToken.None));
     }
 
     [Fact]
@@ -195,7 +284,7 @@ public sealed class VectorStoreAndEmbeddingEdgeCaseTests
     }
 
     [Fact]
-    public async Task Store_FiltersByMetadataCaseInsensitively()
+    public async Task Store_FiltersByMetadataKeyAndValueCaseInsensitively()
     {
         var projectId = Guid.NewGuid();
         var store = new InMemoryVectorStore();
@@ -218,7 +307,7 @@ public sealed class VectorStoreAndEmbeddingEdgeCaseTests
             projectId,
             new float[] { 1, 0 },
             10,
-            new Dictionary<string, string> { ["Version"] = "v2" },
+            new Dictionary<string, string> { ["vErSiOn"] = "v2" },
             CancellationToken.None);
 
         Assert.Single(results);
