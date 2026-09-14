@@ -47,11 +47,19 @@ Azure AI is required. This project intentionally has no mock, local or determini
 
 ## Azure AI configuration
 
-For local development, Azure CLI authentication keeps secrets out of the repository:
+Azure authentication belongs to the **local MCP process**, not to the model. Claude or Codex never needs to receive your Azure credential and there is deliberately no MCP tool for setting an Azure API key or bearer token.
+
+### Recommended for local development: Azure CLI / Microsoft Entra ID
+
+Authenticate once with Azure CLI:
 
 ```powershell
 az login
+```
 
+The signed-in identity must have permission to use the Azure OpenAI resource. Then configure only the resource/deployment information and tell the MCP process to use the Azure CLI identity:
+
+```powershell
 $env:AZURE_OPENAI_ENDPOINT='https://<resource>.openai.azure.com/openai/v1/'
 $env:AZURE_OPENAI_CHAT_DEPLOYMENT='<chat-deployment>'
 $env:AZURE_OPENAI_EMBEDDING_DEPLOYMENT='<embedding-deployment>'
@@ -59,7 +67,40 @@ $env:AZURE_OPENAI_AUTHENTICATION='DefaultAzureCredential'
 $env:AZURE_OPENAI_CREDENTIAL_SOURCE='AzureCli'
 ```
 
-For Azure-hosted use, set `AZURE_OPENAI_CREDENTIAL_SOURCE=ManagedIdentity` instead. API-key and bearer-token authentication are also supported; never commit credentials.
+The flow is:
+
+```text
+Claude / Codex
+      ↓ MCP stdio
+API Tester MCP process
+      ↓ Azure.Identity / Azure CLI credential
+Azure OpenAI
+```
+
+The model never sees the credential.
+
+For Azure-hosted execution, use managed identity instead:
+
+```powershell
+$env:AZURE_OPENAI_AUTHENTICATION='DefaultAzureCredential'
+$env:AZURE_OPENAI_CREDENTIAL_SOURCE='ManagedIdentity'
+```
+
+### Alternative: Azure OpenAI API key
+
+For users who do not use Azure CLI/RBAC, API-key authentication is also supported:
+
+```powershell
+$env:AZURE_OPENAI_ENDPOINT='https://<resource>.openai.azure.com/openai/v1/'
+$env:AZURE_OPENAI_CHAT_DEPLOYMENT='<chat-deployment>'
+$env:AZURE_OPENAI_EMBEDDING_DEPLOYMENT='<embedding-deployment>'
+$env:AZURE_OPENAI_AUTHENTICATION='ApiKey'
+$env:AZURE_OPENAI_API_KEY='<your key>'
+```
+
+Keep the real key in the local process environment or an MCP-client secret/environment configuration. Never commit it and never paste it into a Claude/Codex prompt.
+
+If required configuration is missing or invalid, the MCP process exits before starting stdio and writes actionable setup guidance to **stderr**. It never echoes configured keys or tokens.
 
 ## Build and test
 
@@ -100,7 +141,7 @@ command = "dotnet"
 args = ["run", "--project", "./ApiTester.McpServer/ApiTester.McpServer.csproj"]
 ```
 
-Start Codex from the repository when using the relative project path.
+Start Codex from the repository when using the relative project path. If your MCP client does not inherit the shell environment, configure the non-secret Azure settings and any API key in that client's MCP process environment rather than passing credentials through chat.
 
 ## Connect it to Claude Code
 
@@ -117,7 +158,7 @@ claude mcp get api-tester
 claude mcp list
 ```
 
-Use `--scope user` if you want the MCP server available across Claude Code projects rather than only the current project.
+Use `--scope user` if you want the MCP server available across Claude Code projects rather than only the current project. As with Codex, credentials belong to the spawned MCP process environment or Azure CLI identity, never to an MCP prompt/tool call.
 
 ## Core MCP workflow
 
@@ -161,7 +202,7 @@ $env:APITESTER_MCP_ALLOW_POLICY_MUTATION='true'
 
 Use that only for a supervised development session. Then allow only the target URL and HTTP methods you actually want the agent to exercise. Link-local metadata addresses remain blocked.
 
-Bearer tokens and base-URL overrides live only in the process. They are not stored anywhere.
+Target-API bearer tokens and base-URL overrides live only in the process. Azure AI credentials are also process-start configuration and are never exposed through MCP tools. Nothing is stored anywhere.
 
 ## Why in memory?
 
