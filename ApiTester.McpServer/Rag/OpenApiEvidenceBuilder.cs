@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using ApiTester.McpServer.Models;
+using ApiTester.McpServer.Services;
 using ApiTester.Rag.Models;
 using Microsoft.OpenApi.Any;
 using Microsoft.OpenApi.Models;
@@ -47,9 +48,7 @@ public sealed class OpenApiEvidenceBuilder
             {
                 var method = operationEntry.Key.ToString().ToUpperInvariant();
                 var operation = operationEntry.Value;
-                var operationId = string.IsNullOrWhiteSpace(operation.OperationId)
-                    ? $"{method.ToLowerInvariant()}_{Sanitize(path.Key)}"
-                    : operation.OperationId.Trim();
+                var operationId = OpenApiOperationIdentity.GetEffectiveOperationId(operationEntry.Key, path.Key, operation);
 
                 var text = BuildOperationText(document, path.Key, path.Value, method, operationId, operation, spec);
                 var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -167,9 +166,6 @@ public sealed class OpenApiEvidenceBuilder
             sb.AppendLine("EVIDENCE TYPE: OpenAPI component schema");
             sb.AppendLine($"API: {spec.Title} {spec.Version}".TrimEnd());
             sb.AppendLine($"SCHEMA: {schemaEntry.Key}");
-            // Component entries may retain their own Reference metadata after parsing.
-            // Summarise the resolved definition here; operation-level references should
-            // remain references so the operation and schema evidence stay distinct.
             sb.AppendLine($"DEFINITION: {SummarizeSchema(schemaEntry.Value, includeProperties: true, preferReference: false)}");
 
             var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -328,12 +324,4 @@ public sealed class OpenApiEvidenceBuilder
 
     private static string ComputeSha256Hex(string text)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
-
-    private static string Sanitize(string value)
-    {
-        var sb = new StringBuilder(value.Length);
-        foreach (var ch in value)
-            sb.Append(char.IsLetterOrDigit(ch) ? char.ToLowerInvariant(ch) : '_');
-        return sb.ToString().Trim('_');
-    }
 }
