@@ -13,16 +13,15 @@ public sealed class AzureOpenAiEmbeddingClient : IEmbeddingClient
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _options = options ?? throw new ArgumentNullException(nameof(options));
-
-        if (!_options.IsEmbeddingConfigured)
-            throw new InvalidOperationException(
-                "Azure OpenAI embeddings are not fully configured. Endpoint, EmbeddingDeployment and credentials are required.");
+        _options.ValidateEmbedding();
     }
 
     public async Task<float[]> EmbedAsync(string text, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(text))
             throw new ArgumentException("Text is required for embedding.", nameof(text));
+
+        ct.ThrowIfCancellationRequested();
 
         var input = text.Length <= _options.MaxInputChars
             ? text
