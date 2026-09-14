@@ -28,6 +28,43 @@ builder.Logging.AddConsole(o =>
 var appConfig = AppConfig.Load(builder.Configuration);
 builder.Services.AddSingleton(appConfig);
 
+var azureOpenAi = new AzureOpenAiOptions
+{
+    Endpoint = FirstNonEmpty(
+        builder.Configuration["AzureOpenAI:Endpoint"],
+        Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")),
+    ChatDeployment = FirstNonEmpty(
+        builder.Configuration["AzureOpenAI:ChatDeployment"],
+        Environment.GetEnvironmentVariable("AZURE_OPENAI_CHAT_DEPLOYMENT")),
+    EmbeddingDeployment = FirstNonEmpty(
+        builder.Configuration["AzureOpenAI:EmbeddingDeployment"],
+        Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")),
+    ApiKey = FirstNonEmpty(
+        builder.Configuration["AzureOpenAI:ApiKey"],
+        Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY")),
+    BearerToken = FirstNonEmpty(
+        builder.Configuration["AzureOpenAI:BearerToken"],
+        Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTH_TOKEN")),
+    TimeoutSeconds = builder.Configuration.GetValue<int?>("AzureOpenAI:TimeoutSeconds") ?? 30,
+    MaxRetries = builder.Configuration.GetValue<int?>("AzureOpenAI:MaxRetries") ?? 2,
+    MaxResponseBytes = builder.Configuration.GetValue<int?>("AzureOpenAI:MaxResponseBytes") ?? 1_048_576,
+    MaxInputChars = builder.Configuration.GetValue<int?>("AzureOpenAI:MaxInputChars") ?? 120_000,
+    MaxCompletionTokens = builder.Configuration.GetValue<int?>("AzureOpenAI:MaxCompletionTokens") ?? 1_500,
+    CircuitBreakerFailureThreshold = builder.Configuration.GetValue<int?>("AzureOpenAI:CircuitBreakerFailureThreshold") ?? 4,
+    CircuitBreakerBreakSeconds = builder.Configuration.GetValue<int?>("AzureOpenAI:CircuitBreakerBreakSeconds") ?? 30
+};
+builder.Services.AddSingleton(azureOpenAi);
+
+builder.Services.AddHttpClient("AzureOpenAI", client =>
+{
+    // Per-request timeout is controlled by AzureOpenAiTransport so cancellation
+    // remains explicit and retry attempts get a fresh timeout window.
+    client.Timeout = Timeout.InfiniteTimeSpan;
+});
+builder.Services.AddSingleton(sp => new AzureOpenAiTransport(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("AzureOpenAI"),
+    sp.GetRequiredService<AzureOpenAiOptions>()));
+
 // Core services
 builder.Services.AddSingleton<OpenApiStore>();
 builder.Services.AddSingleton<ApiRuntimeConfig>();
@@ -35,27 +72,60 @@ builder.Services.AddSingleton<SsrfGuard>();
 builder.Services.AddSingleton<EvalRunner>();
 builder.Services.AddSingleton<ProjectContext>();
 builder.Services.AddSingleton<InMemoryVectorStore>();
-builder.Services.AddSingleton<IEmbeddingClient>(_ => new DeterministicHashEmbeddingClient(256));
+
+builder.Services.AddSingleton<IEmbeddingClient>(sp =>
+{
+    var options = sp.GetRequiredService<AzureOpenAiOptions>();
+    if (options.IsEmbeddingConfigured)
+    {
+        return new AzureOpenAiEmbeddingClient(
+            sp.GetRequiredService<AzureOpenAiTransport>(),
+            options);
+    }
+
+    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("ApiTester.Rag.Embeddings");
+    if (!string.IsNullOrWhiteSpace(options.Endpoint) || !string.IsNullOrWhiteSpace(options.EmbeddingDeployment))
+    {
+        logger.LogWarning(
+            "Azure OpenAI embeddings are only partially configured; using deterministic lexical feature hashing. " +
+            "Set Endpoint, EmbeddingDeployment and credentials to enable real embeddings.");
+    }
+    else
+    {
+        logger.LogInformation(
+            "Azure OpenAI embeddings are not configured; using deterministic lexical feature hashing for local/offline RAG.");
+    }
+
+    return new DeterministicHashEmbeddingClient(512);
+});
 
 builder.Services.AddSingleton<IAiClient>(sp =>
 {
-    var cfg = sp.GetRequiredService<IConfiguration>();
-
-    var endpoint = cfg["AzureOpenAI:Endpoint"];
-    var deployment = cfg["AzureOpenAI:ChatDeployment"];
-
-    if (!string.IsNullOrWhiteSpace(endpoint) && !string.IsNullOrWhiteSpace(deployment))
+    var options = sp.GetRequiredService<AzureOpenAiOptions>();
+    if (options.IsChatConfigured)
     {
-        return new AzureOpenAiClient();
+        return new AzureOpenAiClient(
+            sp.GetRequiredService<AzureOpenAiTransport>(),
+            options);
+    }
+
+    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("ApiTester.AI");
+    if (!string.IsNullOrWhiteSpace(options.Endpoint) || !string.IsNullOrWhiteSpace(options.ChatDeployment))
+    {
+        logger.LogWarning(
+            "Azure OpenAI chat is only partially configured; using the local grounded client. " +
+            "Set Endpoint, ChatDeployment and credentials to enable Azure chat.");
+    }
+    else
+    {
+        logger.LogInformation("Azure OpenAI chat is not configured; using the local grounded client.");
     }
 
     return new LocalGroundedAiClient();
 });
 
-
 builder.Services.AddSingleton<IChatCompletionClient, AiClientChatCompletionClient>();
 builder.Services.AddSingleton<RagRuntime>();
-
 
 // IMPORTANT: scoped because it uses ITestRunStore which may be SQL (DbContext scoped)
 builder.Services.AddScoped<TestPlanRunner>();
@@ -76,3 +146,6 @@ builder.Services
     .WithToolsFromAssembly();
 
 await builder.Build().RunAsync();
+
+static string FirstNonEmpty(params string?[] values) =>
+    values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? string.Empty;
