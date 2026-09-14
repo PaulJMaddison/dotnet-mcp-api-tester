@@ -72,6 +72,8 @@ builder.Services.AddSingleton<SsrfGuard>();
 builder.Services.AddSingleton<EvalRunner>();
 builder.Services.AddSingleton<ProjectContext>();
 builder.Services.AddSingleton<InMemoryVectorStore>();
+builder.Services.AddSingleton<OpenApiEvidenceBuilder>();
+builder.Services.AddSingleton<OpenApiConstraintTestGenerator>();
 
 builder.Services.AddSingleton<IEmbeddingClient>(sp =>
 {
