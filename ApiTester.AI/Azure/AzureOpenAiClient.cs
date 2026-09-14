@@ -1,98 +1,134 @@
-using System.Diagnostics;
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using ApiTester.AI.Cost;
-using Azure.Core;
-using Azure.Identity;
 
 namespace ApiTester.AI.Azure;
 
 public sealed class AzureOpenAiClient : IAiClient
 {
-    private static readonly string[] TokenScopes = ["https://ai.azure.com/.default"];
-    private readonly HttpClient _httpClient;
+    private readonly AzureOpenAiTransport _transport;
     private readonly AzureOpenAiOptions _options;
-    private readonly TokenCredential _credential;
 
-    public AzureOpenAiClient(HttpClient httpClient, AzureOpenAiOptions options, TokenCredential? credential = null)
+    public AzureOpenAiClient(AzureOpenAiTransport transport, AzureOpenAiOptions options)
     {
-        ArgumentNullException.ThrowIfNull(httpClient);
-        ArgumentNullException.ThrowIfNull(options);
-
-        if (!options.IsConfigured)
-        {
-            throw new InvalidOperationException(
-                $"Azure OpenAI is not configured. Set {AzureOpenAiOptions.SectionName}:Endpoint, ChatDeployment, and Authentication=DefaultAzureCredential.");
-        }
-
-        _httpClient = httpClient;
-        _options = options;
-        _credential = credential ?? new DefaultAzureCredential();
+        _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _options.ValidateChat();
     }
 
     public async Task<AiResponse> GetResponseAsync(AiPrompt prompt, CancellationToken ct = default)
     {
-        var stopwatch = Stopwatch.StartNew();
-        var token = await _credential.GetTokenAsync(new TokenRequestContext(TokenScopes), ct);
-        var endpoint = _options.Endpoint.TrimEnd('/') + "/chat/completions";
-        var requestBody = new
+        ArgumentNullException.ThrowIfNull(prompt);
+        ct.ThrowIfCancellationRequested();
+
+        var system = Truncate(prompt.System, _options.MaxInputChars);
+        var remaining = Math.Max(1, _options.MaxInputChars - system.Length);
+        var user = Truncate(prompt.User, remaining);
+
+        var payload = new Dictionary<string, object?>
         {
-            model = _options.ChatDeployment,
-            messages = new[]
+            ["model"] = _options.ChatDeployment,
+            ["messages"] = new object[]
             {
-                new { role = "system", content = prompt.System },
-                new { role = "user", content = prompt.User }
-            },
-            temperature = 0.2,
-            max_tokens = Math.Clamp(_options.MaxOutputTokens, 1, 16_384)
+                new { role = "system", content = system },
+                new { role = "user", content = user }
+            }
         };
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(5, _options.TimeoutSeconds)));
+        if (_options.MaxCompletionTokens > 0)
+            payload["max_completion_tokens"] = _options.MaxCompletionTokens;
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
-        request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+        var response = await _transport.PostJsonAsync("chat/completions", payload, ct).ConfigureAwait(false);
 
-        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new HttpRequestException(
-                $"Azure OpenAI returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}).",
-                null,
-                response.StatusCode);
-        }
-
-        await using var responseStream = await response.Content.ReadAsStreamAsync(timeout.Token);
-        using var document = await JsonDocument.ParseAsync(responseStream, cancellationToken: timeout.Token);
+        using var document = JsonDocument.Parse(response.Body);
         var root = document.RootElement;
-        var choices = root.GetProperty("choices");
-        if (choices.GetArrayLength() == 0)
-            throw new InvalidOperationException("Azure OpenAI returned no choices.");
 
-        var content = choices[0].GetProperty("message").GetProperty("content").GetString();
-        if (string.IsNullOrWhiteSpace(content))
-            throw new InvalidOperationException("Azure OpenAI returned empty content.");
-
-        var inputTokens = 0;
-        var outputTokens = 0;
-        if (root.TryGetProperty("usage", out var usage))
+        if (!root.TryGetProperty("choices", out var choices) ||
+            choices.ValueKind != JsonValueKind.Array ||
+            choices.GetArrayLength() == 0)
         {
-            inputTokens = ReadInt(usage, "prompt_tokens");
-            outputTokens = ReadInt(usage, "completion_tokens");
+            throw new InvalidOperationException("Azure OpenAI returned no chat choices.");
         }
 
-        stopwatch.Stop();
-        var model = string.IsNullOrWhiteSpace(_options.ModelName) ? _options.ChatDeployment : _options.ModelName;
+        var firstChoice = choices[0];
+        if (!firstChoice.TryGetProperty("message", out var message) ||
+            !message.TryGetProperty("content", out var contentElement))
+        {
+            throw new InvalidOperationException("Azure OpenAI response did not contain message content.");
+        }
+
+        var content = ReadContent(contentElement);
+        if (string.IsNullOrWhiteSpace(content))
+            throw new InvalidOperationException("Azure OpenAI returned empty message content.");
+
+        var usage = ParseUsage(root);
+
         return new AiResponse(
-            content,
-            new AiUsage(inputTokens, outputTokens),
-            (int)stopwatch.ElapsedMilliseconds,
-            model,
-            AiCostCalculator.Estimate(model, inputTokens, outputTokens));
+            Content: content,
+            Usage: usage,
+            ElapsedMs: response.ElapsedMs,
+            Model: _options.ChatDeployment,
+            Cost: AiCostCalculator.Estimate(_options.ChatDeployment, usage.InputTokens, usage.OutputTokens));
     }
 
-    private static int ReadInt(JsonElement parent, string propertyName)
-        => parent.TryGetProperty(propertyName, out var value) && value.TryGetInt32(out var result) ? result : 0;
+    private static string ReadContent(JsonElement content)
+    {
+        if (content.ValueKind == JsonValueKind.String)
+            return content.GetString() ?? string.Empty;
+
+        if (content.ValueKind != JsonValueKind.Array)
+            return string.Empty;
+
+        var parts = new List<string>();
+        foreach (var item in content.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                var text = item.GetString();
+                if (!string.IsNullOrWhiteSpace(text))
+                    parts.Add(text);
+                continue;
+            }
+
+            if (item.ValueKind == JsonValueKind.Object &&
+                item.TryGetProperty("text", out var textElement) &&
+                textElement.ValueKind == JsonValueKind.String)
+            {
+                var text = textElement.GetString();
+                if (!string.IsNullOrWhiteSpace(text))
+                    parts.Add(text);
+            }
+        }
+
+        return string.Join(Environment.NewLine, parts);
+    }
+
+    private static AiUsage ParseUsage(JsonElement root)
+    {
+        if (!root.TryGetProperty("usage", out var usage) || usage.ValueKind != JsonValueKind.Object)
+            return new AiUsage(0, 0);
+
+        var input = ReadInt(usage, "prompt_tokens", "input_tokens");
+        var output = ReadInt(usage, "completion_tokens", "output_tokens");
+        return new AiUsage(input, output);
+    }
+
+    private static int ReadInt(JsonElement element, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (element.TryGetProperty(name, out var value) && value.TryGetInt32(out var result))
+                return result;
+        }
+
+        return 0;
+    }
+
+    private static string Truncate(string? value, int maxChars)
+    {
+        value ??= string.Empty;
+        if (value.Length <= maxChars)
+            return value;
+
+        return value[..maxChars];
+    }
 }

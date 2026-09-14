@@ -1,15 +1,11 @@
-﻿using ApiTester.AI;
+using ApiTester.AI;
 using ApiTester.AI.Azure;
-using ApiTester.AI.Local;
-using ApiTester.McpServer.Evals;
-using ApiTester.McpServer.Persistence;
 using ApiTester.McpServer.Rag;
-using ApiTester.McpServer.Runtime;
 using ApiTester.McpServer.Services;
+using ApiTester.McpServer.Tools;
 using ApiTester.Rag.Answering;
 using ApiTester.Rag.Embeddings;
 using ApiTester.Rag.VectorStore;
-using System.Net.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -18,49 +14,62 @@ using ModelContextProtocol.Server;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Logging.AddConsole(o =>
+builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Information);
+builder.Services.AddSingleton(McpSafetyOptions.FromConfiguration(builder.Configuration));
+
+var azure = new AzureOpenAiOptions
 {
-    // MCP stdio uses stdout for protocol messages.
-    // Send logs to stderr or you'll corrupt the JSON-RPC stream.
-    o.LogToStandardErrorThreshold = LogLevel.Information;
-});
+    Endpoint = FirstNonEmpty(builder.Configuration["AzureOpenAI:Endpoint"], Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")),
+    ChatDeployment = FirstNonEmpty(builder.Configuration["AzureOpenAI:ChatDeployment"], Environment.GetEnvironmentVariable("AZURE_OPENAI_CHAT_DEPLOYMENT")),
+    EmbeddingDeployment = FirstNonEmpty(builder.Configuration["AzureOpenAI:EmbeddingDeployment"], Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")),
+    Authentication = FirstNonEmpty(builder.Configuration["AzureOpenAI:Authentication"], Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTHENTICATION")),
+    CredentialSource = FirstNonEmpty(builder.Configuration["AzureOpenAI:CredentialSource"], Environment.GetEnvironmentVariable("AZURE_OPENAI_CREDENTIAL_SOURCE")),
+    ApiKey = FirstNonEmpty(builder.Configuration["AzureOpenAI:ApiKey"], Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY")),
+    BearerToken = FirstNonEmpty(builder.Configuration["AzureOpenAI:BearerToken"], Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTH_TOKEN")),
+    TimeoutSeconds = builder.Configuration.GetValue<int?>("AzureOpenAI:TimeoutSeconds") ?? 30,
+    MaxRetries = builder.Configuration.GetValue<int?>("AzureOpenAI:MaxRetries") ?? 2,
+    MaxResponseBytes = builder.Configuration.GetValue<int?>("AzureOpenAI:MaxResponseBytes") ?? 1_048_576,
+    MaxInputChars = builder.Configuration.GetValue<int?>("AzureOpenAI:MaxInputChars") ?? 120_000,
+    MaxEmbeddingBatchChars = builder.Configuration.GetValue<int?>("AzureOpenAI:MaxEmbeddingBatchChars") ?? 24_000,
+    MaxCompletionTokens = builder.Configuration.GetValue<int?>("AzureOpenAI:MaxCompletionTokens") ?? 0,
+    CircuitBreakerFailureThreshold = builder.Configuration.GetValue<int?>("AzureOpenAI:CircuitBreakerFailureThreshold") ?? 4,
+    CircuitBreakerBreakSeconds = builder.Configuration.GetValue<int?>("AzureOpenAI:CircuitBreakerBreakSeconds") ?? 30
+};
 
-var appConfig = AppConfig.Load(builder.Configuration);
-builder.Services.AddSingleton(appConfig);
+var azureStartup = AzureOpenAiStartupValidation.Validate(azure);
+if (!azureStartup.IsValid)
+{
+    Console.Error.WriteLine(azureStartup.ErrorMessage);
+    Environment.ExitCode = 2;
+    return;
+}
 
-// Core services
+builder.Services.AddSingleton(azure);
+
+builder.Services.AddHttpClient("AzureOpenAI", client => client.Timeout = Timeout.InfiniteTimeSpan);
+builder.Services.AddSingleton(sp => new AzureOpenAiTransport(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("AzureOpenAI"),
+    sp.GetRequiredService<AzureOpenAiOptions>()));
+
 builder.Services.AddSingleton<OpenApiStore>();
 builder.Services.AddSingleton<ApiRuntimeConfig>();
 builder.Services.AddSingleton<SsrfGuard>();
-builder.Services.AddSingleton<EvalRunner>();
-builder.Services.AddSingleton<ProjectContext>();
 builder.Services.AddSingleton<InMemoryVectorStore>();
-builder.Services.AddSingleton<IEmbeddingClient>(_ => new DeterministicHashEmbeddingClient(256));
+builder.Services.AddSingleton<OpenApiEvidenceBuilder>();
+builder.Services.AddSingleton<OpenApiConstraintTestGenerator>();
 
-builder.Services.AddSingleton<IAiClient>(sp =>
-{
-    var cfg = sp.GetRequiredService<IConfiguration>();
-    var provider = cfg["AI:Provider"];
-    var options = cfg.GetSection(AzureOpenAiOptions.SectionName).Get<AzureOpenAiOptions>() ?? new AzureOpenAiOptions();
+builder.Services.AddSingleton<IEmbeddingClient>(sp => new AzureOpenAiEmbeddingClient(
+    sp.GetRequiredService<AzureOpenAiTransport>(),
+    sp.GetRequiredService<AzureOpenAiOptions>()));
 
-    if (string.Equals(provider, "AzureOpenAI", StringComparison.OrdinalIgnoreCase) && options.IsConfigured)
-    {
-        var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-        return new AzureOpenAiClient(httpClientFactory.CreateClient(nameof(AzureOpenAiClient)), options);
-    }
-
-    return new LocalGroundedAiClient();
-});
-
+builder.Services.AddSingleton<IAiClient>(sp => new AzureOpenAiClient(
+    sp.GetRequiredService<AzureOpenAiTransport>(),
+    sp.GetRequiredService<AzureOpenAiOptions>()));
 
 builder.Services.AddSingleton<IChatCompletionClient, AiClientChatCompletionClient>();
 builder.Services.AddSingleton<RagRuntime>();
 
-
-// IMPORTANT: scoped because it uses ITestRunStore which may be SQL (DbContext scoped)
-builder.Services.AddScoped<TestPlanRunner>();
-
-builder.Services.AddHttpClient(TestPlanRunner.HttpClientName)
+builder.Services.AddHttpClient(ExecuteTools.HttpClientName)
     .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
     {
         UseProxy = false,
@@ -68,11 +77,12 @@ builder.Services.AddHttpClient(TestPlanRunner.HttpClientName)
     });
 builder.Services.AddHttpClient();
 
-builder.Services.AddApiTesterPersistence(builder.Configuration);
-
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
     .WithToolsFromAssembly();
 
 await builder.Build().RunAsync();
+
+static string FirstNonEmpty(params string?[] values) =>
+    values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? string.Empty;

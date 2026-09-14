@@ -1,9 +1,8 @@
-﻿using System.ComponentModel;
-using ApiTester.McpServer.Models;
-using ApiTester.McpServer.Persistence.Stores;
+using System.ComponentModel;
 using ApiTester.McpServer.Rag;
-using ApiTester.McpServer.Runtime;
-using Microsoft.Extensions.Logging;
+using ApiTester.McpServer.Services;
+using ApiTester.Rag.Embeddings;
+using ApiTester.Rag.VectorStore;
 using ModelContextProtocol.Server;
 
 namespace ApiTester.McpServer.Tools;
@@ -11,104 +10,58 @@ namespace ApiTester.McpServer.Tools;
 [McpServerToolType]
 public sealed class RagTools
 {
+    private readonly OpenApiStore _store;
+    private readonly IEmbeddingClient _embeddings;
+    private readonly InMemoryVectorStore _vectors;
     private readonly RagRuntime _rag;
-    private readonly ProjectContext _ctx;
-    private readonly IOpenApiSpecStore _specs;
-    private readonly ILogger<RagTools> _logger;
 
-    public RagTools(RagRuntime rag, ProjectContext ctx, IOpenApiSpecStore specs, ILogger<RagTools> logger)
+    public RagTools(OpenApiStore store, IEmbeddingClient embeddings, InMemoryVectorStore vectors, RagRuntime rag)
     {
+        _store = store;
+        _embeddings = embeddings;
+        _vectors = vectors;
         _rag = rag;
-        _ctx = ctx;
-        _specs = specs;
-        _logger = logger;
     }
 
-    [McpServerTool, Description("Index the given project's OpenAPI specs into a local vector store for RAG. If projectId is omitted, uses the current project.")]
-    public async Task<object> ApiRagIndexProject(string? projectId = null, CancellationToken ct = default)
+    [McpServerTool, Description("Search the loaded OpenAPI contract semantically and return the most relevant operation/schema/security evidence without calling the chat model.")]
+    public async Task<object> ApiSearchContract(string query, int topK = 8, CancellationToken ct = default)
     {
-        // Deterministic, stateless behaviour for demos and automation
-        if (!string.IsNullOrWhiteSpace(projectId))
-        {
-            if (!Guid.TryParse(projectId, out var pid))
-                return new { ok = false, reason = "Invalid projectId GUID." };
+        if (string.IsNullOrWhiteSpace(query))
+            throw new ArgumentException("query is required.", nameof(query));
 
-            _ctx.SetCurrentProject(pid);
-        }
-
-        var current = _ctx.CurrentProjectId;
-        if (current is null)
-            return new { ok = false, reason = "No current project. Pass projectId or call ApiSetCurrentProject or ApiCreateProject first." };
-
-        var specs = await _specs.ListAsync(OrgDefaults.DefaultOrganisationId, current.Value, ct).ConfigureAwait(false);
-
-        var indexedChunks = 0;
-
-        foreach (var spec in specs)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            var chunks = _rag.Chunker.Chunk(
-                projectId: spec.ProjectId,
-                sourceType: "openapi",
-                sourceId: spec.SpecId.ToString(),
-                text: spec.SpecJson,
-                metadata: new Dictionary<string, string>
-                {
-                    ["Title"] = spec.Title,
-                    ["Version"] = spec.Version
-                },
-                createdUtc: spec.CreatedUtc);
-
-            await _rag.Indexer.IndexAsync(chunks, ct).ConfigureAwait(false);
-            indexedChunks += chunks.Count;
-
-            _logger.LogInformation("Indexed {ChunkCount} chunks for spec {SpecId}", chunks.Count, spec.SpecId);
-        }
+        var snapshot = _store.RequireSnapshot();
+        var vector = await _embeddings.EmbedAsync(query.Trim(), ct).ConfigureAwait(false);
+        var evidence = await _vectors.QueryAsync(snapshot.ScopeId, vector, Math.Clamp(topK, 1, 20), null, ct).ConfigureAwait(false);
 
         return new
         {
-            ok = true,
-            projectId = current.Value,
-            specCount = specs.Count,
-            indexedChunks
+            query = query.Trim(),
+            evidence = evidence.Select(ToResult).ToList()
         };
     }
 
-    [McpServerTool, Description("Ask a question about the given project using RAG over indexed OpenAPI specs. If projectId is omitted, uses the current project.")]
-    public async Task<object> ApiRagAsk(string question, int topK = 10, string? projectId = null, CancellationToken ct = default)
+    [McpServerTool, Description("Ask Azure AI a grounded question about the loaded API using only retrieved OpenAPI evidence.")]
+    public async Task<object> ApiAskContract(string question, int topK = 10, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(question))
-            return new { ok = false, reason = "Question is required." };
+            throw new ArgumentException("question is required.", nameof(question));
 
-        // Deterministic, stateless behaviour for demos and automation
-        if (!string.IsNullOrWhiteSpace(projectId))
-        {
-            if (!Guid.TryParse(projectId, out var pid))
-                return new { ok = false, reason = "Invalid projectId GUID." };
-
-            _ctx.SetCurrentProject(pid);
-        }
-
-        var current = _ctx.CurrentProjectId;
-        if (current is null)
-            return new { ok = false, reason = "No current project. Pass projectId or call ApiSetCurrentProject or ApiCreateProject first." };
-
-        var result = await _rag.Answerer.AnswerAsync(current.Value, question, topK, ct).ConfigureAwait(false);
-
+        var snapshot = _store.RequireSnapshot();
+        var result = await _rag.Answerer.AnswerAsync(snapshot.ScopeId, question.Trim(), topK, ct).ConfigureAwait(false);
         return new
         {
-            ok = true,
-            projectId = current.Value,
             answer = result.Answer,
-            evidence = result.Evidence.Select(e => new
-            {
-                chunkId = e.Chunk.ChunkId,
-                sourceType = e.Chunk.SourceType,
-                sourceId = e.Chunk.SourceId,
-                score = e.Score,
-                preview = e.Chunk.Text.Length <= 220 ? e.Chunk.Text : e.Chunk.Text[..220] + "…"
-            }).ToList()
+            evidence = result.Evidence.Select(ToResult).ToList()
         };
     }
+
+    private static object ToResult(ApiTester.Rag.Models.RagRetrievedChunk item) => new
+    {
+        chunkId = item.Chunk.ChunkId,
+        evidenceType = item.Chunk.Metadata.TryGetValue("EvidenceType", out var evidenceType) ? evidenceType : "unknown",
+        operationId = item.Chunk.Metadata.TryGetValue("OperationId", out var operationId) ? operationId : null,
+        schemaName = item.Chunk.Metadata.TryGetValue("SchemaName", out var schemaName) ? schemaName : null,
+        score = item.Score,
+        text = item.Chunk.Text
+    };
 }

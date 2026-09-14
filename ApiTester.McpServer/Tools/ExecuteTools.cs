@@ -1,6 +1,5 @@
-﻿using ApiTester.McpServer.Serialization;
+using ApiTester.McpServer.Serialization;
 using ApiTester.McpServer.Services;
-using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
@@ -14,27 +13,22 @@ namespace ApiTester.McpServer.Tools;
 [McpServerToolType]
 public sealed class ExecuteTools
 {
+    public const string HttpClientName = "ApiExecution";
+
     private readonly OpenApiStore _store;
     private readonly ApiRuntimeConfig _runtime;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly SsrfGuard _ssrfGuard;
-    private readonly ILogger<ExecuteTools> _logger;
 
-    public ExecuteTools(
-        OpenApiStore store,
-        ApiRuntimeConfig runtime,
-        IHttpClientFactory httpClientFactory,
-        SsrfGuard ssrfGuard,
-        ILogger<ExecuteTools> logger)
+    public ExecuteTools(OpenApiStore store, ApiRuntimeConfig runtime, IHttpClientFactory httpClientFactory, SsrfGuard ssrfGuard)
     {
         _store = store;
         _runtime = runtime;
         _httpClientFactory = httpClientFactory;
         _ssrfGuard = ssrfGuard;
-        _logger = logger;
     }
 
-    [McpServerTool, Description("Execute an OpenAPI operation by operationId. Optional JSON: pathParamsJson, queryParamsJson, headersJson, bodyJson.")]
+    [McpServerTool, Description("Build or execute an OpenAPI operation by operationId. The current policy controls methods, target URLs, network access and dry-run/live behaviour.")]
     public async Task<string> ApiCallOperation(
         string operationId,
         string? pathParamsJson = null,
@@ -44,332 +38,193 @@ public sealed class ExecuteTools
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(operationId))
-            throw new ArgumentException("operationId is required", nameof(operationId));
+            throw new ArgumentException("operationId is required.", nameof(operationId));
 
-        var doc = _store.RequireDocument();
+        var snapshot = _store.RequireSnapshot();
+        var document = snapshot.Document;
+        var match = OpenApiOperationIdentity.Find(document, operationId.Trim())
+            ?? throw new InvalidOperationException($"OperationId not found: {operationId}");
 
-        if (!TryFindOperation(doc, operationId, out var method, out var pathTemplate))
-            throw new InvalidOperationException($"OperationId not found: {operationId}");
-
-        var baseUrl = ResolveBaseUrl(doc, _runtime.BaseUrl);
+        var method = match.Method.ToString().ToUpperInvariant();
+        var baseUrl = ResolveBaseUrl(document, _runtime.BaseUrl, snapshot.Source);
         if (string.IsNullOrWhiteSpace(baseUrl))
-            throw new InvalidOperationException("No base URL available. Call api_set_base_url or ensure the spec contains servers[].");
+            throw new InvalidOperationException("No base URL available. Call api_set_base_url or define servers[] in the OpenAPI contract.");
 
-        _logger.LogInformation("Executing operation {OperationId} {Method} {PathTemplate}", operationId, method, pathTemplate);
-
-        // ---- Day 4 Step 5: Policy enforcement ----
         var policy = _runtime.Policy;
+        var normalisedBaseUrl = baseUrl.TrimEnd('/');
 
-        // A) Method allowlist
         if (!policy.AllowedMethods.Contains(method))
-        {
-            _logger.LogWarning(
-                "Blocked operation {OperationId} due to disallowed method {Method}",
-                operationId,
-                method);
-            return JsonSerializer.Serialize(new
-            {
-                blocked = true,
-                reason = $"Method not allowed by policy: {method}",
-                operationId,
-                method,
-                baseUrl = baseUrl.Trim().TrimEnd('/'),
-                url = (string?)null
-            }, JsonDefaults.Default);
-        }
-
-
-        // B) Base URL allowlist (simple prefix match for now, harden later)
-        var normalisedBaseUrl = baseUrl.Trim().TrimEnd('/');
-
-        if (policy.HostedMode && policy.AllowedBaseUrls.Count == 0)
-        {
-            _logger.LogWarning("Blocked operation {OperationId} in hosted mode due to empty allowed base URLs", operationId);
-            return JsonSerializer.Serialize(new
-            {
-                blocked = true,
-                reason = "Hosted mode requires at least one allowedBaseUrls entry. Deny by default.",
-                operationId,
-                method,
-                baseUrl = normalisedBaseUrl,
-                url = (string?)null
-            }, JsonDefaults.Default);
-        }
+            return Blocked($"Method not allowed by policy: {method}", match.OperationId, method, normalisedBaseUrl);
 
         if (policy.AllowedBaseUrls.Count == 0 && !policy.DryRun)
-        {
-            _logger.LogWarning("Blocked operation {OperationId} due to empty allowed base URLs", operationId);
-            return JsonSerializer.Serialize(new
-            {
-                blocked = true,
-                reason = "No allowedBaseUrls configured, deny by default.",
-                operationId,
-                method,
-                baseUrl = normalisedBaseUrl,
-                url = (string?)null
-            }, JsonDefaults.Default);
-        }
+            return Blocked("No allowedBaseUrls configured. Live execution is deny-by-default.", match.OperationId, method, normalisedBaseUrl);
 
-        if (policy.AllowedBaseUrls.Count > 0 &&
-            !policy.AllowedBaseUrls.Any(allowed =>
-                normalisedBaseUrl.StartsWith(allowed.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase)))
-        {
-            _logger.LogWarning(
-                "Blocked operation {OperationId} due to base URL {BaseUrl} not in allow list",
-                operationId,
-                normalisedBaseUrl);
-            return JsonSerializer.Serialize(new
-            {
-                blocked = true,
-                reason = $"Base URL not allowed by policy: {normalisedBaseUrl}",
-                operationId,
-                method,
-                baseUrl = normalisedBaseUrl,
-                url = (string?)null
-            }, JsonDefaults.Default);
-        }
-
-        // -----------------------------------------
+        if (policy.AllowedBaseUrls.Count > 0 && !policy.AllowedBaseUrls.Any(allowed => IsAllowedBaseUrl(normalisedBaseUrl, allowed)))
+            return Blocked($"Base URL not allowed by policy: {normalisedBaseUrl}", match.OperationId, method, normalisedBaseUrl);
 
         var pathParams = ParseObject(pathParamsJson);
         var queryParams = ParseObject(queryParamsJson);
         var headers = ParseObject(headersJson);
-
-        var path = ApplyPathParams(pathTemplate, pathParams);
-        var url = BuildUrl(baseUrl, path, queryParams);
+        var path = ApplyPathParams(match.Path, pathParams);
+        var url = BuildUrl(normalisedBaseUrl, path, queryParams);
         var uri = new Uri(url);
 
-        var (allowed, reason) = await _ssrfGuard.CheckAsync(
-            uri,
-            blockLocalhost: policy.BlockLocalhost,
-            blockPrivateNetworks: policy.BlockPrivateNetworks,
-            ct: ct);
-
-        if (!allowed && !policy.DryRun)
-        {
-            _logger.LogWarning("Blocked operation {OperationId} due to SSRF policy: {Reason}", operationId, reason);
-            return JsonSerializer.Serialize(new
-            {
-                blocked = true,
-                reason,
-                operationId,
-                method,
-                url
-            }, JsonDefaults.Default);
-        }
-
+        var (networkAllowed, reason) = await _ssrfGuard.CheckAsync(uri, policy.BlockLocalhost, policy.BlockPrivateNetworks, ct).ConfigureAwait(false);
+        if (!networkAllowed && !policy.DryRun)
+            return Blocked(reason ?? "Blocked by network safety policy.", match.OperationId, method, normalisedBaseUrl, url);
 
         using var request = new HttpRequestMessage(new HttpMethod(method), url);
-
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-        foreach (var kvp in headers)
-            request.Headers.TryAddWithoutValidation(kvp.Key, kvp.Value);
+        foreach (var pair in headers)
+            request.Headers.TryAddWithoutValidation(pair.Key, pair.Value);
 
         if (!request.Headers.Contains("Authorization") && !string.IsNullOrWhiteSpace(_runtime.BearerToken))
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _runtime.BearerToken);
 
-        if (!string.IsNullOrWhiteSpace(bodyJson) &&
-            (method is "POST" or "PUT" or "PATCH"))
+        if (!string.IsNullOrWhiteSpace(bodyJson) && method is "POST" or "PUT" or "PATCH")
         {
-            // Optional extra guard: basic request size limit
-            // (uses UTF-8 byte count, policy value is bytes)
-            var bodyBytes = Encoding.UTF8.GetByteCount(bodyJson);
-            if (bodyBytes > policy.MaxRequestBodyBytes)
+            if (Encoding.UTF8.GetByteCount(bodyJson) > policy.MaxRequestBodyBytes)
                 throw new InvalidOperationException($"Request body exceeds MaxRequestBodyBytes ({policy.MaxRequestBodyBytes}).");
-
             request.Content = new StringContent(bodyJson, Encoding.UTF8, "application/json");
         }
 
-        // C) Dry run mode (build request, do not send)
         if (policy.DryRun)
         {
-            _logger.LogInformation("Dry run for operation {OperationId} {Method} {Url}", operationId, method, url);
-            var dryRunResult = new
+            return JsonSerializer.Serialize(new
             {
                 dryRun = true,
-                operationId,
+                operationId = match.OperationId,
                 method,
-                path = pathTemplate,
+                path = match.Path,
                 url,
-                // Helpful for debugging, shows what would be sent
-                requestHeaders = request.Headers.ToDictionary(h => h.Key, h => string.Join(", ", h.Value)),
-                hasBody = request.Content != null,
-                bodyPreview = request.Content == null
-                    ? null
-                    : (bodyJson!.Length > 2000 ? bodyJson[..2000] + "\n... (truncated)" : bodyJson)
-            };
-
-            return JsonSerializer.Serialize(dryRunResult, JsonDefaults.Default);
+                requestHeaders = RedactHeaders(request.Headers),
+                hasBody = request.Content is not null,
+                bodyPreview = request.Content is null ? null : Preview(bodyJson!, 2000)
+            }, JsonDefaults.Default);
         }
 
-        var client = _httpClientFactory.CreateClient(TestPlanRunner.HttpClientName);
+        var client = _httpClientFactory.CreateClient(HttpClientName);
         client.Timeout = policy.Timeout;
 
-        var sw = Stopwatch.StartNew();
-        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-        sw.Stop();
+        var stopwatch = Stopwatch.StartNew();
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        stopwatch.Stop();
 
-        var (responseBody, truncated) = await ReadBodyCappedAsync(response.Content, policy.MaxResponseBodyBytes, ct);
+        var (responseBody, truncated) = await ReadBodyCappedAsync(response.Content, policy.MaxResponseBodyBytes, ct).ConfigureAwait(false);
+        if (truncated) responseBody += "\n... (truncated)";
 
-        if (truncated)
-            responseBody += "\n... (truncated)";
-
-
-        // Existing char cap kept, but also add byte cap aligned with policy
-        // (simple approach: truncate string if UTF-8 byte length exceeds policy max)
-        var responseBytes = Encoding.UTF8.GetByteCount(responseBody);
-        if (responseBytes > policy.MaxResponseBodyBytes)
+        return JsonSerializer.Serialize(new
         {
-            // crude truncation by chars; ok for now, harden later with stream reading
-            const int hardCharLimit = 50_000;
-            responseBody = responseBody.Length > hardCharLimit
-                ? responseBody[..hardCharLimit] + "\n... (truncated)"
-                : responseBody + "\n... (truncated)";
-        }
-        else
-        {
-            const int maxBodyChars = 50_000;
-            if (responseBody.Length > maxBodyChars)
-                responseBody = responseBody[..maxBodyChars] + "\n... (truncated)";
-        }
-
-        var result = new
-        {
-            operationId,
+            operationId = match.OperationId,
             method,
-            path = pathTemplate,
+            path = match.Path,
             url,
             statusCode = (int)response.StatusCode,
             reasonPhrase = response.ReasonPhrase,
-            durationMs = sw.ElapsedMilliseconds,
+            durationMs = stopwatch.ElapsedMilliseconds,
             responseHeaders = response.Headers.ToDictionary(h => h.Key, h => string.Join(", ", h.Value)),
             contentHeaders = response.Content.Headers.ToDictionary(h => h.Key, h => string.Join(", ", h.Value)),
             body = responseBody
-        };
-
-        _logger.LogInformation(
-            "Executed operation {OperationId} {Method} {StatusCode} in {DurationMs}ms",
-            operationId,
-            method,
-            (int)response.StatusCode,
-            sw.ElapsedMilliseconds);
-
-        return JsonSerializer.Serialize(result, JsonDefaults.Default);
+        }, JsonDefaults.Default);
     }
 
-    private static async Task<(string Text, bool Truncated)> ReadBodyCappedAsync(
-        HttpContent content,
-        int maxBytes,
-        CancellationToken ct)
-    {
-        await using var stream = await content.ReadAsStreamAsync(ct);
-        using var ms = new MemoryStream();
+    private static string Blocked(string reason, string operationId, string method, string baseUrl, string? url = null)
+        => JsonSerializer.Serialize(new { blocked = true, reason, operationId, method, baseUrl, url }, JsonDefaults.Default);
 
+    private static bool IsAllowedBaseUrl(string actual, string configured)
+    {
+        if (!Uri.TryCreate(actual, UriKind.Absolute, out var actualUri) ||
+            !Uri.TryCreate(configured.Trim().TrimEnd('/'), UriKind.Absolute, out var allowedUri))
+            return false;
+
+        if (!string.Equals(actualUri.Scheme, allowedUri.Scheme, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(actualUri.Host, allowedUri.Host, StringComparison.OrdinalIgnoreCase) ||
+            actualUri.Port != allowedUri.Port)
+            return false;
+
+        var allowedPath = allowedUri.AbsolutePath.TrimEnd('/');
+        if (allowedPath.Length == 0) return true;
+        var actualPath = actualUri.AbsolutePath.TrimEnd('/');
+        return actualPath.Equals(allowedPath, StringComparison.Ordinal) || actualPath.StartsWith(allowedPath + "/", StringComparison.Ordinal);
+    }
+
+    private static async Task<(string Text, bool Truncated)> ReadBodyCappedAsync(HttpContent content, int maxBytes, CancellationToken ct)
+    {
+        await using var stream = await content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var output = new MemoryStream();
         var buffer = new byte[8192];
         var total = 0;
 
         while (true)
         {
-            var read = await stream.ReadAsync(buffer, 0, buffer.Length, ct);
-            if (read <= 0) break;
-
+            var read = await stream.ReadAsync(buffer.AsMemory(), ct).ConfigureAwait(false);
+            if (read == 0) break;
             var remaining = maxBytes - total;
-            if (remaining <= 0) return (Encoding.UTF8.GetString(ms.ToArray()), true);
-
+            if (remaining <= 0) return (Encoding.UTF8.GetString(output.ToArray()), true);
             var toWrite = Math.Min(read, remaining);
-            ms.Write(buffer, 0, toWrite);
+            output.Write(buffer, 0, toWrite);
             total += toWrite;
-
-            if (toWrite < read) // hit cap
-                return (Encoding.UTF8.GetString(ms.ToArray()), true);
+            if (toWrite < read) return (Encoding.UTF8.GetString(output.ToArray()), true);
         }
 
-        return (Encoding.UTF8.GetString(ms.ToArray()), false);
+        return (Encoding.UTF8.GetString(output.ToArray()), false);
     }
 
-
-    private static bool TryFindOperation(OpenApiDocument doc, string operationId, out string method, out string path)
+    private static string ResolveBaseUrl(OpenApiDocument document, string? runtimeBaseUrl, string? source)
     {
-        foreach (var p in doc.Paths)
-        {
-            foreach (var o in p.Value.Operations)
-            {
-                if (string.Equals(o.Value.OperationId, operationId, StringComparison.Ordinal))
-                {
-                    method = o.Key.ToString().ToUpperInvariant();
-                    path = p.Key;
-                    return true;
-                }
-            }
-        }
+        if (!string.IsNullOrWhiteSpace(runtimeBaseUrl)) return runtimeBaseUrl.Trim().TrimEnd('/');
+        var fromSpec = document.Servers?.FirstOrDefault()?.Url?.Trim();
+        if (string.IsNullOrWhiteSpace(fromSpec)) return string.Empty;
+        if (Uri.TryCreate(fromSpec, UriKind.Absolute, out var absoluteServer))
+            return absoluteServer.ToString().TrimEnd('/');
 
-        method = "";
-        path = "";
-        return false;
-    }
+        if (Uri.TryCreate(source, UriKind.Absolute, out var sourceUri) &&
+            (sourceUri.Scheme == Uri.UriSchemeHttp || sourceUri.Scheme == Uri.UriSchemeHttps))
+            return new Uri(sourceUri, fromSpec).ToString().TrimEnd('/');
 
-    private static string ResolveBaseUrl(OpenApiDocument doc, string? runtimeBaseUrl)
-    {
-        if (!string.IsNullOrWhiteSpace(runtimeBaseUrl))
-            return runtimeBaseUrl.Trim().TrimEnd('/');
-
-        var specUrl = doc.Servers?.FirstOrDefault()?.Url?.Trim();
-        return string.IsNullOrWhiteSpace(specUrl) ? "" : specUrl.TrimEnd('/');
+        throw new InvalidOperationException(
+            "The OpenAPI server URL is relative and cannot be resolved because the contract was not loaded from an HTTP(S) URL. Call api_set_base_url first.");
     }
 
     private static Dictionary<string, string> ParseObject(string? json)
     {
-        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        if (string.IsNullOrWhiteSpace(json))
-            return dict;
-
-        using var doc = JsonDocument.Parse(json);
-
-        if (doc.RootElement.ValueKind != JsonValueKind.Object)
-            throw new InvalidOperationException("Expected a JSON object.");
-
-        foreach (var prop in doc.RootElement.EnumerateObject())
-        {
-            dict[prop.Name] = prop.Value.ValueKind == JsonValueKind.String
-                ? prop.Value.GetString() ?? ""
-                : prop.Value.ToString();
-        }
-
-        return dict;
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(json)) return result;
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("Expected a JSON object.");
+        foreach (var property in document.RootElement.EnumerateObject())
+            result[property.Name] = property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString() ?? string.Empty : property.Value.ToString();
+        return result;
     }
 
-    private static string ApplyPathParams(string pathTemplate, Dictionary<string, string> pathParams)
+    private static string ApplyPathParams(string template, Dictionary<string, string> pathParams)
     {
-        var path = pathTemplate;
-
-        foreach (var kvp in pathParams)
-        {
-            path = path.Replace("{" + kvp.Key + "}", Uri.EscapeDataString(kvp.Value), StringComparison.OrdinalIgnoreCase);
-        }
-
-        if (path.Contains('{') || path.Contains('}'))
-            throw new InvalidOperationException($"Missing required path params for path: {pathTemplate}");
-
+        var path = template;
+        foreach (var pair in pathParams)
+            path = path.Replace("{" + pair.Key + "}", Uri.EscapeDataString(pair.Value), StringComparison.OrdinalIgnoreCase);
+        if (path.Contains('{') || path.Contains('}')) throw new InvalidOperationException($"Missing required path params for path: {template}");
         return path;
     }
 
     private static string BuildUrl(string baseUrl, string path, Dictionary<string, string> queryParams)
     {
-        baseUrl = baseUrl.TrimEnd('/');
-        path = path.StartsWith('/') ? path : "/" + path;
-
-        var sb = new StringBuilder();
-        sb.Append(baseUrl).Append(path);
-
+        var builder = new StringBuilder(baseUrl.TrimEnd('/'));
+        builder.Append(path.StartsWith('/') ? path : "/" + path);
         if (queryParams.Count > 0)
         {
-            sb.Append('?');
-            sb.Append(string.Join("&", queryParams.Select(kvp =>
-                $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}")));
+            builder.Append('?');
+            builder.Append(string.Join("&", queryParams.Select(pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}")));
         }
-
-        return sb.ToString();
+        return builder.ToString();
     }
+
+    private static Dictionary<string, string> RedactHeaders(HttpRequestHeaders headers)
+        => headers.ToDictionary(
+            header => header.Key,
+            header => header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase) ? "[redacted]" : string.Join(", ", header.Value),
+            StringComparer.OrdinalIgnoreCase);
+
+    private static string Preview(string value, int maxChars)
+        => value.Length <= maxChars ? value : value[..maxChars] + "\n... (truncated)";
 }

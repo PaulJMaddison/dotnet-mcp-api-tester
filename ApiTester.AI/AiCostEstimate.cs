@@ -3,4 +3,6 @@
 public sealed record AiCostEstimate(
     decimal InputCostUsd,
     decimal OutputCostUsd,
-    decimal TotalCostUsd);
+    decimal TotalCostUsd,
+    bool IsKnown = true,
+    string? Note = null);

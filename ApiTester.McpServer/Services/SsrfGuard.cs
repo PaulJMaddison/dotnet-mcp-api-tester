@@ -6,9 +6,8 @@ namespace ApiTester.McpServer.Services;
 public sealed class SsrfGuard
 {
     private static readonly string[] BlockedHostSuffixes = [".local"];
-    private static readonly HashSet<string> BlockedHostnames = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> AlwaysBlockedHostnames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "localhost",
         "metadata",
         "metadata.google.internal",
         "metadata.azure.internal"
@@ -36,6 +35,10 @@ public sealed class SsrfGuard
         {
             addresses = await Dns.GetHostAddressesAsync(host, ct);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             return (false, $"DNS resolution failed for host '{host}': {ex.Message}");
@@ -44,11 +47,11 @@ public sealed class SsrfGuard
         if (addresses.Length == 0)
             return (false, $"DNS resolution returned no addresses for host '{host}'.");
 
-        foreach (var addr in addresses)
+        foreach (var address in addresses)
         {
-            var ok = IsIpAllowed(addr, blockLocalhost, blockPrivateNetworks, out var reason);
+            var ok = IsIpAllowed(address, blockLocalhost, blockPrivateNetworks, out var reason);
             if (!ok)
-                return (false, $"Host '{host}' resolves to blocked IP {addr}: {reason}");
+                return (false, $"Host '{host}' resolves to blocked IP {address}: {reason}");
         }
 
         return (true, null);
@@ -64,7 +67,7 @@ public sealed class SsrfGuard
             return true;
         }
 
-        if (BlockedHostnames.Contains(host))
+        if (AlwaysBlockedHostnames.Contains(host))
         {
             reason = $"Blocked host: {host}";
             return true;
@@ -102,47 +105,40 @@ public sealed class SsrfGuard
                 reason = "Loopback address";
                 return false;
             }
-
             return true;
         }
 
         if (ip.AddressFamily == AddressFamily.InterNetwork)
         {
-            var b = ip.GetAddressBytes();
-
-            if (b[0] == 0)
+            var bytes = ip.GetAddressBytes();
+            if (bytes[0] == 0)
             {
                 reason = "Unspecified IPv4 address (0.0.0.0/8)";
                 return false;
             }
-
-            if (b[0] == 169 && b[1] == 254)
+            if (bytes[0] == 169 && bytes[1] == 254)
             {
                 reason = "Link-local IPv4 (includes metadata endpoint range)";
                 return false;
             }
-
-            if (b[0] >= 224 && b[0] <= 239)
+            if (bytes[0] >= 224 && bytes[0] <= 239)
             {
                 reason = "Multicast IPv4 (224.0.0.0/4)";
                 return false;
             }
-
             if (blockPrivate)
             {
-                if (b[0] == 10)
+                if (bytes[0] == 10)
                 {
                     reason = "Private IPv4 (10.0.0.0/8)";
                     return false;
                 }
-
-                if (b[0] == 172 && b[1] >= 16 && b[1] <= 31)
+                if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
                 {
                     reason = "Private IPv4 (172.16.0.0/12)";
                     return false;
                 }
-
-                if (b[0] == 192 && b[1] == 168)
+                if (bytes[0] == 192 && bytes[1] == 168)
                 {
                     reason = "Private IPv4 (192.168.0.0/16)";
                     return false;
@@ -153,19 +149,16 @@ public sealed class SsrfGuard
         if (ip.AddressFamily == AddressFamily.InterNetworkV6)
         {
             var bytes = ip.GetAddressBytes();
-
             if (bytes[0] == 0xFE && (bytes[1] & 0xC0) == 0x80)
             {
                 reason = "Link-local IPv6 (fe80::/10)";
                 return false;
             }
-
             if (bytes[0] == 0xFF)
             {
                 reason = "Multicast IPv6 (ff00::/8)";
                 return false;
             }
-
             if (blockPrivate && (bytes[0] & 0xFE) == 0xFC)
             {
                 reason = "Private IPv6 (fc00::/7)";

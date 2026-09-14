@@ -2,23 +2,25 @@
 
 public static class AiCostCalculator
 {
-    // Simple illustrative rates per 1K tokens
     public static ApiTester.AI.AiCostEstimate Estimate(string model, int inputTokens, int outputTokens)
     {
-        var (inRate, outRate) = model switch
+        if (string.Equals(model, "local-grounded", StringComparison.OrdinalIgnoreCase))
         {
-            "local-grounded-stub" => (0.0005m, 0.001m),
-            _ => (0.002m, 0.002m)
-        };
+            return new ApiTester.AI.AiCostEstimate(
+                InputCostUsd: 0m,
+                OutputCostUsd: 0m,
+                TotalCostUsd: 0m,
+                IsKnown: true,
+                Note: "Local fallback; no external model charge.");
+        }
 
-        var inCost = (inputTokens / 1000m) * inRate;
-        var outCost = (outputTokens / 1000m) * outRate;
-
-        var total = inCost + outCost;
-
+        // Azure/OpenAI pricing depends on the exact deployment, region, tier and
+        // commercial terms. Do not turn token counts into invented billing data.
         return new ApiTester.AI.AiCostEstimate(
-            InputCostUsd: decimal.Round(inCost, 6),
-            OutputCostUsd: decimal.Round(outCost, 6),
-            TotalCostUsd: decimal.Round(total, 6));
+            InputCostUsd: 0m,
+            OutputCostUsd: 0m,
+            TotalCostUsd: 0m,
+            IsKnown: false,
+            Note: $"Pricing is not configured for model/deployment '{model}'.");
     }
 }

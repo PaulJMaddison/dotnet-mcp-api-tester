@@ -1,4 +1,4 @@
-﻿using ApiTester.Rag.Models;
+using ApiTester.Rag.Models;
 
 namespace ApiTester.Rag.VectorStore;
 
@@ -7,32 +7,30 @@ public sealed class InMemoryVectorStore : IVectorStore
     private sealed record Stored(RagChunk Chunk, float[] Embedding);
 
     private readonly List<Stored> _items = new();
-    private readonly object _lock = new();
+    private readonly object _gate = new();
 
     public Task UpsertAsync(IReadOnlyList<(RagChunk Chunk, float[] Embedding)> items, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(items);
         ct.ThrowIfCancellationRequested();
-        if (items.Count == 0) return Task.CompletedTask;
 
-        lock (_lock)
+        lock (_gate)
         {
             foreach (var (chunk, embedding) in items)
             {
-                var idx = _items.FindIndex(x =>
-                    x.Chunk.ProjectId == chunk.ProjectId &&
+                ct.ThrowIfCancellationRequested();
+                if (chunk is null) throw new ArgumentException("Chunk is required.", nameof(items));
+                if (embedding is null || embedding.Length == 0) throw new ArgumentException("Embedding is required.", nameof(items));
+
+                var ownedEmbedding = embedding.ToArray();
+                var index = _items.FindIndex(x =>
+                    x.Chunk.ScopeId == chunk.ScopeId &&
                     x.Chunk.ChunkId == chunk.ChunkId);
 
-                if (idx >= 0)
-                {
-                    if (_items[idx].Chunk.ContentHash == chunk.ContentHash)
-                        continue;
-
-                    _items[idx] = new Stored(chunk, embedding);
-                }
+                if (index >= 0)
+                    _items[index] = new Stored(chunk, ownedEmbedding);
                 else
-                {
-                    _items.Add(new Stored(chunk, embedding));
-                }
+                    _items.Add(new Stored(chunk, ownedEmbedding));
             }
         }
 
@@ -40,20 +38,21 @@ public sealed class InMemoryVectorStore : IVectorStore
     }
 
     public Task<IReadOnlyList<RagRetrievedChunk>> QueryAsync(
-        Guid projectId,
+        Guid scopeId,
         float[] embedding,
         int topK,
         IReadOnlyDictionary<string, string>? filters,
         CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        if (scopeId == Guid.Empty) throw new ArgumentException("scopeId is required.", nameof(scopeId));
+        ArgumentNullException.ThrowIfNull(embedding);
+        if (embedding.Length == 0) throw new ArgumentException("embedding must not be empty.", nameof(embedding));
         if (topK <= 0) throw new ArgumentOutOfRangeException(nameof(topK));
 
         List<Stored> snapshot;
-        lock (_lock)
-        {
-            snapshot = _items.Where(x => x.Chunk.ProjectId == projectId).ToList();
-        }
+        lock (_gate)
+            snapshot = _items.Where(x => x.Chunk.ScopeId == scopeId).ToList();
 
         if (filters is { Count: > 0 })
             snapshot = snapshot.Where(x => MatchesFilters(x.Chunk, filters)).ToList();
@@ -67,24 +66,33 @@ public sealed class InMemoryVectorStore : IVectorStore
         return Task.FromResult<IReadOnlyList<RagRetrievedChunk>>(results);
     }
 
+    public void Clear(Guid scopeId)
+    {
+        if (scopeId == Guid.Empty) return;
+        lock (_gate)
+            _items.RemoveAll(x => x.Chunk.ScopeId == scopeId);
+    }
+
     private static bool MatchesFilters(RagChunk chunk, IReadOnlyDictionary<string, string> filters)
     {
-        foreach (var (k, v) in filters)
+        foreach (var (key, expected) in filters)
         {
-            if (k.Equals("SourceType", StringComparison.OrdinalIgnoreCase))
+            if (key.Equals("SourceType", StringComparison.OrdinalIgnoreCase))
             {
-                if (!chunk.SourceType.Equals(v, StringComparison.OrdinalIgnoreCase)) return false;
+                if (!chunk.SourceType.Equals(expected, StringComparison.OrdinalIgnoreCase)) return false;
                 continue;
             }
 
-            if (k.Equals("SourceId", StringComparison.OrdinalIgnoreCase))
+            if (key.Equals("SourceId", StringComparison.OrdinalIgnoreCase))
             {
-                if (!chunk.SourceId.Equals(v, StringComparison.OrdinalIgnoreCase)) return false;
+                if (!chunk.SourceId.Equals(expected, StringComparison.OrdinalIgnoreCase)) return false;
                 continue;
             }
 
-            if (!chunk.Metadata.TryGetValue(k, out var actual)) return false;
-            if (!actual.Equals(v, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!chunk.Metadata.Any(pair =>
+                    pair.Key.Equals(key, StringComparison.OrdinalIgnoreCase) &&
+                    pair.Value.Equals(expected, StringComparison.OrdinalIgnoreCase)))
+                return false;
         }
 
         return true;
@@ -97,7 +105,6 @@ public sealed class InMemoryVectorStore : IVectorStore
         var dot = 0f;
         var na = 0f;
         var nb = 0f;
-
         for (var i = 0; i < a.Length; i++)
         {
             dot += a[i] * b[i];

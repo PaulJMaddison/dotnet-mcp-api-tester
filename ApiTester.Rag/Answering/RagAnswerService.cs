@@ -1,4 +1,4 @@
-﻿using ApiTester.Rag.Embeddings;
+using ApiTester.Rag.Embeddings;
 using ApiTester.Rag.Models;
 using ApiTester.Rag.Prompting;
 using ApiTester.Rag.VectorStore;
@@ -20,24 +20,24 @@ public sealed class RagAnswerService
         _chat = chat;
     }
 
-    public async Task<RagAnswer> AnswerAsync(Guid projectId, string question, int topK, CancellationToken ct)
+    public async Task<RagAnswer> AnswerAsync(Guid scopeId, string question, int topK, CancellationToken ct)
     {
-        if (projectId == Guid.Empty) throw new ArgumentException("projectId required", nameof(projectId));
-        if (string.IsNullOrWhiteSpace(question)) throw new ArgumentException("question required", nameof(question));
+        if (scopeId == Guid.Empty) throw new ArgumentException("scopeId is required.", nameof(scopeId));
+        if (string.IsNullOrWhiteSpace(question)) throw new ArgumentException("question is required.", nameof(question));
 
-        var qEmbedding = await _embeddings.EmbedAsync(question, ct).ConfigureAwait(false);
-
+        var queryVector = await _embeddings.EmbedAsync(question.Trim(), ct).ConfigureAwait(false);
         var evidence = await _store.QueryAsync(
-            projectId: projectId,
-            embedding: qEmbedding,
-            topK: Math.Clamp(topK, 1, 20),
+            scopeId,
+            queryVector,
+            Math.Clamp(topK, 1, 20),
             filters: null,
-            ct: ct).ConfigureAwait(false);
+            ct).ConfigureAwait(false);
 
-        var userPrompt = _prompt.BuildUserPrompt(question, evidence);
+        if (evidence.Count == 0)
+            return new RagAnswer("I do not have indexed OpenAPI evidence for the loaded API.", evidence);
 
+        var userPrompt = _prompt.BuildUserPrompt(question.Trim(), evidence);
         var answer = await _chat.CompleteAsync(_prompt.SystemPrompt, userPrompt, ct).ConfigureAwait(false);
-
         return new RagAnswer(answer, evidence);
     }
 }

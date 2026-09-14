@@ -7,7 +7,8 @@
 bin/
 obj/
 .nuget/
-artifacts/
+TestResults/
+*.trx
 
 # Local configuration and secrets
 .env

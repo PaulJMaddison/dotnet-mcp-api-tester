@@ -1,293 +1,273 @@
-# Dotnet MCP API Tester
+# .NET MCP API Tester
 
-Turn any OpenAPI spec into a repeatable, developer-friendly API testing workflow. Dotnet MCP API Tester helps teams import contracts, generate operation-level test plans, execute runs, and review results from both a REST API and a UI.
+**Give your coding agent an API test engineer.**
 
-## Why teams use Dotnet MCP API Tester
+`dotnet-mcp-api-tester` is a local .NET MCP server for Claude Code and Codex. Point it at an OpenAPI / Swagger definition and it turns the contract into meaningful **operation, schema and security evidence**, embeds that evidence into an **in-memory vector index using Azure OpenAI**, and exposes MCP tools that let a coding agent understand, reason about and safely test the API.
 
-- **Move faster with confidence**: Go from spec import to executable tests in minutes, so API changes are validated early and often.
-- **Unify API testing workflows**: Keep project setup, OpenAPI metadata, test-plan generation, and run history in one place.
-- **Support different environments**: Start locally with file persistence, then scale to SQL-backed persistence without changing your day-to-day flow.
-- **Work how your team works**: Use the API for automation and CI pipelines, or use the UI for interactive exploration and manual verification.
+The MCP server itself makes the HTTP calls, so it can test localhost, internal, staging or public APIs that you are authorised to test. **Nothing is persisted.** There is no database, web UI, SaaS backend or stored test-run history. Restart the MCP process and the loaded API definition, vector index, target-API auth and execution-policy state disappear.
 
-## Who this is for
+> **The OpenAPI contract decides what is true, deterministic code decides what is mechanically testable and safe, and the LLM handles the reasoning that remains.**
 
-- **Backend/API engineers** who need fast feedback while building or refactoring endpoints.
-- **QA and test engineers** who want deterministic, repeatable API run history with clear payload/result visibility.
-- **Platform and DevOps teams** looking for a practical API quality gate that can be scripted and integrated into delivery workflows.
-- **Technical leads** who need a shared source of truth for API behavior across contributors.
+## v1 scope
 
-## Key capabilities at a glance
+The first release is deliberately small:
 
-- Import and version OpenAPI specs per project.
-- Generate operation-scoped test plans.
-- Execute runs and inspect detailed run outputs.
-- Manage projects and runs through both REST endpoints and a Razor Pages UI.
-- Choose between local file storage and EF Core-backed SQL persistence.
+- local `stdio` MCP server
+- .NET 8
+- Azure OpenAI only
+- OpenAPI / Swagger as the source of truth
+- semantic operation / schema / security evidence
+- batched Azure embeddings
+- in-memory vector retrieval
+- grounded Azure AI reasoning
+- deterministic constraint-derived edge cases
+- safe direct HTTP execution
+- no persistence and no external vector database
 
-## Typical use cases
+OpenAI direct, Gemini, Claude reasoning providers and other model backends are intentionally outside the v1 scope.
 
-- Validate new endpoints before merging feature branches.
-- Regression-check critical operations after contract updates.
-- Run smoke and golden-path API checks as part of release readiness.
-- Give non-backend contributors a simple UI for reviewing API behavior.
+The NuGet / .NET Tool package is the next release step. Until that package is published, run the MCP server directly from source as shown below.
 
-## Architecture overview
+## How it works
 
-The solution is split into three main layers:
-
-- **ApiTester.Web**: The ASP.NET Core Web API that handles project CRUD, OpenAPI imports, test-plan generation, and run execution. It exposes a REST API (plus Swagger UI) and is the source of truth for persistence configuration.
-- **ApiTester.Ui**: A Razor Pages UI that calls `ApiTester.Web` using an API key. It is intended for human-driven exploration of projects and runs.
-- **Persistence layer (ApiTester.McpServer)**: Shared persistence abstractions and implementations. The Web API registers either file-based stores or EF Core-backed SQL stores based on configuration.
-
-<img src="docs/diagrams/architecture-overview.svg" alt="Architecture overview" style="max-width: 100%; height: auto;">
-
-## Persistence model
-
-Persistence is selected at startup via the `Persistence` configuration section:
-
-- **File (default)**: Projects, OpenAPI specs, and test plans are stored as JSON in the working directory, while run results are stored as JSON files per project. The working directory comes from `MCP_WORKDIR` (defaults to the current directory).
-- **SQL (SqlServer or Sqlite)**: Uses EF Core with the migrations in `ApiTester.McpServer`. All project, spec, test plan, and run data are stored in a database.
-
-### Configure SQL persistence
-
-Set the persistence provider and connection string (for example via environment variables):
-
-```bash
-export Persistence__Provider=SqlServer
-export Persistence__ConnectionString="Server=localhost;Database=ApiTester;User Id=sa;Password=Your_password123;TrustServerCertificate=true"
+```text
+Claude / Codex
+      │
+      │ MCP stdio
+      ▼
+┌──────────────────────────────┐
+│     API Tester MCP Server    │
+│                              │
+│ OpenAPI loader               │
+│ OpenAPI semantic evidence    │
+│ Azure embeddings             │
+│ In-memory vector store       │
+│ Contract retrieval / RAG     │
+│ Deterministic edge cases     │
+│ HTTP execution + safety      │
+│ Azure AI reasoning           │
+└──────────────────────────────┘
+             │
+             ▼
+      localhost / dev /
+      staging / public API
 ```
 
-For SQLite:
+Loading a contract is atomic:
 
-```bash
-export Persistence__Provider=Sqlite
-export Persistence__ConnectionString="Data Source=apitester.db"
+```text
+api_load_open_api
+      ↓
+download / read
+      ↓
+parse OpenAPI
+      ↓
+normalise operation identities
+      ↓
+build operation / schema / security evidence
+      ↓
+batch Azure embeddings
+      ↓
+replace in-memory vector index
+      ↓
+READY
 ```
 
-Apply migrations before first run:
+The RAG implementation deliberately does **not** split OpenAPI JSON every N characters. `OpenApiEvidenceBuilder` keeps the domain boundaries intact: an operation stays an operation, a component schema stays a schema and a security scheme stays a security scheme.
+
+The vector store is intentionally in-process. OpenAPI is the source of truth; vectors are disposable derived state. That means no Pinecone, Elasticsearch, PostgreSQL/pgvector or other vector infrastructure is required.
+
+## Requirements
+
+- .NET 8 SDK
+- Codex CLI or Claude Code
+- Azure OpenAI chat deployment
+- Azure OpenAI embedding deployment
+- Azure credentials using Azure CLI / managed identity / API key / bearer token
+
+Azure AI is required. v1 intentionally has no local, mock or deterministic AI fallback.
+
+## Quick start
+
+Clone the repository, configure Azure OpenAI, build it, then register the MCP server with Codex or Claude Code.
 
 ```bash
-dotnet ef database update --project ApiTester.McpServer
+dotnet restore DotnetMcpApiTester.sln
+dotnet build DotnetMcpApiTester.sln -c Release
+dotnet test DotnetMcpApiTester.sln -c Release
 ```
 
-## Local development
+The solution deliberately contains only:
 
-```bash
-dotnet restore
-dotnet build -c Release
-dotnet test -c Release
+```text
+ApiTester.McpServer
+ApiTester.Rag
+ApiTester.AI
+ApiTester.McpServer.Tests
 ```
 
-Azure OpenAI is configured keylessly through Microsoft Entra ID. See [Azure OpenAI and secret storage](docs/azure-openai.md) for local `az login`, managed identity, Key Vault, and ignored `.env` guidance.
+## Azure authentication
 
-## Testing
+Azure authentication belongs to the **local MCP process**, not to the model. Claude or Codex never needs to receive your Azure credential and there is deliberately no MCP tool for setting an Azure API key or bearer token.
 
-Run all unit/integration tests:
+### Recommended: Azure CLI / Microsoft Entra ID
 
-```bash
-dotnet test
-```
-
-Run the security regression suite only:
-
-```bash
-./scripts/security.sh
-```
-
-Windows:
+Authenticate locally:
 
 ```powershell
-pwsh ./scripts/security.ps1
+az login
 ```
 
-Run the docker-compose golden path E2E suite:
-
-```bash
-./scripts/e2e.sh
-```
-
-Windows:
+The signed-in identity must have permission to use the Azure OpenAI resource. Then configure the resource and deployments:
 
 ```powershell
-pwsh ./scripts/e2e.ps1
+$env:AZURE_OPENAI_ENDPOINT='https://<resource>.openai.azure.com/openai/v1/'
+$env:AZURE_OPENAI_CHAT_DEPLOYMENT='<chat-deployment>'
+$env:AZURE_OPENAI_EMBEDDING_DEPLOYMENT='<embedding-deployment>'
+$env:AZURE_OPENAI_AUTHENTICATION='DefaultAzureCredential'
+$env:AZURE_OPENAI_CREDENTIAL_SOURCE='AzureCli'
 ```
 
-Manual QA runbook and fixture data are documented in:
-- `docs/qa/golden-path.md`
-- `docs/qa/test-data.md`
+The credential boundary is:
 
-Security docs and threat modeling resources:
-- `docs/security/README.md`
-- `docs/security/threat-model.md`
-- `SECURITY.md`
+```text
+Claude / Codex
+      ↓ MCP stdio
+API Tester MCP process
+      ↓ Azure.Identity / Azure CLI credential
+Azure OpenAI
+```
 
-## Local run
+**The model never sees the Azure credential.**
 
-One command to start the Web API + UI:
+For Azure-hosted execution, use managed identity instead:
+
+```powershell
+$env:AZURE_OPENAI_AUTHENTICATION='DefaultAzureCredential'
+$env:AZURE_OPENAI_CREDENTIAL_SOURCE='ManagedIdentity'
+```
+
+### Alternative: Azure OpenAI API key
+
+```powershell
+$env:AZURE_OPENAI_ENDPOINT='https://<resource>.openai.azure.com/openai/v1/'
+$env:AZURE_OPENAI_CHAT_DEPLOYMENT='<chat-deployment>'
+$env:AZURE_OPENAI_EMBEDDING_DEPLOYMENT='<embedding-deployment>'
+$env:AZURE_OPENAI_AUTHENTICATION='ApiKey'
+$env:AZURE_OPENAI_API_KEY='<your key>'
+```
+
+Keep the real key in the local process environment or an MCP-client secret/environment configuration. Never commit it and never paste it into a Claude/Codex prompt.
+
+If configuration is missing or invalid, the MCP process exits before starting stdio and writes actionable setup guidance to **stderr**. It never echoes configured keys or tokens.
+
+## Connect to Codex
+
+From the repository root:
 
 ```bash
-./scripts/local-run.sh
+codex mcp add api-tester -- dotnet run --project ./ApiTester.McpServer/ApiTester.McpServer.csproj
 ```
 
-Run them separately (two terminals) if you prefer:
+Check the registration:
 
 ```bash
-dotnet run --project ApiTester.Web --launch-profile "ApiTester.Web"
-dotnet run --project ApiTester.Ui --launch-profile "ApiTester.Ui"
+codex mcp list
 ```
 
-The Web API defaults to `http://localhost:5000` and the UI defaults to `http://localhost:5171`.
+Equivalent Codex configuration:
 
-## Marketing site assets
-
-The marketing site lives in `ApiTester.Site`. Static assets are stored under `ApiTester.Site/wwwroot/images` (for example `logo-mark.svg`, `hero-illustration.svg`, and `pattern-grid.svg`). Replace those files when updating the logo, hero illustration, or background patterns, and keep references in `ApiTester.Site/Components/App.razor` and the marketing page components in sync with the filenames.
-
-## UI usage
-
-1. Start both the Web API and UI.
-2. Navigate to `http://localhost:5171`.
-3. Create a project, import an OpenAPI spec, generate test plans, and execute runs.
-4. Use the Runs page to review test results and payloads.
-
-The UI sends the API key configured in `ApiTester.Ui/appsettings.json` (`Auth:ApiKey`) to the Web API. Ensure it matches one of the keys configured in `ApiTester.Web` (`Auth:ApiKeys`).
-
-## API authentication
-
-All `/api/*` endpoints require an API key header:
-
-```
-X-Api-Key: <your-key>
+```toml
+[mcp_servers.api-tester]
+command = "dotnet"
+args = ["run", "--project", "./ApiTester.McpServer/ApiTester.McpServer.csproj"]
 ```
 
-The default dev keys are listed in `ApiTester.Web/appsettings.json`.
+If your MCP client does not inherit the shell environment, configure the Azure settings in that client's MCP process environment rather than passing credentials through chat.
 
-## API examples (curl)
+## Connect to Claude Code
 
-Set a couple of helpers:
+From the repository root:
 
 ```bash
-export API_BASE_URL=http://localhost:5000
-export API_KEY=dev-local-key
+claude mcp add api-tester -- dotnet run --project ./ApiTester.McpServer/ApiTester.McpServer.csproj
 ```
 
-Health check:
+Check it:
 
 ```bash
-curl -H "X-Api-Key: $API_KEY" "$API_BASE_URL/health"
+claude mcp get api-tester
+claude mcp list
 ```
 
-Version:
+Use `--scope user` if you want the MCP server available across Claude Code projects rather than only the current project.
 
-```bash
-curl -H "X-Api-Key: $API_KEY" "$API_BASE_URL/api/version"
+## Core MCP workflow
+
+```text
+api_load_open_api
+      ↓
+api_list_operations / api_describe_operation
+      ↓
+api_search_contract / api_ask_contract
+      ↓
+api_generate_test_plan
+      ↓
+api_get_policy
+      ↓
+api_call_operation (dry-run first)
+      ↓
+live API call when explicitly allowed
 ```
 
-List projects:
+Example:
 
-```bash
-curl -H "X-Api-Key: $API_KEY" "$API_BASE_URL/api/projects"
+> Load `./openapi.json`. Show me the available operations, find the endpoint for retrieving orders, generate the edge cases for that operation and dry-run the requests. Use only the OpenAPI contract as documented truth and do not make a live call until I approve it.
+
+The deterministic test generator derives mechanically provable cases from the contract itself: required/optional/nullable parameters, numeric boundaries, string lengths and patterns, enums, formats, arrays, nested objects, composed schemas and related OpenAPI constraints. The LLM is not asked to invent those cases.
+
+## Safety model
+
+The model cannot create new network authority for itself.
+
+Live execution is constrained by:
+
+```text
+allowed target URL(s)
+        +
+allowed HTTP method(s)
+        +
+network safety rules
+        +
+request / response limits
 ```
 
-Create a project:
+Execution starts in **dry-run** mode. Live calls are deny-by-default until an allowed base URL is configured. Localhost and private networks are blocked by default.
 
-```bash
-curl -H "X-Api-Key: $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Sample Project"}' \
-  "$API_BASE_URL/api/projects"
+Policy mutation through MCP is disabled unless a human explicitly enables it before process startup:
+
+```powershell
+$env:APITESTER_MCP_ALLOW_POLICY_MUTATION='true'
 ```
 
-Get a project:
+Use that only for a supervised development session. Then allow only the target URL and HTTP methods you actually want the agent to exercise. Link-local/cloud metadata addresses remain blocked.
 
-```bash
-curl -H "X-Api-Key: $API_KEY" "$API_BASE_URL/api/projects/<projectId>"
-```
+Target-API bearer tokens and base-URL overrides live only in the process. Azure AI credentials are process-start configuration and are never exposed through MCP tools. Nothing is stored anywhere.
 
-Import an OpenAPI spec (JSON file upload):
+## Why in memory?
 
-```bash
-curl -H "X-Api-Key: $API_KEY" \
-  -F "file=@./openapi.json" \
-  "$API_BASE_URL/api/projects/<projectId>/openapi/import"
-```
+An API definition normally produces hundreds or a few thousand evidence chunks, not millions. A linear in-memory cosine-similarity scan is therefore simple, fast and cheap for this use case.
 
-Get OpenAPI metadata:
+More importantly, the vector index is not authoritative state. It can always be recreated from the OpenAPI contract. Persisting it would add hosting cost, credentials, network I/O, patching, backup and additional security surface without providing much value to a local developer MCP tool.
 
-```bash
-curl -H "X-Api-Key: $API_KEY" "$API_BASE_URL/api/projects/<projectId>/openapi"
-```
+## Testing philosophy
 
-Generate a test plan:
+The repository keeps tests around the actual MCP product rather than deleted application surfaces. Coverage includes OpenAPI identity and semantics, parameter and request-body edge cases, semantic evidence generation, vector retrieval, Azure batching and failure behaviour, grounding boundaries, execution policy, URL construction, authentication redaction, network/SSRF controls and atomic state replacement.
 
-```bash
-curl -H "X-Api-Key: $API_KEY" \
-  -X POST \
-  "$API_BASE_URL/api/projects/<projectId>/testplans/<operationId>/generate"
-```
+The design rule is simple:
 
-Fetch a test plan:
+> **The model is intentionally the least trusted part of the system.**
 
-```bash
-curl -H "X-Api-Key: $API_KEY" \
-  "$API_BASE_URL/api/projects/<projectId>/testplans/<operationId>"
-```
+## Licence
 
-Execute a run:
-
-```bash
-curl -H "X-Api-Key: $API_KEY" \
-  -X POST \
-  "$API_BASE_URL/api/projects/<projectId>/runs/execute/<operationId>"
-```
-
-List runs:
-
-```bash
-curl -H "X-Api-Key: $API_KEY" \
-  "$API_BASE_URL/api/runs?projectKey=<projectKey>"
-```
-
-Get a run:
-
-```bash
-curl -H "X-Api-Key: $API_KEY" \
-  "$API_BASE_URL/api/runs/<runId>"
-```
-
-
-## Deployment and release operations
-
-For production packaging and release hardening guidance, see:
-
-- `docs/deployment.md`
-- `docs/release-checklist.md`
-
-## Troubleshooting
-
-### API fails to start with an API key error
-
-If you see `API key authentication requires at least one key`, configure at least one key under `Auth:ApiKey` or `Auth:ApiKeys` for the Web API (and UI).
-
-### UI shows 401/403 when calling the API
-
-Ensure `ApiTester.Ui/appsettings.json` has an `Auth:ApiKey` value that matches one of the keys in `ApiTester.Web/appsettings.json`. Also verify `ApiTesterWeb:BaseUrl` matches where the Web API is running.
-
-### SQL provider config mismatch
-
-If you set a SQL connection string but the service still uses file persistence, confirm you set `Persistence:Provider` **and** `Persistence:ConnectionString`. The persistence layer does not read `ConnectionStrings:ApiTester` for selection, so mismatched keys will silently fall back to file storage.
-
-### EF Core migrations missing tables
-
-If the app fails on SQL queries, run the migrations:
-
-```bash
-dotnet ef database update --project ApiTester.McpServer
-```
-
-## Smoke test
-
-With the Web API + UI running:
-
-```bash
-./scripts/smoke-test.sh
-```
+See [LICENSE](LICENSE).
