@@ -1,6 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /app
-
-Sitemap: https://apitester.example.com/sitemap.xml
-Host: https://apitester.example.com

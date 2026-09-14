@@ -1,110 +1,78 @@
-using ApiTester.McpServer.Runtime;
 using Microsoft.OpenApi.Models;
 
 namespace ApiTester.McpServer.Services;
 
+public sealed record OpenApiSnapshot(
+    Guid SessionId,
+    Guid SourceId,
+    OpenApiDocument Document,
+    string RawSpec,
+    string? Source,
+    string SpecHash,
+    DateTime LoadedUtc);
+
 public sealed class OpenApiStore
 {
     private readonly object _gate = new();
-    private readonly ProjectContext? _projectContext;
-    private OpenApiDocument? _document;
-    private string? _source;
-    private Guid? _projectId;
+    private OpenApiSnapshot? _snapshot;
 
-    public OpenApiStore(ProjectContext? projectContext = null)
-    {
-        _projectContext = projectContext;
-    }
+    public Guid SessionId { get; } = Guid.NewGuid();
 
     public OpenApiDocument? Document
     {
-        get
-        {
-            lock (_gate)
-            {
-                if (_projectContext?.CurrentProjectId is Guid current && _projectId != current)
-                    return null;
-                return _document;
-            }
-        }
+        get { lock (_gate) return _snapshot?.Document; }
     }
 
     public string? Source
     {
-        get
+        get { lock (_gate) return _snapshot?.Source; }
+    }
+
+    public bool HasDocument
+    {
+        get { lock (_gate) return _snapshot is not null; }
+    }
+
+    public void SetDocument(
+        OpenApiDocument document,
+        string rawSpec,
+        string? source,
+        string specHash,
+        DateTime loadedUtc)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (string.IsNullOrWhiteSpace(rawSpec))
+            throw new ArgumentException("rawSpec is required.", nameof(rawSpec));
+        if (string.IsNullOrWhiteSpace(specHash))
+            throw new ArgumentException("specHash is required.", nameof(specHash));
+
+        lock (_gate)
         {
-            lock (_gate)
-            {
-                if (_projectContext?.CurrentProjectId is Guid current && _projectId != current)
-                    return null;
-                return _source;
-            }
+            _snapshot = new OpenApiSnapshot(
+                SessionId,
+                Guid.NewGuid(),
+                document,
+                rawSpec,
+                source,
+                specHash,
+                loadedUtc);
         }
     }
 
-    public Guid? ProjectId
-    {
-        get { lock (_gate) return _projectId; }
-    }
+    public OpenApiDocument RequireDocument() => RequireSnapshot().Document;
 
-    public void SetDocument(OpenApiDocument doc, string? source = null)
-    {
-        ArgumentNullException.ThrowIfNull(doc);
-        var projectId = _projectContext?.CurrentProjectId;
-        SetDocument(projectId, doc, source);
-    }
-
-    public void SetDocument(Guid projectId, OpenApiDocument doc, string? source = null)
-    {
-        if (projectId == Guid.Empty)
-            throw new ArgumentException("projectId must not be empty.", nameof(projectId));
-        SetDocument((Guid?)projectId, doc, source);
-    }
-
-    private void SetDocument(Guid? projectId, OpenApiDocument doc, string? source)
-    {
-        ArgumentNullException.ThrowIfNull(doc);
-        lock (_gate)
-        {
-            _document = doc;
-            _source = source;
-            _projectId = projectId;
-        }
-    }
-
-    public OpenApiDocument RequireDocument()
+    public OpenApiSnapshot RequireSnapshot()
     {
         lock (_gate)
         {
-            if (_document is null)
-                throw new InvalidOperationException("No OpenAPI document loaded. Call api_import_open_api first.");
-
-            if (_projectContext?.CurrentProjectId is Guid current && _projectId != current)
-                throw new InvalidOperationException("No OpenAPI document is loaded for the current project. Import a specification for this project first.");
-
-            return _document;
+            return _snapshot
+                ?? throw new InvalidOperationException("No OpenAPI document loaded. Call api_import_open_api first.");
         }
     }
 
     public void Clear()
     {
         lock (_gate)
-        {
-            _document = null;
-            _source = null;
-            _projectId = null;
-        }
-    }
-
-    public bool HasDocument
-    {
-        get
-        {
-            lock (_gate)
-            {
-                if (_document is null) return false;
-                return _projectContext?.CurrentProjectId is not Guid current || _projectId == current;
-            }
-        }
+            _snapshot = null;
     }
 }

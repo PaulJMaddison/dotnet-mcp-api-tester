@@ -25,25 +25,19 @@ public sealed class InMemoryVectorStore : IVectorStore
                 if (embedding is null || embedding.Length == 0)
                     throw new ArgumentException("Vector-store items must contain a non-empty embedding.", nameof(items));
 
-                // Own the vector state. Callers must not be able to mutate indexed
-                // retrieval behaviour after the upsert returns.
                 var ownedEmbedding = embedding.ToArray();
-                var idx = _items.FindIndex(x =>
+                var index = _items.FindIndex(x =>
                     x.Chunk.ProjectId == chunk.ProjectId &&
                     x.Chunk.ChunkId == chunk.ChunkId);
 
-                if (idx >= 0)
+                if (index >= 0)
                 {
-                    var existing = _items[idx];
+                    var existing = _items[index];
                     if (existing.Chunk.ContentHash == chunk.ContentHash &&
                         existing.Embedding.AsSpan().SequenceEqual(ownedEmbedding))
-                    {
                         continue;
-                    }
 
-                    // Replace even when content is unchanged if the embedding changed.
-                    // This supports re-indexing after an embedding-model migration.
-                    _items[idx] = new Stored(chunk, ownedEmbedding);
+                    _items[index] = new Stored(chunk, ownedEmbedding);
                 }
                 else
                 {
@@ -70,9 +64,7 @@ public sealed class InMemoryVectorStore : IVectorStore
 
         List<Stored> snapshot;
         lock (_lock)
-        {
             snapshot = _items.Where(x => x.Chunk.ProjectId == projectId).ToList();
-        }
 
         if (filters is { Count: > 0 })
             snapshot = snapshot.Where(x => MatchesFilters(x.Chunk, filters)).ToList();
@@ -84,6 +76,19 @@ public sealed class InMemoryVectorStore : IVectorStore
             .ToList();
 
         return Task.FromResult<IReadOnlyList<RagRetrievedChunk>>(results);
+    }
+
+    public void Clear(Guid projectId)
+    {
+        if (projectId == Guid.Empty) return;
+        lock (_lock)
+            _items.RemoveAll(x => x.Chunk.ProjectId == projectId);
+    }
+
+    public void ClearAll()
+    {
+        lock (_lock)
+            _items.Clear();
     }
 
     private static bool MatchesFilters(RagChunk chunk, IReadOnlyDictionary<string, string> filters)
@@ -105,12 +110,9 @@ public sealed class InMemoryVectorStore : IVectorStore
             var found = false;
             foreach (var (metadataKey, actual) in chunk.Metadata)
             {
-                if (!metadataKey.Equals(key, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
+                if (!metadataKey.Equals(key, StringComparison.OrdinalIgnoreCase)) continue;
                 found = true;
-                if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
-                    return false;
+                if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase)) return false;
                 break;
             }
 
@@ -123,7 +125,6 @@ public sealed class InMemoryVectorStore : IVectorStore
     private static float CosineSimilarity(float[] a, float[] b)
     {
         if (a.Length != b.Length) throw new InvalidOperationException("Embedding dimension mismatch.");
-
         var dot = 0f;
         var na = 0f;
         var nb = 0f;
