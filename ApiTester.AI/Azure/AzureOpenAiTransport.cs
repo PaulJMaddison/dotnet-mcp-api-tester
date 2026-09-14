@@ -31,7 +31,7 @@ public sealed class AzureOpenAiTransport
         _options.ValidateCommon();
         _authenticationMode = _options.GetAuthenticationMode();
         _tokenCredential = _authenticationMode == AzureOpenAiAuthenticationMode.DefaultAzureCredential
-            ? tokenCredential ?? new DefaultAzureCredential()
+            ? tokenCredential ?? CreateCredential(_options.GetCredentialSource())
             : null;
     }
 
@@ -53,6 +53,9 @@ public sealed class AzureOpenAiTransport
         activity?.SetTag("server.address", baseUri.Host);
         activity?.SetTag("http.request.method", "POST");
         activity?.SetTag("http.route", relativePath.TrimStart('/'));
+        activity?.SetTag("ai.auth.mode", _authenticationMode.ToString());
+        if (_authenticationMode == AzureOpenAiAuthenticationMode.DefaultAzureCredential)
+            activity?.SetTag("ai.auth.credential_source", _options.GetCredentialSource().ToString());
 
         for (var attempt = 1; attempt <= attempts; attempt++)
         {
@@ -176,6 +179,13 @@ public sealed class AzureOpenAiTransport
         throw new InvalidOperationException(
             "Azure OpenAI authentication is not configured. Select DefaultAzureCredential, ApiKey, or BearerToken and provide any credential required by that mode.");
     }
+
+    private static TokenCredential CreateCredential(AzureOpenAiCredentialSource source) => source switch
+    {
+        AzureOpenAiCredentialSource.AzureCli => new AzureCliCredential(),
+        AzureOpenAiCredentialSource.ManagedIdentity => new ManagedIdentityCredential(),
+        _ => new DefaultAzureCredential()
+    };
 
     private void EnsureCircuitClosed()
     {
