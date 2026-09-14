@@ -79,7 +79,7 @@ public sealed class AzureOpenAiClientTests
 
             return JsonResponse("{\"ok\":true}");
         });
-        var options = Options(chat: "chat-demo") with { MaxRetries = 1 };
+        var options = Options(chat: "chat-demo", maxRetries: 1);
         var transport = new AzureOpenAiTransport(new HttpClient(handler), options);
 
         var response = await transport.PostJsonAsync(
@@ -91,14 +91,17 @@ public sealed class AzureOpenAiClientTests
         Assert.NotEmpty(response.Body);
     }
 
-    private static AzureOpenAiOptions Options(string chat = "", string embedding = "") => new()
+    private static AzureOpenAiOptions Options(
+        string chat = "",
+        string embedding = "",
+        int maxRetries = 0) => new()
     {
         Endpoint = "https://example.openai.azure.com",
         ChatDeployment = chat,
         EmbeddingDeployment = embedding,
         ApiKey = "test-key",
         TimeoutSeconds = 5,
-        MaxRetries = 0,
+        MaxRetries = maxRetries,
         MaxCompletionTokens = 200
     };
 
