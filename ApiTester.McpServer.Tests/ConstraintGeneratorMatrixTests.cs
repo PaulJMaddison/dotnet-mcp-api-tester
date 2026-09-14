@@ -89,7 +89,7 @@ public sealed class ConstraintGeneratorMatrixTests
         """);
 
         var plan = _generator.Generate(document, "search");
-        var q = Assert.Single(plan.Parameters.Where(p => p.Name == "q"));
+        var q = Assert.Single(plan.Parameters, p => p.Name == "q");
 
         Assert.Equal("integer", q.Type);
         Assert.Equal(10m, q.Maximum);
