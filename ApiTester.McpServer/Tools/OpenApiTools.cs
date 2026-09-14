@@ -1,4 +1,4 @@
-﻿using ApiTester.McpServer.Models;
+using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Runtime;
 using ApiTester.McpServer.Services;
@@ -46,11 +46,10 @@ public sealed class OpenApiTools
         if (string.IsNullOrWhiteSpace(specUrlOrPath))
             throw new ArgumentException("specUrlOrPath is required.", nameof(specUrlOrPath));
 
-        // Allow stateless demos by passing projectId explicitly
         if (!string.IsNullOrWhiteSpace(projectId))
         {
-            if (!Guid.TryParse(projectId, out var pid))
-                throw new ArgumentException("projectId must be a valid GUID.", nameof(projectId));
+            if (!Guid.TryParse(projectId, out var pid) || pid == Guid.Empty)
+                throw new ArgumentException("projectId must be a valid non-empty GUID.", nameof(projectId));
 
             _ctx.SetCurrentProject(pid);
         }
@@ -100,24 +99,25 @@ public sealed class OpenApiTools
             specText = await File.ReadAllTextAsync(specUrlOrPath, ct);
         }
 
-        // Parse for metadata / validation diagnostics
         var reader = new OpenApiStringReader();
         var doc = reader.Read(specText, out var diag);
 
         if (doc is null)
             throw new InvalidOperationException("OpenAPI document could not be parsed (doc was null).");
 
-        // IMPORTANT: load it even if there are errors, so the tool still works on messy specs
-        _store.SetDocument(doc);
+        // Give operations without explicit operationId a stable identity before any
+        // discovery, generation, test-run or execution service sees the document.
+        OpenApiOperationIdentity.EnsureOperationIds(doc);
+
+        // Publish only after a successful read/parse. OpenApiStore binds the document
+        // to this project so a failed import after a project switch cannot expose a
+        // previously loaded project's contract.
+        _store.SetDocument(currentProjectId.Value, doc, specUrlOrPath);
 
         var title = doc.Info?.Title ?? "(no title)";
         var version = doc.Info?.Version ?? "(no version)";
         var paths = doc.Paths?.Count ?? 0;
-
-        // Persist to store for the current project so RagTools can index it
         var createdUtc = DateTime.UtcNow;
-
-        // Stable hash so we can de-dupe / track changes
         var specHash = ComputeSha256Hex(specText);
 
         await _specs.UpsertAsync(
