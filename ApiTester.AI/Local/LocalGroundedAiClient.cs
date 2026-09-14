@@ -5,17 +5,20 @@ using ApiTester.AI.Cost;
 
 namespace ApiTester.AI.Local;
 
+/// <summary>
+/// Deterministic offline fallback used when no external chat model is configured.
+/// It only derives output from evidence contained in the supplied prompt and is
+/// intentionally limited; production-quality natural-language reasoning should
+/// use a configured model provider.
+/// </summary>
 public sealed class LocalGroundedAiClient : IAiClient
 {
     private static readonly Regex ChunkTag = new(@"\[chunk:(?<id>[^\]]+)\]", RegexOptions.Compiled);
 
-    public async Task<AiResponse> GetResponseAsync(AiPrompt prompt, CancellationToken ct)
+    public Task<AiResponse> GetResponseAsync(AiPrompt prompt, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var sw = Stopwatch.StartNew();
-
-        // Make it feel real in a workshop, also makes timing demoable
-        await Task.Delay(180, ct);
 
         var answer = BuildGroundedAnswer(prompt.User);
 
@@ -23,15 +26,14 @@ public sealed class LocalGroundedAiClient : IAiClient
         var tokensIn = EstimateTokens(prompt.System) + EstimateTokens(prompt.User);
         var tokensOut = EstimateTokens(answer);
         var usage = new AiUsage(tokensIn, tokensOut);
-        var cost = AiCostCalculator.Estimate("local-grounded-stub", tokensIn, tokensOut);
+        var cost = AiCostCalculator.Estimate("local-grounded", tokensIn, tokensOut);
 
-        return new AiResponse(
+        return Task.FromResult(new AiResponse(
             Content: answer,
             Usage: usage,
             ElapsedMs: (int)sw.ElapsedMilliseconds,
-            Model: "local-grounded-stub",
-            Cost: cost);
-
+            Model: "local-grounded",
+            Cost: cost));
     }
 
     private static string BuildGroundedAnswer(string userPrompt)
@@ -60,26 +62,25 @@ public sealed class LocalGroundedAiClient : IAiClient
         }
 
         sb.AppendLine("Operations and mappings:");
-        foreach (var m in mappings.Take(12))
+        foreach (var mapping in mappings.Take(12))
         {
-            sb.AppendLine($"- {m.Method} {m.Path}, operationId `{m.OperationId}` {m.Citation}");
+            sb.AppendLine($"- {mapping.Method} {mapping.Path}, operationId `{mapping.OperationId}` {mapping.Citation}");
         }
 
         sb.AppendLine();
-        sb.AppendLine("If you want, pick one operationId and I will list required params and responses using the same evidence only rules.");
+        sb.AppendLine("Pick one operationId to inspect required parameters and responses using the same evidence-only rules.");
 
         return sb.ToString();
     }
 
     private static List<(string Method, string Path, string OperationId, string Citation)> ExtractOpenApiMappings(string userPrompt)
     {
-        // Deliberately simple. It is a demo stub, but it only uses evidence content.
         var results = new List<(string, string, string, string)>();
 
         var opMatches = Regex.Matches(userPrompt, @"""operationId""\s*:\s*""(?<op>[^""]+)""", RegexOptions.Compiled);
         var pathMatches = Regex.Matches(userPrompt, @"""(?<path>\/[^""]+)""\s*:\s*\{", RegexOptions.Compiled);
 
-        var ops = opMatches.Select(m => m.Groups["op"].Value).Distinct().ToList();
+        var operations = opMatches.Select(m => m.Groups["op"].Value).Distinct().ToList();
         var paths = pathMatches.Select(m => m.Groups["path"].Value).Distinct().ToList();
 
         var chunkIds = ChunkTag.Matches(userPrompt)
@@ -87,12 +88,10 @@ public sealed class LocalGroundedAiClient : IAiClient
             .Distinct()
             .ToList();
 
-        var cite = chunkIds.Count > 0 ? $"[chunk:{chunkIds[0]}]" : "";
+        var citation = chunkIds.Count > 0 ? $"[chunk:{chunkIds[0]}]" : string.Empty;
 
-        // Try to detect method blocks near operationId, fallback to HTTP
-        string GuessMethod(string op)
+        string GuessMethod()
         {
-            // naive, good enough for a workshop
             if (userPrompt.Contains(@"""get"":", StringComparison.OrdinalIgnoreCase)) return "GET";
             if (userPrompt.Contains(@"""post"":", StringComparison.OrdinalIgnoreCase)) return "POST";
             if (userPrompt.Contains(@"""put"":", StringComparison.OrdinalIgnoreCase)) return "PUT";
@@ -100,10 +99,8 @@ public sealed class LocalGroundedAiClient : IAiClient
             return "HTTP";
         }
 
-        for (var i = 0; i < Math.Min(ops.Count, paths.Count); i++)
-        {
-            results.Add((GuessMethod(ops[i]), paths[i], ops[i], cite));
-        }
+        for (var i = 0; i < Math.Min(operations.Count, paths.Count); i++)
+            results.Add((GuessMethod(), paths[i], operations[i], citation));
 
         return results;
     }
