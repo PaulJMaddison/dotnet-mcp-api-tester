@@ -192,7 +192,7 @@ public sealed class AzureOpenAiTransport
     private static TokenCredential CreateCredential(AzureOpenAiCredentialSource source) => source switch
     {
         AzureOpenAiCredentialSource.AzureCli => new AzureCliCredential(),
-        AzureOpenAiCredentialSource.ManagedIdentity => new ManagedIdentityCredential(),
+        AzureOpenAiCredentialSource.ManagedIdentity => new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned),
         _ => new DefaultAzureCredential()
     };
 
