@@ -27,8 +27,8 @@ public sealed class SecuritySemanticsTests
         OpenApiSecuritySemantics.PreserveExplicitOverrides(document, source);
 
         var chunks = new OpenApiEvidenceBuilder().Build(document, Guid.NewGuid(), Guid.NewGuid(), "Security", "1", DateTime.UtcNow);
-        var publicEvidence = Assert.Single(chunks.Where(c => c.Metadata.TryGetValue("OperationId", out var id) && id == "publicGet"));
-        var secureEvidence = Assert.Single(chunks.Where(c => c.Metadata.TryGetValue("OperationId", out var id) && id == "secureGet"));
+        var publicEvidence = Assert.Single(chunks, c => c.Metadata.TryGetValue("OperationId", out var id) && id == "publicGet");
+        var secureEvidence = Assert.Single(chunks, c => c.Metadata.TryGetValue("OperationId", out var id) && id == "secureGet");
 
         Assert.Contains("SECURITY: none documented", publicEvidence.Text);
         Assert.Contains("SECURITY: bearer", secureEvidence.Text);
