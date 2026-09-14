@@ -161,6 +161,19 @@ public sealed class ExecutionPolicyMatrixTests
     }
 
     [Fact]
+    public async Task RelativeOpenApiServerIsResolvedAgainstRemoteContractSource()
+    {
+        var store = Store("""
+        {"openapi":"3.0.1","info":{"title":"Exec","version":"1"},"servers":[{"url":"/api/v3"}],"paths":{"/items/{id}":{"get":{"operationId":"getItem","responses":{"200":{"description":"OK"}}}}}}
+        """, "https://petstore.example/api/v3/openapi.json");
+        var tools = new ExecuteTools(store, new ApiRuntimeConfig(), new StubHttpClientFactory(), new SsrfGuard());
+
+        var json = await tools.ApiCallOperation("getItem", pathParamsJson: "{\"id\":\"1\"}");
+
+        Assert.Contains("https://petstore.example/api/v3/items/1", json);
+    }
+
+    [Fact]
     public void PolicyMutationDisabledCannotChangeSafetyState()
     {
         var runtime = new ApiRuntimeConfig();
@@ -232,14 +245,14 @@ public sealed class ExecutionPolicyMatrixTests
         Assert.Null(runtime.BearerToken);
     }
 
-    private static OpenApiStore Store(string json)
+    private static OpenApiStore Store(string json, string source = "test")
     {
         var document = new OpenApiStringReader().Read(json, out var diagnostics);
         Assert.NotNull(document);
         Assert.Empty(diagnostics.Errors);
         OpenApiOperationIdentity.EnsureOperationIds(document);
         var store = new OpenApiStore();
-        store.SetDocument(Guid.NewGuid(), Guid.NewGuid(), document, "test", "hash", DateTime.UtcNow);
+        store.SetDocument(Guid.NewGuid(), Guid.NewGuid(), document, source, "hash", DateTime.UtcNow);
         return store;
     }
 

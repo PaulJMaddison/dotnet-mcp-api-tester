@@ -33,6 +33,7 @@ public sealed class AzureOpenAiEmbeddingClient : IBatchEmbeddingClient
         var normalised = texts.Select(NormaliseInput).ToArray();
         var results = new List<float[]>(normalised.Length);
         var offset = 0;
+        var batchCharLimit = Math.Min(_options.MaxInputChars, _options.MaxEmbeddingBatchChars);
 
         while (offset < normalised.Length)
         {
@@ -44,7 +45,7 @@ public sealed class AzureOpenAiEmbeddingClient : IBatchEmbeddingClient
             while (offset + batch.Count < normalised.Length && batch.Count < MaxBatchItems)
             {
                 var candidate = normalised[offset + batch.Count];
-                if (batch.Count > 0 && totalChars + candidate.Length > _options.MaxInputChars)
+                if (batch.Count > 0 && totalChars + candidate.Length > batchCharLimit)
                     break;
 
                 batch.Add(candidate);
@@ -74,9 +75,10 @@ public sealed class AzureOpenAiEmbeddingClient : IBatchEmbeddingClient
         if (string.IsNullOrWhiteSpace(text))
             throw new ArgumentException("Text is required for embedding.", nameof(text));
 
-        return text.Length <= _options.MaxInputChars
+        var maxChars = Math.Min(_options.MaxInputChars, _options.MaxEmbeddingBatchChars);
+        return text.Length <= maxChars
             ? text
-            : text[.._options.MaxInputChars];
+            : text[..maxChars];
     }
 
     private static IReadOnlyList<float[]> ParseBatch(byte[] body, int expectedCount)

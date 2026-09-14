@@ -40,12 +40,13 @@ public sealed class ExecuteTools
         if (string.IsNullOrWhiteSpace(operationId))
             throw new ArgumentException("operationId is required.", nameof(operationId));
 
-        var document = _store.RequireDocument();
+        var snapshot = _store.RequireSnapshot();
+        var document = snapshot.Document;
         var match = OpenApiOperationIdentity.Find(document, operationId.Trim())
             ?? throw new InvalidOperationException($"OperationId not found: {operationId}");
 
         var method = match.Method.ToString().ToUpperInvariant();
-        var baseUrl = ResolveBaseUrl(document, _runtime.BaseUrl);
+        var baseUrl = ResolveBaseUrl(document, _runtime.BaseUrl, snapshot.Source);
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new InvalidOperationException("No base URL available. Call api_set_base_url or define servers[] in the OpenAPI contract.");
 
@@ -170,11 +171,20 @@ public sealed class ExecuteTools
         return (Encoding.UTF8.GetString(output.ToArray()), false);
     }
 
-    private static string ResolveBaseUrl(OpenApiDocument document, string? runtimeBaseUrl)
+    private static string ResolveBaseUrl(OpenApiDocument document, string? runtimeBaseUrl, string? source)
     {
         if (!string.IsNullOrWhiteSpace(runtimeBaseUrl)) return runtimeBaseUrl.Trim().TrimEnd('/');
         var fromSpec = document.Servers?.FirstOrDefault()?.Url?.Trim();
-        return string.IsNullOrWhiteSpace(fromSpec) ? string.Empty : fromSpec.TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(fromSpec)) return string.Empty;
+        if (Uri.TryCreate(fromSpec, UriKind.Absolute, out var absoluteServer))
+            return absoluteServer.ToString().TrimEnd('/');
+
+        if (Uri.TryCreate(source, UriKind.Absolute, out var sourceUri) &&
+            (sourceUri.Scheme == Uri.UriSchemeHttp || sourceUri.Scheme == Uri.UriSchemeHttps))
+            return new Uri(sourceUri, fromSpec).ToString().TrimEnd('/');
+
+        throw new InvalidOperationException(
+            "The OpenAPI server URL is relative and cannot be resolved because the contract was not loaded from an HTTP(S) URL. Call api_set_base_url first.");
     }
 
     private static Dictionary<string, string> ParseObject(string? json)

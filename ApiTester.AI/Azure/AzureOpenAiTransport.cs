@@ -17,6 +17,7 @@ public sealed class AzureOpenAiTransport
     private readonly AzureOpenAiOptions _options;
     private readonly AzureOpenAiAuthenticationMode _authenticationMode;
     private readonly TokenCredential? _tokenCredential;
+    private readonly SemaphoreSlim _requestGate = new(1, 1);
     private readonly object _circuitLock = new();
     private int _consecutiveFailures;
     private DateTimeOffset? _circuitOpenedUntil;
@@ -41,7 +42,10 @@ public sealed class AzureOpenAiTransport
             throw new ArgumentException("A relative Azure OpenAI path is required.", nameof(relativePath));
         ArgumentNullException.ThrowIfNull(payload);
 
-        EnsureCircuitClosed();
+        await _requestGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            EnsureCircuitClosed();
 
         var baseUri = _options.GetApiBaseUri();
         var requestUri = new Uri(baseUri, relativePath.TrimStart('/'));
@@ -148,7 +152,12 @@ public sealed class AzureOpenAiTransport
         activity?.SetTag("ai.retry.count", attempts - 1);
         activity?.SetTag("error.type", lastError?.GetType().Name ?? "Unknown");
         activity?.SetStatus(ActivityStatusCode.Error, "Azure OpenAI request failed");
-        throw new InvalidOperationException("Azure OpenAI request failed.", lastError);
+            throw new InvalidOperationException("Azure OpenAI request failed.", lastError);
+        }
+        finally
+        {
+            _requestGate.Release();
+        }
     }
 
     private async Task ApplyAuthenticationAsync(HttpRequestMessage request, CancellationToken ct)
@@ -223,6 +232,7 @@ public sealed class AzureOpenAiTransport
     }
 
     private static bool IsTransient(HttpStatusCode statusCode) =>
+        statusCode == HttpStatusCode.NotFound ||
         statusCode == HttpStatusCode.RequestTimeout ||
         statusCode == HttpStatusCode.TooManyRequests ||
         (int)statusCode >= 500;
@@ -232,13 +242,26 @@ public sealed class AzureOpenAiTransport
 
     private static async Task DelayForRetryAsync(HttpResponseMessage response, int attempt, CancellationToken ct)
     {
-        var delay = response.Headers.RetryAfter?.Delta ?? Backoff(attempt);
-        if (delay > TimeSpan.FromSeconds(10))
-            delay = TimeSpan.FromSeconds(10);
+        var delay = GetProviderRetryDelay(response) ?? Backoff(attempt);
+        if (delay > TimeSpan.FromSeconds(60))
+            delay = TimeSpan.FromSeconds(60);
         if (delay < TimeSpan.Zero)
             delay = TimeSpan.Zero;
 
         await Task.Delay(delay, ct).ConfigureAwait(false);
+    }
+
+    private static TimeSpan? GetProviderRetryDelay(HttpResponseMessage response)
+    {
+        if (response.Headers.RetryAfter?.Delta is TimeSpan standardDelay)
+            return standardDelay;
+
+        if (response.Headers.TryGetValues("retry-after-ms", out var values) &&
+            double.TryParse(values.FirstOrDefault(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var milliseconds))
+            return TimeSpan.FromMilliseconds(milliseconds);
+
+        return null;
     }
 
     private static string? TryGetRequestId(HttpResponseMessage response)

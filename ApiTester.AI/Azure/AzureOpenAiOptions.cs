@@ -21,6 +21,7 @@ public sealed class AzureOpenAiOptions
     public int MaxRetries { get; init; } = 2;
     public int MaxResponseBytes { get; init; } = 1_048_576;
     public int MaxInputChars { get; init; } = 120_000;
+    public int MaxEmbeddingBatchChars { get; init; } = 24_000;
 
     public int MaxCompletionTokens { get; init; }
     public int CircuitBreakerFailureThreshold { get; init; } = 4;
@@ -55,6 +56,8 @@ public sealed class AzureOpenAiOptions
             throw new InvalidOperationException("AzureOpenAI:MaxResponseBytes must be greater than zero.");
         if (MaxInputChars <= 0)
             throw new InvalidOperationException("AzureOpenAI:MaxInputChars must be greater than zero.");
+        if (MaxEmbeddingBatchChars <= 0)
+            throw new InvalidOperationException("AzureOpenAI:MaxEmbeddingBatchChars must be greater than zero.");
         if (CircuitBreakerFailureThreshold <= 0)
             throw new InvalidOperationException("AzureOpenAI:CircuitBreakerFailureThreshold must be greater than zero.");
         if (CircuitBreakerBreakSeconds <= 0)

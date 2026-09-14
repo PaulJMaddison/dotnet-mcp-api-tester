@@ -47,6 +47,7 @@ public sealed class AzureAiMatrixTests
         Assert.Throws<InvalidOperationException>(() => WithRetries(BaseOptions(), -1).ValidateCommon());
         Assert.Throws<InvalidOperationException>(() => WithMaxResponseBytes(BaseOptions(), 0).ValidateCommon());
         Assert.Throws<InvalidOperationException>(() => WithMaxInputChars(BaseOptions(), 0).ValidateCommon());
+        Assert.Throws<InvalidOperationException>(() => WithMaxEmbeddingBatchChars(BaseOptions(), 0).ValidateCommon());
         Assert.Throws<InvalidOperationException>(() => WithCircuitThreshold(BaseOptions(), 0).ValidateCommon());
     }
 
@@ -74,6 +75,19 @@ public sealed class AzureAiMatrixTests
 
         Assert.Equal(new[] { 1, 1, 1 }, handler.BatchSizes);
         Assert.Equal(new[] { 4, 4, 5 }, handler.InputLengths);
+    }
+
+    [Fact]
+    public async Task EmbeddingsUseDedicatedBatchBudgetWithoutReducingChatInputBudget()
+    {
+        var handler = new EmbeddingHandler();
+        var options = WithMaxEmbeddingBatchChars(WithMaxInputChars(BaseOptions(), 100_000), 10);
+        var client = new AzureOpenAiEmbeddingClient(new AzureOpenAiTransport(new HttpClient(handler), options), options);
+
+        await client.EmbedBatchAsync(new[] { "aaaaaa", "bbbbbb" }, CancellationToken.None);
+
+        Assert.Equal(new[] { 1, 1 }, handler.BatchSizes);
+        Assert.Equal(100_000, options.MaxInputChars);
     }
 
     [Theory]
@@ -112,6 +126,62 @@ public sealed class AzureAiMatrixTests
 
         Assert.Equal(2, handler.CallCount);
         Assert.Contains("ok", Encoding.UTF8.GetString(response.Body));
+    }
+
+    [Fact]
+    public async Task TransportHonoursAzureRetryAfterMillisecondsHeader()
+    {
+        var call = 0;
+        var handler = new StaticHandler(_ =>
+        {
+            call++;
+            if (call == 1)
+            {
+                var response = JsonResponse(HttpStatusCode.TooManyRequests, "{}");
+                response.Headers.TryAddWithoutValidation("retry-after-ms", "1");
+                return response;
+            }
+            return JsonResponse(HttpStatusCode.OK, "{\"ok\":true}");
+        });
+        var transport = new AzureOpenAiTransport(new HttpClient(handler), WithRetries(BaseOptions(), 1));
+
+        await transport.PostJsonAsync("embeddings", new { input = "hello" }, CancellationToken.None);
+
+        Assert.Equal(2, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task TransportRetriesTransientAzureNotFoundThenSucceeds()
+    {
+        var call = 0;
+        var handler = new StaticHandler(_ =>
+        {
+            call++;
+            return call == 1
+                ? JsonResponse(HttpStatusCode.NotFound, "{}")
+                : JsonResponse(HttpStatusCode.OK, "{\"ok\":true}");
+        });
+        var options = WithRetries(BaseOptions(), 1);
+        var transport = new AzureOpenAiTransport(new HttpClient(handler), options);
+
+        var response = await transport.PostJsonAsync("embeddings", new { input = "hello" }, CancellationToken.None);
+
+        Assert.Equal(2, handler.CallCount);
+        Assert.Contains("ok", Encoding.UTF8.GetString(response.Body));
+    }
+
+    [Fact]
+    public async Task ConcurrentAzureRequestsAreSerialized()
+    {
+        var handler = new ConcurrencyTrackingHandler();
+        var transport = new AzureOpenAiTransport(new HttpClient(handler), BaseOptions());
+
+        await Task.WhenAll(
+            transport.PostJsonAsync("embeddings", new { input = "one" }, CancellationToken.None),
+            transport.PostJsonAsync("embeddings", new { input = "two" }, CancellationToken.None),
+            transport.PostJsonAsync("embeddings", new { input = "three" }, CancellationToken.None));
+
+        Assert.Equal(1, handler.MaxConcurrency);
     }
 
     [Fact]
@@ -183,6 +253,7 @@ public sealed class AzureAiMatrixTests
     private static AzureOpenAiOptions WithRetries(AzureOpenAiOptions o, int value) => Copy(o, retries: value);
     private static AzureOpenAiOptions WithMaxResponseBytes(AzureOpenAiOptions o, int value) => Copy(o, maxResponseBytes: value);
     private static AzureOpenAiOptions WithMaxInputChars(AzureOpenAiOptions o, int value) => Copy(o, maxInputChars: value);
+    private static AzureOpenAiOptions WithMaxEmbeddingBatchChars(AzureOpenAiOptions o, int value) => Copy(o, maxEmbeddingBatchChars: value);
     private static AzureOpenAiOptions WithCircuitThreshold(AzureOpenAiOptions o, int value) => Copy(o, circuitThreshold: value);
     private static AzureOpenAiOptions WithBearerOnly(AzureOpenAiOptions o, string value) => Copy(o, authentication: string.Empty, apiKey: string.Empty, bearer: value);
     private static AzureOpenAiOptions WithApiKeyOnly(AzureOpenAiOptions o, string value) => Copy(o, authentication: string.Empty, apiKey: value, bearer: string.Empty);
@@ -198,6 +269,7 @@ public sealed class AzureAiMatrixTests
         int? retries = null,
         int? maxResponseBytes = null,
         int? maxInputChars = null,
+        int? maxEmbeddingBatchChars = null,
         int? circuitThreshold = null) => new()
     {
         Endpoint = endpoint ?? o.Endpoint,
@@ -211,6 +283,7 @@ public sealed class AzureAiMatrixTests
         MaxRetries = retries ?? o.MaxRetries,
         MaxResponseBytes = maxResponseBytes ?? o.MaxResponseBytes,
         MaxInputChars = maxInputChars ?? o.MaxInputChars,
+        MaxEmbeddingBatchChars = maxEmbeddingBatchChars ?? o.MaxEmbeddingBatchChars,
         MaxCompletionTokens = o.MaxCompletionTokens,
         CircuitBreakerFailureThreshold = circuitThreshold ?? o.CircuitBreakerFailureThreshold,
         CircuitBreakerBreakSeconds = o.CircuitBreakerBreakSeconds
@@ -247,6 +320,27 @@ public sealed class AzureAiMatrixTests
             InputLengths.AddRange(inputs.Select(x => x.Length));
             var data = inputs.Select((_, index) => new { index, embedding = new[] { 1f, (float)index } }).ToArray();
             return JsonResponse(HttpStatusCode.OK, JsonSerializer.Serialize(new { data }));
+        }
+    }
+
+    private sealed class ConcurrencyTrackingHandler : HttpMessageHandler
+    {
+        private int _concurrency;
+        public int MaxConcurrency { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var current = Interlocked.Increment(ref _concurrency);
+            MaxConcurrency = Math.Max(MaxConcurrency, current);
+            try
+            {
+                await Task.Delay(20, cancellationToken);
+                return JsonResponse(HttpStatusCode.OK, "{\"ok\":true}");
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _concurrency);
+            }
         }
     }
 }
