@@ -2,7 +2,19 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-Console.WriteLine("Workshop demo, MCP + RAG");
+Console.WriteLine("Workshop demo, MCP + grounded RAG");
+Console.WriteLine();
+
+var externalSpec = GetArg(args, "--spec");
+var externalQuestion = GetArg(args, "--question");
+var topK = int.TryParse(GetArg(args, "--top-k"), out var parsedTopK)
+    ? Math.Clamp(parsedTopK, 1, 20)
+    : 8;
+
+if (!string.IsNullOrWhiteSpace(externalSpec))
+    Console.WriteLine($"[demo] Using supplied OpenAPI source: {externalSpec}");
+else
+    Console.WriteLine("[demo] No --spec supplied; using the built-in deterministic WeatherForecast fixture.");
 Console.WriteLine();
 
 var serverProject = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "ApiTester.McpServer"));
@@ -48,7 +60,6 @@ static void ThrowIfRpcError(JsonDocument doc)
 
 static void ThrowIfToolError(JsonDocument doc)
 {
-    // MCP tools/call returns result which may contain isError/content
     if (doc.RootElement.TryGetProperty("result", out var result) &&
         result.TryGetProperty("isError", out var isError) &&
         isError.ValueKind == JsonValueKind.True)
@@ -70,8 +81,6 @@ async Task<JsonElement> CallToolAsync(string toolName, object args)
 
     ThrowIfRpcError(doc);
     ThrowIfToolError(doc);
-
-    // Critical: clone before JsonDocument is disposed
     return doc.RootElement.GetProperty("result").Clone();
 }
 
@@ -122,12 +131,11 @@ static string ExtractText(JsonElement toolResult)
 static Guid ExtractGuidFromResult(JsonElement toolResult)
 {
     var text = ExtractText(toolResult);
-
-    var m = Regex.Match(text, @"[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}");
-    if (!m.Success)
+    var match = Regex.Match(text, @"[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}");
+    if (!match.Success)
         throw new InvalidOperationException("Could not find a GUID in tool text: " + text);
 
-    return Guid.Parse(m.Value);
+    return Guid.Parse(match.Value);
 }
 
 static void PrintStep(string title, JsonElement result)
@@ -139,8 +147,6 @@ static void PrintStep(string title, JsonElement result)
 
 static void EnsureOkIfPresent(JsonElement result, string stepName)
 {
-    // Some tools return structured JSON, others return JSON inside text.
-    // If it contains ok:false we fail fast with readable output.
     var text = ExtractText(result);
 
     if (text.Contains("\"ok\": false", StringComparison.OrdinalIgnoreCase) ||
@@ -151,13 +157,12 @@ static void EnsureOkIfPresent(JsonElement result, string stepName)
     }
 }
 
-// Give the server a moment to start
 await Task.Delay(350);
 
 Console.WriteLine("0) tools/list");
 var tools = await ListToolsAsync();
-foreach (var t in tools.OrderBy(x => x))
-    Console.WriteLine($"- {t}");
+foreach (var tool in tools.OrderBy(x => x))
+    Console.WriteLine($"- {tool}");
 Console.WriteLine();
 
 Require(tools, "api_ping");
@@ -166,15 +171,12 @@ Require(tools, "api_set_current_project");
 Require(tools, "api_import_open_api");
 Require(tools, "api_rag_index_project");
 Require(tools, "api_rag_ask");
-// eval is optional
 
-// ---- 1) Ping
 var ping = await CallToolAsync("api_ping", new { });
 PrintStep("1) Ping", ping);
 EnsureOkIfPresent(ping, "Ping");
 
-// ---- 2) Create project
-var created = await CallToolAsync("api_create_project", new { name = "Workshop Project" });
+var created = await CallToolAsync("api_create_project", new { name = "Grounded API Demo" });
 PrintStep("2) Create project", created);
 EnsureOkIfPresent(created, "Create project");
 
@@ -182,88 +184,90 @@ var projectId = ExtractGuidFromResult(created);
 Console.WriteLine($"[demo] Using projectId: {projectId}");
 Console.WriteLine();
 
-// ---- 2b) Set current project (string expected by server tool)
 var setCurrent = await CallToolAsync("api_set_current_project", new { projectId = projectId.ToString() });
 PrintStep("2b) Set current project", setCurrent);
 EnsureOkIfPresent(setCurrent, "Set current project");
 
-// ---- 3) Import OpenAPI (tool expects specUrlOrPath, so write to temp file)
-var specJson = """
+string? tempSpecPath = null;
+var specSource = externalSpec;
+if (string.IsNullOrWhiteSpace(specSource))
 {
-  "openapi": "3.0.1",
-  "info": { "title": "WeatherForecast API", "version": "1.0" },
-  "paths": {
-    "/weatherforecast": {
-      "get": {
-        "operationId": "GetWeatherForecast",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": { "$ref": "#/components/schemas/WeatherForecast" }
+    var specJson = """
+    {
+      "openapi": "3.0.1",
+      "info": { "title": "WeatherForecast API", "version": "1.0" },
+      "paths": {
+        "/weatherforecast": {
+          "get": {
+            "operationId": "GetWeatherForecast",
+            "summary": "Return the current weather forecast",
+            "responses": {
+              "200": {
+                "description": "OK",
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/WeatherForecast" }
+                    }
+                  }
                 }
               }
             }
           }
         }
-      }
-    }
-  },
-  "components": {
-    "schemas": {
-      "WeatherForecast": {
-        "type": "object",
-        "required": [ "date", "temperatureC", "summary" ],
-        "properties": {
-          "date": { "type": "string", "format": "date-time" },
-          "temperatureC": { "type": "integer", "format": "int32" },
-          "temperatureF": { "type": "integer", "format": "int32", "readOnly": true },
-          "summary": { "type": "string", "nullable": true }
+      },
+      "components": {
+        "schemas": {
+          "WeatherForecast": {
+            "type": "object",
+            "required": [ "date", "temperatureC", "summary" ],
+            "properties": {
+              "date": { "type": "string", "format": "date-time" },
+              "temperatureC": { "type": "integer", "format": "int32" },
+              "temperatureF": { "type": "integer", "format": "int32", "readOnly": true },
+              "summary": { "type": "string", "nullable": true }
+            }
+          }
         }
       }
     }
-  }
+    """;
+
+    tempSpecPath = Path.Combine(Path.GetTempPath(), $"demo-openapi-{Guid.NewGuid():N}.json");
+    await File.WriteAllTextAsync(tempSpecPath, specJson);
+    specSource = tempSpecPath;
+    Console.WriteLine($"[demo] Wrote built-in OpenAPI fixture to: {tempSpecPath}");
+    Console.WriteLine();
 }
-""";
 
-
-var tempSpecPath = Path.Combine(Path.GetTempPath(), $"demo-openapi-{Guid.NewGuid():N}.json");
-await File.WriteAllTextAsync(tempSpecPath, specJson);
-
-Console.WriteLine($"[demo] Wrote OpenAPI to: {tempSpecPath}");
-Console.WriteLine();
-
-var imported = await CallToolAsync("api_import_open_api", new { specUrlOrPath = tempSpecPath });
+var imported = await CallToolAsync("api_import_open_api", new { specUrlOrPath = specSource });
 PrintStep("3) Import OpenAPI", imported);
 EnsureOkIfPresent(imported, "Import OpenAPI");
 
-// ---- 4) RAG index (pass projectId explicitly, so demo is stateless and reliable)
 var indexed = await CallToolAsync("api_rag_index_project", new { projectId = projectId.ToString() });
 PrintStep("4) RAG index", indexed);
 EnsureOkIfPresent(indexed, "RAG index");
 
-// ---- 5) RAG ask (pass projectId explicitly)
+var question = string.IsNullOrWhiteSpace(externalQuestion)
+    ? "What are the most important endpoints in this API, how do I call them from .NET 8, what authentication is explicitly documented, and what edge cases should I test? Do not invent anything not present in the supplied API evidence."
+    : externalQuestion;
+
+Console.WriteLine($"[demo] Question: {question}");
+Console.WriteLine();
+
 var asked = await CallToolAsync("api_rag_ask", new
 {
-    question =
-        "I’m integrating this WeatherForecast API into a .NET 8 service. " +
-        "What endpoint do I call, what does it return, and can you show a curl example plus a C# HttpClient example? " +
-        "Also, does the spec show any authentication requirements?",
-    topK = 10,
+    question,
+    topK,
     projectId = projectId.ToString()
 });
 
-PrintStep("5) RAG ask", asked);
+PrintStep("5) Grounded RAG answer", asked);
 EnsureOkIfPresent(asked, "RAG ask");
 
-// ---- 6) Eval run (optional, pass projectId if your tool supports it)
 if (tools.Contains("api_eval_run", StringComparer.OrdinalIgnoreCase))
 {
-    // If you updated ApiEvalRun to accept projectId, this will work.
-    // If not, you can change args to new { }.
     var eval = await CallToolAsync("api_eval_run", new { projectId = projectId.ToString() });
     PrintStep("6) Eval run", eval);
     EnsureOkIfPresent(eval, "Eval run");
@@ -276,14 +280,33 @@ try
 }
 catch
 {
-    // ignore
+    // Best-effort cleanup only.
 }
 
-try
+if (!string.IsNullOrWhiteSpace(tempSpecPath))
 {
-    File.Delete(tempSpecPath);
+    try
+    {
+        File.Delete(tempSpecPath);
+    }
+    catch
+    {
+        // Best-effort cleanup only.
+    }
 }
-catch
+
+static string? GetArg(string[] arguments, string name)
 {
-    // ignore
+    for (var i = 0; i < arguments.Length; i++)
+    {
+        if (!string.Equals(arguments[i], name, StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        if (i + 1 >= arguments.Length || string.IsNullOrWhiteSpace(arguments[i + 1]))
+            throw new ArgumentException($"{name} requires a value.");
+
+        return arguments[i + 1];
+    }
+
+    return null;
 }
