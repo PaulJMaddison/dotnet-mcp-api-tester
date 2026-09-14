@@ -94,7 +94,8 @@ public sealed class AzureOpenAiClientTests
     private static AzureOpenAiOptions Options(
         string chat = "",
         string embedding = "",
-        int maxRetries = 0) => new()
+        int maxRetries = 0,
+        int maxCompletionTokens = 200) => new()
     {
         Endpoint = "https://example.openai.azure.com",
         ChatDeployment = chat,
@@ -102,7 +103,7 @@ public sealed class AzureOpenAiClientTests
         ApiKey = "test-key",
         TimeoutSeconds = 5,
         MaxRetries = maxRetries,
-        MaxCompletionTokens = 200
+        MaxCompletionTokens = maxCompletionTokens
     };
 
     private static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
