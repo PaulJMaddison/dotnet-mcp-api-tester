@@ -1,5 +1,4 @@
-﻿using System.ComponentModel;
-using System.Text.Json;
+using System.ComponentModel;
 using ApiTester.McpServer.Services;
 using Microsoft.OpenApi.Models;
 using ModelContextProtocol.Server;
@@ -27,9 +26,7 @@ public sealed class DescribeTools
                 .OrderBy(operation => operation.Key.ToString(), StringComparer.Ordinal)
                 .Select(operation => new
                 {
-                    operationId = string.IsNullOrWhiteSpace(operation.Value.OperationId)
-                        ? $"{operation.Key}:{path.Key}"
-                        : operation.Value.OperationId,
+                    operationId = OpenApiOperationIdentity.GetEffectiveOperationId(operation.Key, path.Key, operation.Value),
                     method = operation.Key.ToString().ToUpperInvariant(),
                     path = path.Key,
                     summary = operation.Value.Summary ?? string.Empty
@@ -46,33 +43,10 @@ public sealed class DescribeTools
             throw new ArgumentException("operationId is required.", nameof(operationId));
 
         var doc = _store.RequireDocument();
+        var match = OpenApiOperationIdentity.Find(doc, operationId)
+            ?? throw new InvalidOperationException($"OperationId not found: {operationId}");
 
-        // Find operation by operationId (fall back to generated ids used in list)
-        (string path, OperationType method, OpenApiOperation op)? match = null;
-
-        foreach (var p in doc.Paths)
-        {
-            foreach (var o in p.Value.Operations)
-            {
-                var opId = string.IsNullOrWhiteSpace(o.Value.OperationId)
-                    ? $"{o.Key}:{p.Key}"
-                    : o.Value.OperationId;
-
-                if (string.Equals(opId, operationId, StringComparison.OrdinalIgnoreCase))
-                {
-                    match = (p.Key, o.Key, o.Value);
-                    break;
-                }
-            }
-            if (match is not null) break;
-        }
-
-        if (match is null)
-            throw new InvalidOperationException($"OperationId not found: {operationId}");
-
-        var (pathKey, httpMethod, operation) = match.Value;
-
-        // Parameters
+        var operation = match.Operation;
         var parameters = new List<object>();
         foreach (var param in operation.Parameters ?? new List<OpenApiParameter>())
         {
@@ -86,7 +60,6 @@ public sealed class DescribeTools
             });
         }
 
-        // Request body (if any)
         object? requestBody = null;
         if (operation.RequestBody is not null)
         {
@@ -102,7 +75,6 @@ public sealed class DescribeTools
             };
         }
 
-        // Responses
         var responses = new Dictionary<string, object>();
         foreach (var r in operation.Responses)
         {
@@ -117,14 +89,13 @@ public sealed class DescribeTools
             };
         }
 
-        // Security
-        var requiresAuth = operation.Security is { Count: > 0 };
+        var requiresAuth = operation.Security is { Count: > 0 } || doc.SecurityRequirements is { Count: > 0 };
 
         return new
         {
-            operationId = operationId,
-            method = httpMethod.ToString().ToUpperInvariant(),
-            path = pathKey,
+            operationId = match.OperationId,
+            method = match.Method.ToString().ToUpperInvariant(),
+            path = match.Path,
             summary = operation.Summary ?? "",
             description = operation.Description ?? "",
             requiresAuth,
@@ -138,13 +109,11 @@ public sealed class DescribeTools
     {
         if (schema is null) return null;
 
-        // Keep it simple and stable, we can expand later.
         return new
         {
             type = schema.Type ?? "",
             format = schema.Format ?? "",
             nullable = schema.Nullable,
-            // Basic handling for arrays
             items = schema.Items is null ? null : new { type = schema.Items.Type ?? "", format = schema.Items.Format ?? "" }
         };
     }
