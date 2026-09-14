@@ -34,8 +34,14 @@ public sealed class RagAnswerService
             filters: null,
             ct: ct).ConfigureAwait(false);
 
-        var userPrompt = _prompt.BuildUserPrompt(question, evidence);
+        if (evidence.Count == 0)
+        {
+            return new RagAnswer(
+                "I do not have indexed evidence for this project. Index an OpenAPI specification before asking grounded questions.",
+                evidence);
+        }
 
+        var userPrompt = _prompt.BuildUserPrompt(question, evidence);
         var answer = await _chat.CompleteAsync(_prompt.SystemPrompt, userPrompt, ct).ConfigureAwait(false);
 
         return new RagAnswer(answer, evidence);
