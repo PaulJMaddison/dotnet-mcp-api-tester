@@ -76,14 +76,19 @@ builder.Services.AddSingleton<InMemoryVectorStore>();
 builder.Services.AddSingleton<IEmbeddingClient>(sp =>
 {
     var options = sp.GetRequiredService<AzureOpenAiOptions>();
+    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("ApiTester.Rag.Embeddings");
+
     if (options.IsEmbeddingConfigured)
     {
+        logger.LogInformation(
+            "Using Azure OpenAI embedding deployment {EmbeddingDeployment} for RAG retrieval.",
+            options.EmbeddingDeployment);
+
         return new AzureOpenAiEmbeddingClient(
             sp.GetRequiredService<AzureOpenAiTransport>(),
             options);
     }
 
-    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("ApiTester.Rag.Embeddings");
     if (!string.IsNullOrWhiteSpace(options.Endpoint) || !string.IsNullOrWhiteSpace(options.EmbeddingDeployment))
     {
         logger.LogWarning(
@@ -102,14 +107,19 @@ builder.Services.AddSingleton<IEmbeddingClient>(sp =>
 builder.Services.AddSingleton<IAiClient>(sp =>
 {
     var options = sp.GetRequiredService<AzureOpenAiOptions>();
+    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("ApiTester.AI");
+
     if (options.IsChatConfigured)
     {
+        logger.LogInformation(
+            "Using Azure OpenAI chat deployment {ChatDeployment} for grounded answers.",
+            options.ChatDeployment);
+
         return new AzureOpenAiClient(
             sp.GetRequiredService<AzureOpenAiTransport>(),
             options);
     }
 
-    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("ApiTester.AI");
     if (!string.IsNullOrWhiteSpace(options.Endpoint) || !string.IsNullOrWhiteSpace(options.ChatDeployment))
     {
         logger.LogWarning(
