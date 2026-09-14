@@ -48,7 +48,7 @@ public sealed class DescribeTools
 
         var operation = match.Operation;
         var parameters = new List<object>();
-        foreach (var param in operation.Parameters ?? new List<OpenApiParameter>())
+        foreach (var param in MergeParameters(match.PathItem.Parameters, operation.Parameters))
         {
             parameters.Add(new
             {
@@ -89,7 +89,7 @@ public sealed class DescribeTools
             };
         }
 
-        var requiresAuth = operation.Security is { Count: > 0 } || doc.SecurityRequirements is { Count: > 0 };
+        var requiresAuth = OpenApiSecuritySemantics.RequiresAuthentication(doc, operation);
 
         return new
         {
@@ -103,6 +103,21 @@ public sealed class DescribeTools
             requestBody,
             responses
         };
+    }
+
+    private static IReadOnlyList<OpenApiParameter> MergeParameters(
+        IList<OpenApiParameter>? pathParameters,
+        IList<OpenApiParameter>? operationParameters)
+    {
+        var merged = new Dictionary<string, OpenApiParameter>(StringComparer.OrdinalIgnoreCase);
+        foreach (var parameter in pathParameters ?? Array.Empty<OpenApiParameter>())
+            merged[$"{parameter.In}:{parameter.Name}"] = parameter;
+        foreach (var parameter in operationParameters ?? Array.Empty<OpenApiParameter>())
+            merged[$"{parameter.In}:{parameter.Name}"] = parameter;
+        return merged.Values
+            .OrderBy(parameter => parameter.In.ToString(), StringComparer.Ordinal)
+            .ThenBy(parameter => parameter.Name, StringComparer.Ordinal)
+            .ToList();
     }
 
     private static object? DescribeSchema(OpenApiSchema? schema)

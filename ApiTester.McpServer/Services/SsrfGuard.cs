@@ -35,6 +35,10 @@ public sealed class SsrfGuard
         {
             addresses = await Dns.GetHostAddressesAsync(host, ct);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             return (false, $"DNS resolution failed for host '{host}': {ex.Message}");

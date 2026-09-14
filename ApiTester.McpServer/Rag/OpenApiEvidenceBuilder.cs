@@ -102,7 +102,7 @@ public sealed class OpenApiEvidenceBuilder
                 sb.AppendLine($"- content-type={content.Key} schema={SummarizeSchema(content.Value.Schema)}");
         }
 
-        var security = operation.Security is { Count: > 0 } ? operation.Security : document.SecurityRequirements;
+        var security = OpenApiSecuritySemantics.EffectiveRequirements(document, operation);
         sb.AppendLine($"SECURITY: {SummarizeSecurityRequirements(security)}");
         sb.AppendLine("RESPONSES:");
         if (operation.Responses.Count == 0) sb.AppendLine("- none documented");

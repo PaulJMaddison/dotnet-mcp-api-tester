@@ -136,9 +136,9 @@ public sealed class OpenApiLoadAtomicityTests
     private static Microsoft.OpenApi.Models.OpenApiDocument TestDocument(string title)
     {
         var reader = new Microsoft.OpenApi.Readers.OpenApiStringReader();
-        var doc = reader.Read($$"""
-        {"openapi":"3.0.1","info":{"title":"{{title}}","version":"1"},"paths":{"/old":{"get":{"operationId":"getOld","responses":{"200":{"description":"OK"}}}}}}
-        """, out var diagnostics);
+        var doc = reader.Read("""
+        {"openapi":"3.0.1","info":{"title":"__TITLE__","version":"1"},"paths":{"/old":{"get":{"operationId":"getOld","responses":{"200":{"description":"OK"}}}}}}
+        """.Replace("__TITLE__", title, StringComparison.Ordinal), out var diagnostics);
         Assert.NotNull(doc);
         Assert.Empty(diagnostics.Errors);
         return doc;

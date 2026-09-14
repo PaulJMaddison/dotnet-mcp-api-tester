@@ -190,6 +190,7 @@ public sealed class ConstraintGeneratorMatrixTests
         var document = new OpenApiStringReader().Read(text, out var diagnostics);
         Assert.NotNull(document);
         Assert.Empty(diagnostics.Errors);
+        OpenApiSecuritySemantics.PreserveExplicitOverrides(document, text);
         return document;
     }
 }

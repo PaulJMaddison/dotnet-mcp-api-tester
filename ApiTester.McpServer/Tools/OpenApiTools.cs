@@ -53,6 +53,7 @@ public sealed class OpenApiTools
         var document = reader.Read(specText, out var diagnostics)
             ?? throw new InvalidOperationException("OpenAPI document could not be parsed.");
 
+        OpenApiSecuritySemantics.PreserveExplicitOverrides(document, specText);
         OpenApiOperationIdentity.EnsureOperationIds(document);
 
         var scopeId = Guid.NewGuid();

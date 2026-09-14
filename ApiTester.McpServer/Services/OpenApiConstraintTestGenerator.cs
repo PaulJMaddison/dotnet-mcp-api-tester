@@ -74,7 +74,7 @@ public sealed class OpenApiConstraintTestGenerator
             found.Path,
             string.IsNullOrWhiteSpace(found.Operation.Summary) ? "No summary provided in OpenAPI." : found.Operation.Summary.Trim(),
             found.Operation.Description?.Trim() ?? string.Empty,
-            found.Operation.Security is { Count: > 0 } || document.SecurityRequirements is { Count: > 0 },
+            OpenApiSecuritySemantics.RequiresAuthentication(document, found.Operation),
             descriptors,
             responses,
             Deduplicate(cases));
@@ -272,35 +272,129 @@ public sealed class OpenApiConstraintTestGenerator
         foreach (var content in body.Content)
         {
             var schema = ResolveSchema(content.Value.Schema, document);
-            foreach (var property in schema.Properties ?? new Dictionary<string, OpenApiSchema>())
+            if (EffectiveType(schema) == "array")
             {
-                var required = schema.Required?.Contains(property.Key) == true;
-                AddBodyPropertyCases(property.Key, ResolveSchema(property.Value, document), content.Key, required, document, cases);
+                var before = cases.Count;
+                AddArrayCases("requestBody", "requestBody", schema, cases);
+                AppendContentType(cases, before, content.Key);
+                continue;
+            }
+
+            AddObjectProperties(schema, "requestBody", content.Key, document, cases, rootProperties: true, depth: 0);
+        }
+    }
+
+    private static void AddObjectProperties(
+        OpenApiSchema schema,
+        string parentTarget,
+        string contentType,
+        OpenApiDocument document,
+        List<GeneratedApiTestCase> cases,
+        bool rootProperties,
+        int depth)
+    {
+        if (depth > 12) return;
+
+        foreach (var shape in ObjectShapes(schema, document))
+        {
+            foreach (var property in shape.Properties ?? new Dictionary<string, OpenApiSchema>())
+            {
+                var target = $"{parentTarget}.{property.Key}";
+                var required = shape.Required?.Contains(property.Key) == true;
+                AddBodyValueCases(
+                    property.Key,
+                    property.Value,
+                    target,
+                    contentType,
+                    required,
+                    rootProperties,
+                    document,
+                    cases,
+                    depth + 1);
             }
         }
     }
 
-    private static void AddBodyPropertyCases(
+    private static void AddBodyValueCases(
         string name,
         OpenApiSchema schema,
+        string target,
         string contentType,
         bool required,
+        bool rootProperty,
         OpenApiDocument document,
-        List<GeneratedApiTestCase> cases)
+        List<GeneratedApiTestCase> cases,
+        int depth)
     {
-        var synthetic = new OpenApiParameter { Name = name, In = ParameterLocation.Query, Required = required, Schema = schema };
-        var before = cases.Count;
-        AddParameterCases(synthetic, document, cases);
-        for (var i = before; i < cases.Count; i++)
+        var resolved = ResolveSchema(schema, document);
+        if (required)
         {
-            var current = cases[i];
-            cases[i] = current with
-            {
-                Category = current.Category == "required" ? "required-body-property" : current.Category,
-                Target = current.Category == "required" ? $"requestBody:{name}" : current.Target.Replace($"Query:{name}", $"requestBody.{name}", StringComparison.Ordinal),
-                Description = current.Description.Replace($"parameter '{name}'", $"request-body property '{name}'", StringComparison.Ordinal) + $" Content-Type: {contentType}."
-            };
+            cases.Add(Case(
+                rootProperty ? "required-body-property" : "object-required-property",
+                rootProperty ? $"requestBody:{name}" : target,
+                rootProperty
+                    ? $"Omit required request-body property '{name}'. Content-Type: {contentType}."
+                    : $"Omit required nested property '{name}'. Content-Type: {contentType}.",
+                name,
+                null));
         }
+
+        var objectShapes = ObjectShapes(resolved, document).ToList();
+        if (objectShapes.Count > 0)
+        {
+            cases.Add(Case("object-empty", target, $"Use an empty object for '{name}'. Content-Type: {contentType}.", name, "{}"));
+            cases.Add(Case("wrong-type", target, $"Use a scalar instead of an object for '{name}'. Content-Type: {contentType}.", name, "not-an-object"));
+            AddObjectProperties(resolved, target, contentType, document, cases, rootProperties: false, depth);
+            return;
+        }
+
+        var before = cases.Count;
+        switch (EffectiveType(resolved))
+        {
+            case "integer": AddNumericCases(name, target, resolved, cases, integral: true); break;
+            case "number": AddNumericCases(name, target, resolved, cases, integral: false); break;
+            case "boolean":
+                cases.Add(Case("boolean", target, $"Use true for '{name}'.", name, "true"));
+                cases.Add(Case("boolean", target, $"Use false for '{name}'.", name, "false"));
+                cases.Add(Case("wrong-type", target, $"Use a non-boolean value for '{name}'.", name, "not-a-boolean"));
+                break;
+            case "array": AddArrayCases(name, target, resolved, cases); break;
+            default: AddStringCases(name, target, resolved, cases); break;
+        }
+        AddEnumCases(name, target, resolved, cases);
+        AppendContentType(cases, before, contentType);
+    }
+
+    private static IEnumerable<OpenApiSchema> ObjectShapes(OpenApiSchema schema, OpenApiDocument document)
+    {
+        var resolved = ResolveSchema(schema, document);
+        var hasComposition = resolved.AllOf is { Count: > 0 } || resolved.OneOf is { Count: > 0 };
+
+        if (EffectiveType(resolved) == "object" && resolved.Properties is { Count: > 0 })
+            yield return resolved;
+
+        if (resolved.AllOf is { Count: > 0 })
+        {
+            foreach (var part in resolved.AllOf)
+            foreach (var shape in ObjectShapes(part, document))
+                yield return shape;
+        }
+
+        if (resolved.OneOf is { Count: > 0 })
+        {
+            foreach (var part in resolved.OneOf)
+            foreach (var shape in ObjectShapes(part, document))
+                yield return shape;
+        }
+
+        if (!hasComposition && EffectiveType(resolved) == "object" && resolved.Properties is not { Count: > 0 })
+            yield return resolved;
+    }
+
+    private static void AppendContentType(List<GeneratedApiTestCase> cases, int start, string contentType)
+    {
+        for (var index = start; index < cases.Count; index++)
+            cases[index] = cases[index] with { Description = cases[index].Description + $" Content-Type: {contentType}." };
     }
 
     private static OpenApiSchema ResolveSchema(OpenApiSchema? schema, OpenApiDocument document)
@@ -328,6 +422,8 @@ public sealed class OpenApiConstraintTestGenerator
             return "object";
         if (schema.Items is not null)
             return "array";
+        if (schema.AllOf is { Count: > 0 } || schema.OneOf is { Count: > 0 })
+            return "object";
         return "string";
     }
 
@@ -360,7 +456,7 @@ public sealed class OpenApiConstraintTestGenerator
     }
 
     private static IReadOnlyList<GeneratedApiTestCase> Deduplicate(IEnumerable<GeneratedApiTestCase> cases)
-        => cases.GroupBy(c => $"{c.Category}|{c.Target}|{string.Join(";", c.Inputs.Select(i => $"{i.Key}={i.Value}"))}", StringComparer.Ordinal)
+        => cases.GroupBy(c => $"{c.Category}|{c.Target}|{c.Description}|{string.Join(";", c.Inputs.Select(i => $"{i.Key}={i.Value}"))}", StringComparer.Ordinal)
             .Select(g => g.First()).ToList();
 
     private static GeneratedApiTestCase Case(string category, string target, string description)

@@ -105,7 +105,7 @@ public sealed class ContractEvidenceMatrixTests
         Assert.Equal(first.Select(c => c.ChunkId), second.Select(c => c.ChunkId));
         Assert.Equal(first.Select(c => c.ContentHash), second.Select(c => c.ContentHash));
         Assert.Equal(first.Select(c => c.Text), second.Select(c => c.Text));
-        Assert.Contains(first[0].Text, "/a");
+        Assert.Contains("/a", first[0].Text);
     }
 
     [Fact]
@@ -180,6 +180,7 @@ public sealed class ContractEvidenceMatrixTests
         var document = new OpenApiStringReader().Read(text, out var diagnostics);
         Assert.NotNull(document);
         Assert.Empty(diagnostics.Errors);
+        OpenApiSecuritySemantics.PreserveExplicitOverrides(document, text);
         return document;
     }
 }
