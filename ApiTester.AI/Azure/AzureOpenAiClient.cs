@@ -12,15 +12,13 @@ public sealed class AzureOpenAiClient : IAiClient
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _options = options ?? throw new ArgumentNullException(nameof(options));
-
-        if (!_options.IsChatConfigured)
-            throw new InvalidOperationException(
-                "Azure OpenAI chat is not fully configured. Endpoint, ChatDeployment and credentials are required.");
+        _options.ValidateChat();
     }
 
     public async Task<AiResponse> GetResponseAsync(AiPrompt prompt, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(prompt);
+        ct.ThrowIfCancellationRequested();
 
         var system = Truncate(prompt.System, _options.MaxInputChars);
         var remaining = Math.Max(1, _options.MaxInputChars - system.Length);
@@ -128,7 +126,7 @@ public sealed class AzureOpenAiClient : IAiClient
     private static string Truncate(string? value, int maxChars)
     {
         value ??= string.Empty;
-        if (maxChars <= 0 || value.Length <= maxChars)
+        if (value.Length <= maxChars)
             return value;
 
         return value[..maxChars];
