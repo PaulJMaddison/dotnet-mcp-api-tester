@@ -34,7 +34,8 @@ The important boundary is:
 - OpenAPI decides what is documented/true.
 - deterministic C# derives mechanical boundary cases;
 - Azure AI handles semantic reasoning over retrieved evidence;
-- deterministic application policy decides what may execute.
+- deterministic application policy decides what may execute;
+- the MCP agent cannot loosen policy at all unless a human enabled that capability before the server process started.
 
 ## Local deterministic target
 
@@ -80,6 +81,17 @@ command = "dotnet"
 args = ["run", "--project", "C:\\ABSOLUTE\\PATH\\dotnet-mcp-api-tester\\ApiTester.McpServer"]
 ```
 
+For the live interview fixture only, if you want the agent to be able to loosen the execution policy after it shows you the initial denial, explicitly opt in at process launch:
+
+```toml
+[mcp_servers.api_tester]
+command = "dotnet"
+args = ["run", "--project", "C:\\ABSOLUTE\\PATH\\dotnet-mcp-api-tester\\ApiTester.McpServer"]
+env = { APITESTER_MCP_ALLOW_POLICY_MUTATION = "true" }
+```
+
+That flag is not a secret. It is a human-controlled capability switch. Without it, `ApiSetPolicy` fails closed.
+
 Restart/reload the Codex client after changing MCP configuration and confirm the API Tester tools are visible before the interview.
 
 Do not put Azure keys or access tokens in this file. Let the server inherit the local Azure/AI environment or use the keyless `DefaultAzureCredential` path once merged.
@@ -92,16 +104,25 @@ Give Codex this high-level request rather than manually invoking every tool:
 Use the API Tester MCP server to qualify the local fixture API.
 
 1. Create a project called "ICS Interview Demo".
-2. Import http://127.0.0.1:5055/openapi.json.
-3. Show me the available operations.
-4. Generate the deterministic test plan for getWidgetById and explain which cases came directly from OpenAPI constraints.
-5. Generate the deterministic test plan for createWidget and show the min/max, enum, pattern, required-field and array-boundary cases.
-6. Index the project for RAG.
-7. Ask the grounded AI what the documented failure modes are for getWidgetById and show the retrieved evidence separately from the generated answer.
-8. Show the current execution policy before making any network call.
-9. Keep execution in dry-run mode first and show the request that would be sent for id=0 and id=1.
-10. Only after showing the policy boundary, enable the minimum local permissions required for this fixture and execute permitted cases.
-11. Summarise what failed, what passed, and which conclusions came from deterministic contract checks versus AI reasoning.
+2. Inspect the current execution policy and tell me whether MCP policy mutation was enabled by the human at process startup.
+3. Try to import http://127.0.0.1:5055/openapi.json without weakening the policy first. I expect localhost SSRF protection to block it.
+4. Show me the exact reason it was blocked.
+5. If and only if the process-level mutation capability is enabled, change the minimum policy required for this fixture:
+   - keep dryRun=true;
+   - allow only http://127.0.0.1:5055;
+   - allow GET and POST;
+   - allow localhost for this fixture only.
+6. Import the OpenAPI document successfully.
+7. Show me the available operations.
+8. Generate the deterministic test plan for getWidgetById and explain which cases came directly from OpenAPI constraints.
+9. Generate the deterministic test plan for createWidget and show the min/max, enum, pattern, required-field and array-boundary cases.
+10. Index the project for RAG.
+11. Ask the grounded AI what the documented failure modes are for getWidgetById and show the retrieved evidence separately from the generated answer.
+12. While dryRun is still true, show the request that would be sent for id=0 and id=1.
+13. Ask me before changing dryRun to false.
+14. After approval, execute a small set of permitted cases, including id=0, id=1 and id=10000.
+15. Summarise what failed, what passed, and which conclusions came from deterministic contract checks versus AI reasoning.
+16. Reset runtime/policy to safe defaults at the end.
 
 Do not invent parameters or behaviour that is absent from the OpenAPI contract.
 ```
@@ -110,21 +131,20 @@ The agent should discover and compose the MCP tools itself. That is part of the 
 
 ## Safety moment to show deliberately
 
-The fixture uses localhost. Default policy is intentionally restrictive.
+The localhost import should fail on the first attempt. That is intentional.
 
-Do not silently disable the controls before the demo. Show them.
+The useful conversation is:
 
-A good sequence is:
+1. `ApiGetPolicy` shows deny-by-default execution and `blockLocalhost=true`;
+2. the attempted localhost OpenAPI import is blocked by the SSRF guard;
+3. `mcpPolicyMutationEnabled` shows whether the human pre-authorized policy changes at process startup;
+4. only in the interview-specific process, after human opt-in, can the agent scope policy down to one base URL and GET/POST;
+5. execution remains dry-run until a second explicit decision changes it;
+6. `ApiResetRuntime` returns everything to safe defaults.
 
-1. import/analyse/index while execution remains safe;
-2. call the policy inspection tool;
-3. run an operation in dry-run mode;
-4. explain that the model cannot grant itself network access;
-5. explicitly allow only `http://127.0.0.1:5055`, the required methods, and local access for the fixture;
-6. execute the selected cases;
-7. reset runtime/policy at the end.
+The architectural statement is therefore accurate:
 
-That turns a limitation into one of the strongest architectural points in the walkthrough.
+> The model cannot create new authority. The process decides whether policy mutation is even available, and the policy decides what network actions are permitted.
 
 ## Code walkthrough after the live demo
 
@@ -165,12 +185,13 @@ Show these files in this order:
 7. `ApiTester.AI/Azure/AzureOpenAiTransport.cs`
    - authentication, timeout, retry, Retry-After, response bounds, circuit breaker, safe diagnostics and telemetry.
 
-8. `ApiTester.McpServer/Tools/ExecuteTools.cs` / `PolicyTools.cs`
+8. `ApiTester.McpServer/Services/McpSafetyOptions.cs` + `PolicyTools.cs` + `ExecuteTools.cs`
+   - human capability gate at process startup;
    - agent intent is not authority;
-   - execution is governed by deterministic policy.
+   - execution remains deterministic policy.
 
-9. `ApiTester.Web.UnitTests/OpenApiStructuredAnalysisTests.cs`
-   - finish with evidence that structure and constraints are mechanically protected.
+9. `ApiTester.Web.UnitTests/OpenApiStructuredAnalysisTests.cs` + `McpPolicySafetyTests.cs`
+   - finish with evidence that structure, constraints and authority boundaries are mechanically protected.
 
 ## The line to use
 
