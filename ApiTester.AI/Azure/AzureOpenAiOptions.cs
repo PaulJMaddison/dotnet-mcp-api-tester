@@ -6,10 +6,15 @@ public sealed class AzureOpenAiOptions
     public const string ApiKeyAuthentication = "ApiKey";
     public const string BearerTokenAuthentication = "BearerToken";
 
+    public const string DefaultCredentialSource = "Default";
+    public const string AzureCliCredentialSource = "AzureCli";
+    public const string ManagedIdentityCredentialSource = "ManagedIdentity";
+
     public string Endpoint { get; init; } = string.Empty;
     public string ChatDeployment { get; init; } = string.Empty;
     public string EmbeddingDeployment { get; init; } = string.Empty;
     public string Authentication { get; init; } = string.Empty;
+    public string CredentialSource { get; init; } = DefaultCredentialSource;
     public string ApiKey { get; init; } = string.Empty;
     public string BearerToken { get; init; } = string.Empty;
     public int TimeoutSeconds { get; init; } = 30;
@@ -17,10 +22,7 @@ public sealed class AzureOpenAiOptions
     public int MaxResponseBytes { get; init; } = 1_048_576;
     public int MaxInputChars { get; init; } = 120_000;
 
-    // Leave unset by default because Azure Foundry v1 can front model families
-    // with different generation controls. Enable only after choosing a deployment.
     public int MaxCompletionTokens { get; init; }
-
     public int CircuitBreakerFailureThreshold { get; init; } = 4;
     public int CircuitBreakerBreakSeconds { get; init; } = 30;
 
@@ -41,7 +43,9 @@ public sealed class AzureOpenAiOptions
     public void ValidateCommon()
     {
         _ = GetApiBaseUri();
-        _ = GetAuthenticationMode();
+        var authenticationMode = GetAuthenticationMode();
+        if (authenticationMode == AzureOpenAiAuthenticationMode.DefaultAzureCredential)
+            _ = GetCredentialSource();
 
         if (TimeoutSeconds <= 0)
             throw new InvalidOperationException("AzureOpenAI:TimeoutSeconds must be greater than zero.");
@@ -107,13 +111,29 @@ public sealed class AzureOpenAiOptions
                 "AzureOpenAI:Authentication must be DefaultAzureCredential, ApiKey, or BearerToken.");
         }
 
-        // Backward-compatible behavior for existing local/test configuration.
         if (!string.IsNullOrWhiteSpace(BearerToken))
             return AzureOpenAiAuthenticationMode.BearerToken;
         if (!string.IsNullOrWhiteSpace(ApiKey))
             return AzureOpenAiAuthenticationMode.ApiKey;
 
         return AzureOpenAiAuthenticationMode.None;
+    }
+
+    public AzureOpenAiCredentialSource GetCredentialSource()
+    {
+        var configured = string.IsNullOrWhiteSpace(CredentialSource)
+            ? DefaultCredentialSource
+            : CredentialSource.Trim();
+
+        if (configured.Equals(DefaultCredentialSource, StringComparison.OrdinalIgnoreCase))
+            return AzureOpenAiCredentialSource.Default;
+        if (configured.Equals(AzureCliCredentialSource, StringComparison.OrdinalIgnoreCase))
+            return AzureOpenAiCredentialSource.AzureCli;
+        if (configured.Equals(ManagedIdentityCredentialSource, StringComparison.OrdinalIgnoreCase))
+            return AzureOpenAiCredentialSource.ManagedIdentity;
+
+        throw new InvalidOperationException(
+            "AzureOpenAI:CredentialSource must be Default, AzureCli, or ManagedIdentity.");
     }
 }
 
@@ -123,4 +143,11 @@ public enum AzureOpenAiAuthenticationMode
     DefaultAzureCredential,
     ApiKey,
     BearerToken
+}
+
+public enum AzureOpenAiCredentialSource
+{
+    Default,
+    AzureCli,
+    ManagedIdentity
 }
