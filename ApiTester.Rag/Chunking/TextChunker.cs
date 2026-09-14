@@ -39,7 +39,7 @@ public sealed class TextChunker
         var created = createdUtc ?? DateTime.UtcNow;
 
         // A small but valid OpenAPI document is still useful evidence. MinChunkChars
-        // controls split fragments, not whether the entire source is eligible for indexing.
+        // controls preferred split size, not whether the source is eligible for indexing.
         if (text.Length < _o.MinChunkChars)
         {
             return new[]
@@ -64,7 +64,7 @@ public sealed class TextChunker
                 cut = candidate.Length;
 
             var chunkText = candidate.Substring(0, cut).Trim();
-            if (chunkText.Length >= _o.MinChunkChars || (idx == 0 && chunks.Count == 0))
+            if (chunkText.Length > 0)
             {
                 chunks.Add(CreateChunk(
                     projectId,
