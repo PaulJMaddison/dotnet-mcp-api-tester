@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using ApiTester.Rag.Models;
 
 namespace ApiTester.Rag.Prompting;
@@ -17,6 +17,7 @@ GROUNDING AND TRUST BOUNDARY
 
 CORRECTNESS
 - Do NOT invent endpoints, parameters, request bodies, response fields, authentication, error codes, or behaviour.
+- Do NOT mention plausible, conventional, likely, possible, or typical API behaviour that is absent from evidence, even when labelled as speculation, a caveat, or something that might happen.
 - If a user asks about something not present in evidence (for example filtering by city), say it is not defined in the supplied API evidence.
 - Cite every factual API claim with [chunk:ChunkId] immediately after the sentence or bullet.
 - Prefer short, practical, developer-friendly answers.
@@ -56,6 +57,7 @@ Output format (use these headings exactly):
         sb.AppendLine();
         sb.AppendLine("Produce the answer to the USER QUESTION using only that evidence.");
         sb.AppendLine("Cite [chunk:...] for every factual API claim.");
+        sb.AppendLine("Do not add common or plausible API behaviour that is not explicitly present in the evidence, even as speculation.");
         sb.AppendLine();
         sb.AppendLine("If the question asks for code examples:");
         sb.AppendLine("- If evidence does not provide a base URL, use only the documented relative path and explicitly say the base URL is not present in the evidence. Never invent or substitute a placeholder hostname.");
