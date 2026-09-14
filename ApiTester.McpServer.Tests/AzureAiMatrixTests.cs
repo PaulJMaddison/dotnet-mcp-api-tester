@@ -15,7 +15,7 @@ public sealed class AzureAiMatrixTests
     [InlineData("https://example.openai.azure.com/openai/v1/", "https://example.openai.azure.com/openai/v1/")]
     public void EndpointNormalisationIsDeterministic(string input, string expected)
     {
-        var options = BaseOptions() withEndpoint(input);
+        var options = WithEndpoint(BaseOptions(), input);
         Assert.Equal(expected, options.GetApiBaseUri().ToString());
     }
 
@@ -26,35 +26,35 @@ public sealed class AzureAiMatrixTests
     [InlineData("not-a-uri")]
     public void InvalidEndpointsFailClosed(string endpoint)
     {
-        var options = BaseOptions() withEndpoint(endpoint);
+        var options = WithEndpoint(BaseOptions(), endpoint);
         Assert.Throws<InvalidOperationException>(options.GetApiBaseUri);
     }
 
     [Fact]
     public void AuthenticationModeIsExplicitWhenConfiguredAndOtherwiseUsesAvailableSecret()
     {
-        Assert.Equal(AzureOpenAiAuthenticationMode.ApiKey, (BaseOptions() withAuthentication(AzureOpenAiOptions.ApiKeyAuthentication)).GetAuthenticationMode());
-        Assert.Equal(AzureOpenAiAuthenticationMode.BearerToken, (BaseOptions() withBearerOnly("token")).GetAuthenticationMode());
-        Assert.Equal(AzureOpenAiAuthenticationMode.ApiKey, (BaseOptions() withApiKeyOnly("key")).GetAuthenticationMode());
-        Assert.Throws<InvalidOperationException>(() => (BaseOptions() withAuthentication("something-else")).GetAuthenticationMode());
+        Assert.Equal(AzureOpenAiAuthenticationMode.ApiKey, WithAuthentication(BaseOptions(), AzureOpenAiOptions.ApiKeyAuthentication).GetAuthenticationMode());
+        Assert.Equal(AzureOpenAiAuthenticationMode.BearerToken, WithBearerOnly(BaseOptions(), "token").GetAuthenticationMode());
+        Assert.Equal(AzureOpenAiAuthenticationMode.ApiKey, WithApiKeyOnly(BaseOptions(), "key").GetAuthenticationMode());
+        Assert.Throws<InvalidOperationException>(() => WithAuthentication(BaseOptions(), "something-else").GetAuthenticationMode());
     }
 
     [Fact]
     public void InvalidCredentialSourceAndInvalidResourceBoundsAreRejected()
     {
-        Assert.Throws<InvalidOperationException>(() => (BaseOptions() withCredentialSource("VisualStudio")).GetCredentialSource());
-        Assert.Throws<InvalidOperationException>(() => (BaseOptions() withTimeout(0)).ValidateCommon());
-        Assert.Throws<InvalidOperationException>(() => (BaseOptions() withRetries(-1)).ValidateCommon());
-        Assert.Throws<InvalidOperationException>(() => (BaseOptions() withMaxResponseBytes(0)).ValidateCommon());
-        Assert.Throws<InvalidOperationException>(() => (BaseOptions() withMaxInputChars(0)).ValidateCommon());
-        Assert.Throws<InvalidOperationException>(() => (BaseOptions() withCircuitThreshold(0)).ValidateCommon());
+        Assert.Throws<InvalidOperationException>(() => WithCredentialSource(BaseOptions(), "VisualStudio").GetCredentialSource());
+        Assert.Throws<InvalidOperationException>(() => WithTimeout(BaseOptions(), 0).ValidateCommon());
+        Assert.Throws<InvalidOperationException>(() => WithRetries(BaseOptions(), -1).ValidateCommon());
+        Assert.Throws<InvalidOperationException>(() => WithMaxResponseBytes(BaseOptions(), 0).ValidateCommon());
+        Assert.Throws<InvalidOperationException>(() => WithMaxInputChars(BaseOptions(), 0).ValidateCommon());
+        Assert.Throws<InvalidOperationException>(() => WithCircuitThreshold(BaseOptions(), 0).ValidateCommon());
     }
 
     [Fact]
     public async Task EmbeddingsSplitAtProviderBatchLimit()
     {
         var handler = new EmbeddingHandler();
-        var options = BaseOptions() withMaxInputChars(100_000);
+        var options = WithMaxInputChars(BaseOptions(), 100_000);
         var client = new AzureOpenAiEmbeddingClient(new AzureOpenAiTransport(new HttpClient(handler), options), options);
 
         var result = await client.EmbedBatchAsync(Enumerable.Range(0, 65).Select(i => $"item-{i}").ToArray(), CancellationToken.None);
@@ -67,7 +67,7 @@ public sealed class AzureAiMatrixTests
     public async Task EmbeddingsAlsoSplitByAggregateCharacterBudgetAndTrimSingleOversizedInput()
     {
         var handler = new EmbeddingHandler();
-        var options = BaseOptions() withMaxInputChars(5);
+        var options = WithMaxInputChars(BaseOptions(), 5);
         var client = new AzureOpenAiEmbeddingClient(new AzureOpenAiTransport(new HttpClient(handler), options), options);
 
         await client.EmbedBatchAsync(new[] { "aaaa", "bbbb", "0123456789" }, CancellationToken.None);
@@ -105,7 +105,7 @@ public sealed class AzureAiMatrixTests
             }
             return JsonResponse(HttpStatusCode.OK, "{\"ok\":true}");
         });
-        var options = BaseOptions() withRetries(1);
+        var options = WithRetries(BaseOptions(), 1);
         var transport = new AzureOpenAiTransport(new HttpClient(handler), options);
 
         var response = await transport.PostJsonAsync("chat/completions", new { hello = "world" }, CancellationToken.None);
@@ -118,7 +118,7 @@ public sealed class AzureAiMatrixTests
     public async Task CircuitBreakerOpensAfterConfiguredConsecutiveFailures()
     {
         var handler = new StaticHandler(_ => JsonResponse(HttpStatusCode.BadRequest, "{}"));
-        var options = BaseOptions() withCircuitThreshold(2) withRetries(0);
+        var options = WithRetries(WithCircuitThreshold(BaseOptions(), 2), 0);
         var transport = new AzureOpenAiTransport(new HttpClient(handler), options);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => transport.PostJsonAsync("embeddings", new { input = "a" }, CancellationToken.None));
@@ -147,14 +147,15 @@ public sealed class AzureAiMatrixTests
         await transport.PostJsonAsync("chat/completions", new { message = "hello" }, CancellationToken.None);
 
         Assert.Equal("unit-test-key", apiKeyHeader);
-        Assert.DoesNotContain("unit-test-key", requestBody);
+        Assert.NotNull(requestBody);
+        Assert.DoesNotContain("unit-test-key", requestBody!);
     }
 
     [Fact]
     public async Task OversizedAzureResponseIsRejected()
     {
         var handler = new StaticHandler(_ => JsonResponse(HttpStatusCode.OK, "123456789"));
-        var options = BaseOptions() withMaxResponseBytes(4);
+        var options = WithMaxResponseBytes(BaseOptions(), 4);
         var transport = new AzureOpenAiTransport(new HttpClient(handler), options);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => transport.PostJsonAsync("chat/completions", new { x = 1 }, CancellationToken.None));
@@ -175,16 +176,16 @@ public sealed class AzureAiMatrixTests
         CircuitBreakerBreakSeconds = 30
     };
 
-    private static AzureOpenAiOptions withEndpoint(this AzureOpenAiOptions o, string value) => Copy(o, endpoint: value);
-    private static AzureOpenAiOptions withAuthentication(this AzureOpenAiOptions o, string value) => Copy(o, authentication: value);
-    private static AzureOpenAiOptions withCredentialSource(this AzureOpenAiOptions o, string value) => Copy(o, credentialSource: value);
-    private static AzureOpenAiOptions withTimeout(this AzureOpenAiOptions o, int value) => Copy(o, timeout: value);
-    private static AzureOpenAiOptions withRetries(this AzureOpenAiOptions o, int value) => Copy(o, retries: value);
-    private static AzureOpenAiOptions withMaxResponseBytes(this AzureOpenAiOptions o, int value) => Copy(o, maxResponseBytes: value);
-    private static AzureOpenAiOptions withMaxInputChars(this AzureOpenAiOptions o, int value) => Copy(o, maxInputChars: value);
-    private static AzureOpenAiOptions withCircuitThreshold(this AzureOpenAiOptions o, int value) => Copy(o, circuitThreshold: value);
-    private static AzureOpenAiOptions withBearerOnly(this AzureOpenAiOptions o, string value) => Copy(o, authentication: "", apiKey: "", bearer: value);
-    private static AzureOpenAiOptions withApiKeyOnly(this AzureOpenAiOptions o, string value) => Copy(o, authentication: "", apiKey: value, bearer: "");
+    private static AzureOpenAiOptions WithEndpoint(AzureOpenAiOptions o, string value) => Copy(o, endpoint: value);
+    private static AzureOpenAiOptions WithAuthentication(AzureOpenAiOptions o, string value) => Copy(o, authentication: value);
+    private static AzureOpenAiOptions WithCredentialSource(AzureOpenAiOptions o, string value) => Copy(o, credentialSource: value);
+    private static AzureOpenAiOptions WithTimeout(AzureOpenAiOptions o, int value) => Copy(o, timeout: value);
+    private static AzureOpenAiOptions WithRetries(AzureOpenAiOptions o, int value) => Copy(o, retries: value);
+    private static AzureOpenAiOptions WithMaxResponseBytes(AzureOpenAiOptions o, int value) => Copy(o, maxResponseBytes: value);
+    private static AzureOpenAiOptions WithMaxInputChars(AzureOpenAiOptions o, int value) => Copy(o, maxInputChars: value);
+    private static AzureOpenAiOptions WithCircuitThreshold(AzureOpenAiOptions o, int value) => Copy(o, circuitThreshold: value);
+    private static AzureOpenAiOptions WithBearerOnly(AzureOpenAiOptions o, string value) => Copy(o, authentication: string.Empty, apiKey: string.Empty, bearer: value);
+    private static AzureOpenAiOptions WithApiKeyOnly(AzureOpenAiOptions o, string value) => Copy(o, authentication: string.Empty, apiKey: value, bearer: string.Empty);
 
     private static AzureOpenAiOptions Copy(
         AzureOpenAiOptions o,
