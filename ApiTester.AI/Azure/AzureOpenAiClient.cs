@@ -33,8 +33,7 @@ public sealed class AzureOpenAiClient : IAiClient
             {
                 new { role = "system", content = system },
                 new { role = "user", content = user }
-            },
-            ["temperature"] = 0.1
+            }
         };
 
         if (_options.MaxCompletionTokens > 0)
