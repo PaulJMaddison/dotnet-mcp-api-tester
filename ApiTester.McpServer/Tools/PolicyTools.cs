@@ -14,11 +14,11 @@ public sealed class PolicyTools
     private readonly IAuditEventStore _auditStore;
     private readonly McpSafetyOptions _safety;
 
-    public PolicyTools(ApiRuntimeConfig cfg, IAuditEventStore auditStore, McpSafetyOptions safety)
+    public PolicyTools(ApiRuntimeConfig cfg, IAuditEventStore auditStore, McpSafetyOptions? safety = null)
     {
         _cfg = cfg ?? throw new ArgumentNullException(nameof(cfg));
         _auditStore = auditStore ?? throw new ArgumentNullException(nameof(auditStore));
-        _safety = safety ?? throw new ArgumentNullException(nameof(safety));
+        _safety = safety ?? new McpSafetyOptions(true);
     }
 
     [McpServerTool, Description("Get the current API execution policy and whether this server process permits MCP policy mutation.")]
