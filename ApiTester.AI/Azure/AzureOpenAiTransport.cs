@@ -8,6 +8,8 @@ namespace ApiTester.AI.Azure;
 
 public sealed class AzureOpenAiTransport
 {
+    public static readonly ActivitySource ActivitySource = new("ApiTester.AI.Azure");
+
     private readonly HttpClient _httpClient;
     private readonly AzureOpenAiOptions _options;
     private readonly object _circuitLock = new();
@@ -32,9 +34,16 @@ public sealed class AzureOpenAiTransport
         var attempts = Math.Max(1, _options.MaxRetries + 1);
         Exception? lastError = null;
 
+        using var activity = ActivitySource.StartActivity("azure.openai.request", ActivityKind.Client);
+        activity?.SetTag("ai.system", "azure_openai");
+        activity?.SetTag("server.address", baseUri.Host);
+        activity?.SetTag("http.request.method", "POST");
+        activity?.SetTag("http.route", relativePath.TrimStart('/'));
+
         for (var attempt = 1; attempt <= attempts; attempt++)
         {
             ct.ThrowIfCancellationRequested();
+            activity?.SetTag("ai.retry.attempt", attempt);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(5, _options.TimeoutSeconds)));
@@ -54,6 +63,8 @@ public sealed class AzureOpenAiTransport
                     HttpCompletionOption.ResponseHeadersRead,
                     timeoutCts.Token).ConfigureAwait(false);
                 stopwatch.Stop();
+
+                activity?.SetTag("http.response.status_code", (int)response.StatusCode);
 
                 if (IsTransient(response.StatusCode) && attempt < attempts)
                 {
@@ -81,8 +92,14 @@ public sealed class AzureOpenAiTransport
                         $"Azure OpenAI response exceeded the configured maximum of {_options.MaxResponseBytes} bytes.");
                 }
 
+                var requestId = TryGetRequestId(response);
+                activity?.SetTag("ai.retry.count", attempt - 1);
+                activity?.SetTag("ai.response.bytes", bytes.Length);
+                activity?.SetTag("ai.request_id", requestId);
+                activity?.SetStatus(ActivityStatusCode.Ok);
+
                 RecordSuccess();
-                return new AzureOpenAiTransportResponse(bytes, (int)stopwatch.ElapsedMilliseconds, TryGetRequestId(response));
+                return new AzureOpenAiTransportResponse(bytes, (int)stopwatch.ElapsedMilliseconds, requestId);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested && attempt < attempts)
             {
@@ -107,6 +124,9 @@ public sealed class AzureOpenAiTransport
         }
 
         RecordFailure();
+        activity?.SetTag("ai.retry.count", attempts - 1);
+        activity?.SetTag("error.type", lastError?.GetType().Name ?? "Unknown");
+        activity?.SetStatus(ActivityStatusCode.Error, "Azure OpenAI request failed");
         throw new InvalidOperationException("Azure OpenAI request failed.", lastError);
     }
 
