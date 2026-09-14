@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using ApiTester.Rag.Models;
 
@@ -10,10 +10,12 @@ public sealed class TextChunker
 
     public TextChunker(ChunkerOptions options)
     {
+        ArgumentNullException.ThrowIfNull(options);
         if (options.MaxCharsPerChunk < 400) throw new ArgumentOutOfRangeException(nameof(options.MaxCharsPerChunk));
         if (options.OverlapChars < 0) throw new ArgumentOutOfRangeException(nameof(options.OverlapChars));
         if (options.OverlapChars >= options.MaxCharsPerChunk) throw new ArgumentOutOfRangeException(nameof(options.OverlapChars));
         if (options.MinChunkChars < 50) throw new ArgumentOutOfRangeException(nameof(options.MinChunkChars));
+        if (options.MinChunkChars > options.MaxCharsPerChunk) throw new ArgumentOutOfRangeException(nameof(options.MinChunkChars));
 
         _o = options;
     }
@@ -36,6 +38,16 @@ public sealed class TextChunker
         metadata ??= new Dictionary<string, string>();
         var created = createdUtc ?? DateTime.UtcNow;
 
+        // A small but valid OpenAPI document is still useful evidence. MinChunkChars
+        // controls split fragments, not whether the entire source is eligible for indexing.
+        if (text.Length < _o.MinChunkChars)
+        {
+            return new[]
+            {
+                CreateChunk(projectId, sourceType, sourceId, 0, text, metadata, created)
+            };
+        }
+
         var chunks = new List<RagChunk>();
         var idx = 0;
         var chunkIndex = 0;
@@ -52,21 +64,16 @@ public sealed class TextChunker
                 cut = candidate.Length;
 
             var chunkText = candidate.Substring(0, cut).Trim();
-            if (chunkText.Length >= _o.MinChunkChars)
+            if (chunkText.Length >= _o.MinChunkChars || (idx == 0 && chunks.Count == 0))
             {
-                var chunkId = $"{sourceType}:{sourceId}:{chunkIndex:D4}";
-                var hash = Sha256Hex(chunkText);
-
-                chunks.Add(new RagChunk(
-                    ProjectId: projectId,
-                    SourceType: sourceType,
-                    SourceId: sourceId,
-                    ChunkId: chunkId,
-                    Text: chunkText,
-                    ContentHash: hash,
-                    CreatedUtc: created,
-                    Metadata: metadata));
-
+                chunks.Add(CreateChunk(
+                    projectId,
+                    sourceType,
+                    sourceId,
+                    chunkIndex,
+                    chunkText,
+                    metadata,
+                    created));
                 chunkIndex++;
             }
 
@@ -79,11 +86,32 @@ public sealed class TextChunker
         return chunks;
     }
 
-    private static string Normalise(string text)
+    private static RagChunk CreateChunk(
+        Guid projectId,
+        string sourceType,
+        string sourceId,
+        int chunkIndex,
+        string text,
+        IReadOnlyDictionary<string, string> metadata,
+        DateTime createdUtc)
+    {
+        return new RagChunk(
+            ProjectId: projectId,
+            SourceType: sourceType,
+            SourceId: sourceId,
+            ChunkId: $"{sourceType}:{sourceId}:{chunkIndex:D4}",
+            Text: text,
+            ContentHash: Sha256Hex(text),
+            CreatedUtc: createdUtc,
+            Metadata: metadata);
+    }
+
+    private static string Normalise(string? text)
     {
         text ??= string.Empty;
         text = text.Replace("\r\n", "\n").Replace('\r', '\n');
-        while (text.Contains("\n\n\n")) text = text.Replace("\n\n\n", "\n\n");
+        while (text.Contains("\n\n\n", StringComparison.Ordinal))
+            text = text.Replace("\n\n\n", "\n\n", StringComparison.Ordinal);
         return text.Trim();
     }
 
