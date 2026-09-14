@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+
 namespace ApiTester.McpServer.Services;
 
 /// <summary>
