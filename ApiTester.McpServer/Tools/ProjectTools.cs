@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using ApiTester.McpServer.Models;
 using ApiTester.McpServer.Persistence.Stores;
 using ApiTester.McpServer.Runtime;
@@ -16,9 +16,9 @@ public sealed class ProjectTools
 
     public ProjectTools(IProjectStore projects, ProjectContext ctx, ILogger<ProjectTools> logger)
     {
-        _projects = projects;
-        _ctx = ctx;
-        _logger = logger;
+        _projects = projects ?? throw new ArgumentNullException(nameof(projects));
+        _ctx = ctx ?? throw new ArgumentNullException(nameof(ctx));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     [McpServerTool, Description("Create a new project. Returns projectId.")]
@@ -27,7 +27,7 @@ public sealed class ProjectTools
         if (string.IsNullOrWhiteSpace(name))
             return new { isError = true, error = "Project name is required." };
 
-        var project = await _projects.CreateAsync(OrgDefaults.DefaultOrganisationId, OwnerKeyDefaults.Default, name, ct);
+        var project = await _projects.CreateAsync(OrgDefaults.DefaultOrganisationId, OwnerKeyDefaults.Default, name.Trim(), ct);
         _ctx.SetCurrentProject(project.ProjectId);
         _logger.LogInformation("Created project {ProjectId} with name {ProjectName}", project.ProjectId, project.Name);
         return new { projectId = project.ProjectId, currentProjectId = project.ProjectId };
@@ -50,7 +50,7 @@ public sealed class ProjectTools
     [McpServerTool, Description("Set the current project used for storing runs.")]
     public async Task<object> ApiSetCurrentProject(string projectId, CancellationToken ct)
     {
-        if (!Guid.TryParse(projectId, out var id))
+        if (!Guid.TryParse(projectId, out var id) || id == Guid.Empty)
             return new { ok = false, reason = "Invalid projectId GUID." };
 
         if (await _projects.GetAsync(OrgDefaults.DefaultOrganisationId, id, ct) is null)
