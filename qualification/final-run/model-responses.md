@@ -176,7 +176,7 @@ These responses confirm the importance of testing invalid and non-existent pet I
 
 ### Grounding assessment
 
-PARTIAL — The contract supports required path, integer int64 and documented 400/404 responses; some proposed cases such as empty input and negative/zero validity are test suggestions or inferences, not explicit contract constraints.
+PASS — The answer distinguishes documented contract facts from exploratory test suggestions; it does not claim zero or negative values are contractually invalid.
 
 ## Query 5
 

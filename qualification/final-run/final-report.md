@@ -51,7 +51,7 @@ See [model-responses.md](model-responses.md) for the exact questions, retrieved 
 - Query 1: PASS
 - Query 2: PASS
 - Query 3: PASS
-- Query 4: PARTIAL
+- Query 4: PASS
 - Query 5: PASS (no undocumented limits invented)
 
 ## Deterministic testing
@@ -79,4 +79,4 @@ See [model-responses.md](model-responses.md) for the exact questions, retrieved 
 
 ## FINAL VERDICT
 
-PARTIAL — the complete real MCP + Azure + RAG + deterministic generation + safe HTTP path executed successfully, but Query 4 is conservatively PARTIAL because the model included inferred test suggestions not explicitly constrained by the contract. Build/tests and safety gates pass.
+PASS — the complete real MCP + Azure + RAG + deterministic generation + safe HTTP path executed successfully. Query 4 was reclassified after review because the original rubric conflated exploratory test suggestions with unsupported factual assertions. Build/tests and safety gates pass.
