@@ -1,9 +1,18 @@
 $ErrorActionPreference = 'Stop'
-$env:AZURE_OPENAI_ENDPOINT = 'https://aoai-apitester-demo-pjm.openai.azure.com/openai/v1/'
-$env:AZURE_OPENAI_CHAT_DEPLOYMENT = 'gpt-41-mini-demo'
-$env:AZURE_OPENAI_EMBEDDING_DEPLOYMENT = 'text-embedding-3-small-demo'
-$env:AZURE_OPENAI_AUTHENTICATION = 'DefaultAzureCredential'
-$env:AZURE_OPENAI_CREDENTIAL_SOURCE = 'AzureCli'
+
+$requiredAzureSettings = @(
+    'AZURE_OPENAI_ENDPOINT',
+    'AZURE_OPENAI_CHAT_DEPLOYMENT',
+    'AZURE_OPENAI_EMBEDDING_DEPLOYMENT',
+    'AZURE_OPENAI_AUTHENTICATION',
+    'AZURE_OPENAI_CREDENTIAL_SOURCE'
+)
+foreach ($name in $requiredAzureSettings) {
+    if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+        throw "Missing required runtime environment variable: $name"
+    }
+}
+
 $env:API_TESTER_QUALIFICATION_DIR = (Join-Path (Get-Location) 'qualification/final-run')
 $env:APITESTER_MCP_ALLOW_POLICY_MUTATION = 'true'
 New-Item -ItemType Directory -Force $env:API_TESTER_QUALIFICATION_DIR | Out-Null

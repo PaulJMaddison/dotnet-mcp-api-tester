@@ -164,7 +164,7 @@ public sealed class OpenApiEvidenceBuilder
             if (!string.IsNullOrWhiteSpace(scheme.Scheme)) sb.AppendLine($"SCHEME: {scheme.Scheme}");
             if (!string.IsNullOrWhiteSpace(scheme.BearerFormat)) sb.AppendLine($"BEARER FORMAT: {scheme.BearerFormat}");
             if (!string.IsNullOrWhiteSpace(scheme.Name)) sb.AppendLine($"NAME: {scheme.Name}");
-            sb.AppendLine($"IN: {scheme.In}");
+            if (scheme.Type == SecuritySchemeType.ApiKey) sb.AppendLine($"IN: {scheme.In}");
             if (!string.IsNullOrWhiteSpace(scheme.Description)) sb.AppendLine($"DESCRIPTION: {scheme.Description.Trim()}");
 
             var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
