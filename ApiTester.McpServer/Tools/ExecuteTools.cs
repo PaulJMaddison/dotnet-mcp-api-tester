@@ -19,13 +19,15 @@ public sealed class ExecuteTools
     private readonly ApiRuntimeConfig _runtime;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly SsrfGuard _ssrfGuard;
+    private readonly QualificationTelemetry? _telemetry;
 
-    public ExecuteTools(OpenApiStore store, ApiRuntimeConfig runtime, IHttpClientFactory httpClientFactory, SsrfGuard ssrfGuard)
+    public ExecuteTools(OpenApiStore store, ApiRuntimeConfig runtime, IHttpClientFactory httpClientFactory, SsrfGuard ssrfGuard, QualificationTelemetry? telemetry = null)
     {
         _store = store;
         _runtime = runtime;
         _httpClientFactory = httpClientFactory;
         _ssrfGuard = ssrfGuard;
+        _telemetry = telemetry;
     }
 
     [McpServerTool, Description("Build or execute an OpenAPI operation by operationId. The current policy controls methods, target URLs, network access and dry-run/live behaviour.")]
@@ -51,6 +53,7 @@ public sealed class ExecuteTools
             throw new InvalidOperationException("No base URL available. Call api_set_base_url or define servers[] in the OpenAPI contract.");
 
         var policy = _runtime.Policy;
+        _telemetry?.Emit("execution.policy.evaluate", new { toolName = "api_call_operation", operationId = match.OperationId, httpMethod = method, policyDecision = policy.DryRun ? "dry-run" : "live" });
         var normalisedBaseUrl = baseUrl.TrimEnd('/');
 
         if (!policy.AllowedMethods.Contains(method))
@@ -70,6 +73,7 @@ public sealed class ExecuteTools
         var uri = new Uri(url);
 
         var (networkAllowed, reason) = await _ssrfGuard.CheckAsync(uri, policy.BlockLocalhost, policy.BlockPrivateNetworks, ct).ConfigureAwait(false);
+        _telemetry?.Emit("execution.ssrf.evaluate", new { operationId = match.OperationId, host = uri.Host, path = uri.AbsolutePath, policyDecision = networkAllowed ? "allowed" : "blocked", reason });
         if (!networkAllowed && !policy.DryRun)
             return Blocked(reason ?? "Blocked by network safety policy.", match.OperationId, method, normalisedBaseUrl, url);
 
@@ -91,6 +95,7 @@ public sealed class ExecuteTools
 
         if (policy.DryRun)
         {
+            _telemetry?.Emit("execution.http.completed", new { operationId = match.OperationId, httpMethod = method, url = url, dryRun = true, success = true });
             return JsonSerializer.Serialize(new
             {
                 dryRun = true,
@@ -108,11 +113,13 @@ public sealed class ExecuteTools
         client.Timeout = policy.Timeout;
 
         var stopwatch = Stopwatch.StartNew();
+        _telemetry?.Emit("execution.http.start", new { operationId = match.OperationId, httpMethod = method, host = uri.Host, path = uri.AbsolutePath, url, dryRun = false });
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         stopwatch.Stop();
 
         var (responseBody, truncated) = await ReadBodyCappedAsync(response.Content, policy.MaxResponseBodyBytes, ct).ConfigureAwait(false);
         if (truncated) responseBody += "\n... (truncated)";
+        _telemetry?.Emit("execution.http.completed", new { operationId = match.OperationId, httpMethod = method, statusCode = (int)response.StatusCode, durationMs = stopwatch.ElapsedMilliseconds, bytes = Encoding.UTF8.GetByteCount(responseBody), truncated, success = response.IsSuccessStatusCode });
 
         return JsonSerializer.Serialize(new
         {

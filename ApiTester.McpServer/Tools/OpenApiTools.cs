@@ -7,6 +7,7 @@ using ModelContextProtocol.Server;
 using System.ComponentModel;
 using System.Security.Cryptography;
 using System.Text;
+using System.Diagnostics;
 
 namespace ApiTester.McpServer.Tools;
 
@@ -21,6 +22,7 @@ public sealed class OpenApiTools
     private readonly RagRuntime _rag;
     private readonly InMemoryVectorStore _vectors;
     private readonly ILogger<OpenApiTools> _logger;
+    private readonly QualificationTelemetry? _telemetry;
 
     public OpenApiTools(
         OpenApiStore store,
@@ -30,7 +32,8 @@ public sealed class OpenApiTools
         OpenApiEvidenceBuilder evidenceBuilder,
         RagRuntime rag,
         InMemoryVectorStore vectors,
-        ILogger<OpenApiTools> logger)
+        ILogger<OpenApiTools> logger,
+        QualificationTelemetry? telemetry = null)
     {
         _store = store;
         _runtime = runtime;
@@ -40,18 +43,24 @@ public sealed class OpenApiTools
         _rag = rag;
         _vectors = vectors;
         _logger = logger;
+        _telemetry = telemetry;
     }
 
     [McpServerTool, Description("Load an OpenAPI/Swagger definition from a URL or local file. Parses it, builds semantic operation/schema/security evidence and replaces the in-memory vector index atomically.")]
     public async Task<object> ApiLoadOpenApi(string specUrlOrPath, CancellationToken ct = default)
     {
+        var started = Stopwatch.StartNew();
+        _telemetry?.Emit("mcp.tool.start", new { toolName = "api_load_open_api", source = specUrlOrPath });
         if (string.IsNullOrWhiteSpace(specUrlOrPath))
             throw new ArgumentException("specUrlOrPath is required.", nameof(specUrlOrPath));
 
+        _telemetry?.Emit("openapi.load.start", new { source = specUrlOrPath.Trim() });
         var specText = await ReadSpecAsync(specUrlOrPath.Trim(), ct).ConfigureAwait(false);
+        _telemetry?.Emit("openapi.fetch.completed", new { source = specUrlOrPath.Trim(), bytes = Encoding.UTF8.GetByteCount(specText) });
         var reader = new OpenApiStringReader();
         var document = reader.Read(specText, out var diagnostics)
             ?? throw new InvalidOperationException("OpenAPI document could not be parsed.");
+        _telemetry?.Emit("openapi.parse.completed", new { validationIssues = diagnostics.Errors.Count });
 
         OpenApiSecuritySemantics.PreserveExplicitOverrides(document, specText);
         OpenApiOperationIdentity.EnsureOperationIds(document);
@@ -64,12 +73,14 @@ public sealed class OpenApiTools
         var specHash = Hash(specText);
 
         var chunks = _evidenceBuilder.Build(document, scopeId, sourceId, title, version, loadedUtc);
+        _telemetry?.Emit("evidence.build.completed", new { scopeId, chunkCount = chunks.Count });
         if (chunks.Count == 0)
             throw new InvalidOperationException("The OpenAPI document produced no operation, schema or security evidence to index.");
 
         // Index under a new scope before publishing it as current. If embeddings fail,
         // the previous loaded API remains usable and no partial new index becomes active.
         await _rag.Indexer.IndexAsync(chunks, ct).ConfigureAwait(false);
+        _telemetry?.Emit("embedding.index.completed", new { scopeId, vectorCount = chunks.Count, durationMs = started.ElapsedMilliseconds });
 
         var previousScope = _store.Current?.ScopeId;
         _store.SetDocument(scopeId, sourceId, document, specUrlOrPath, specHash, loadedUtc);
@@ -81,6 +92,7 @@ public sealed class OpenApiTools
         var securityChunks = chunks.Count(c => c.Metadata.TryGetValue("EvidenceType", out var value) && value.Equals("security", StringComparison.OrdinalIgnoreCase));
 
         _logger.LogInformation("Loaded and indexed OpenAPI {Title} {Version}: {ChunkCount} semantic chunks", title, version, chunks.Count);
+        _telemetry?.Emit("mcp.tool.end", new { toolName = "api_load_open_api", scopeId, durationMs = started.ElapsedMilliseconds, success = true });
 
         return new
         {
@@ -118,6 +130,8 @@ public sealed class OpenApiTools
             _runtime.Policy.BlockPrivateNetworks,
             ct).ConfigureAwait(false);
         if (!allowed) throw new InvalidOperationException($"Blocked OpenAPI URL: {reason}");
+
+        _telemetry?.Emit("openapi.fetch.start", new { httpMethod = "GET", host = uri!.Host, path = uri.AbsolutePath, policyDecision = "allowed" });
 
         var client = _httpClientFactory.CreateClient();
         client.Timeout = _runtime.Policy.Timeout;

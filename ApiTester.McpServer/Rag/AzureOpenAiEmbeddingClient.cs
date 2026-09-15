@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ApiTester.AI.Azure;
 using ApiTester.Rag.Embeddings;
+using ApiTester.McpServer.Services;
 
 namespace ApiTester.McpServer.Rag;
 
@@ -10,11 +11,13 @@ public sealed class AzureOpenAiEmbeddingClient : IBatchEmbeddingClient
 
     private readonly AzureOpenAiTransport _transport;
     private readonly AzureOpenAiOptions _options;
+    private readonly QualificationTelemetry? _telemetry;
 
-    public AzureOpenAiEmbeddingClient(AzureOpenAiTransport transport, AzureOpenAiOptions options)
+    public AzureOpenAiEmbeddingClient(AzureOpenAiTransport transport, AzureOpenAiOptions options, QualificationTelemetry? telemetry = null)
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _telemetry = telemetry;
         _options.ValidateEmbedding();
     }
 
@@ -61,10 +64,12 @@ public sealed class AzureOpenAiEmbeddingClient : IBatchEmbeddingClient
                 input = batch
             };
 
+            _telemetry?.Emit("embedding.batch.start", new { embeddingBatchNumber = results.Count / Math.Max(1, batch.Count) + 1, embeddingBatchSize = batch.Count, deployment = _options.EmbeddingDeployment });
             var response = await _transport.PostJsonAsync("embeddings", payload, ct).ConfigureAwait(false);
             var vectors = ParseBatch(response.Body, batch.Count);
             results.AddRange(vectors);
             offset += batch.Count;
+            _telemetry?.Emit("embedding.batch.completed", new { embeddingBatchSize = batch.Count, bytes = response.Body.Length, durationMs = response.ElapsedMs, deployment = _options.EmbeddingDeployment });
         }
 
         return results;

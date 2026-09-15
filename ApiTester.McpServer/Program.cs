@@ -15,6 +15,8 @@ using ModelContextProtocol.Server;
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Information);
+var telemetry = new QualificationTelemetry();
+builder.Services.AddSingleton(telemetry);
 builder.Services.AddSingleton(McpSafetyOptions.FromConfiguration(builder.Configuration));
 
 var azure = new AzureOpenAiOptions
@@ -44,6 +46,15 @@ if (!azureStartup.IsValid)
     return;
 }
 
+telemetry.Emit("azure.configuration.validated", new
+{
+    authenticationMode = azure.Authentication,
+    credentialSource = azure.CredentialSource,
+    azureHost = Uri.TryCreate(azure.Endpoint, UriKind.Absolute, out var safeEndpoint) ? safeEndpoint.Host : "invalid",
+    chatDeployment = azure.ChatDeployment,
+    embeddingDeployment = azure.EmbeddingDeployment
+});
+
 builder.Services.AddSingleton(azure);
 
 builder.Services.AddHttpClient("AzureOpenAI", client => client.Timeout = Timeout.InfiniteTimeSpan);
@@ -60,7 +71,8 @@ builder.Services.AddSingleton<OpenApiConstraintTestGenerator>();
 
 builder.Services.AddSingleton<IEmbeddingClient>(sp => new AzureOpenAiEmbeddingClient(
     sp.GetRequiredService<AzureOpenAiTransport>(),
-    sp.GetRequiredService<AzureOpenAiOptions>()));
+    sp.GetRequiredService<AzureOpenAiOptions>(),
+    sp.GetRequiredService<QualificationTelemetry>()));
 
 builder.Services.AddSingleton<IAiClient>(sp => new AzureOpenAiClient(
     sp.GetRequiredService<AzureOpenAiTransport>(),

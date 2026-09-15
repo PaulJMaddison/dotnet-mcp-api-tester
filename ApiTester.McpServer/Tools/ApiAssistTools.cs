@@ -9,11 +9,13 @@ public sealed class ApiAssistTools
 {
     private readonly OpenApiStore _store;
     private readonly OpenApiConstraintTestGenerator _generator;
+    private readonly QualificationTelemetry? _telemetry;
 
-    public ApiAssistTools(OpenApiStore store, OpenApiConstraintTestGenerator generator)
+    public ApiAssistTools(OpenApiStore store, OpenApiConstraintTestGenerator generator, QualificationTelemetry? telemetry = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
+        _telemetry = telemetry;
     }
 
     [McpServerTool, Description("Generate a deterministic, constraint-driven API test plan for an operationId using the OpenAPI contract. Includes parameters, schema bounds and concrete edge-case inputs.")]
@@ -23,7 +25,9 @@ public sealed class ApiAssistTools
             throw new ArgumentException("operationId is required.", nameof(operationId));
 
         var document = _store.RequireDocument();
+        _telemetry?.Emit("testplan.generate.start", new { toolName = "api_generate_test_plan", operationId = operationId.Trim() });
         var plan = _generator.Generate(document, operationId.Trim());
+        _telemetry?.Emit("testplan.generate.completed", new { operationId = plan.OperationId, testCaseCount = plan.TestCases.Count, success = true });
 
         return new
         {

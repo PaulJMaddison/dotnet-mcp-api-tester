@@ -1,0 +1,17 @@
+{
+  "result": {
+    "protocolVersion": "2025-06-18",
+    "capabilities": {
+      "logging": {},
+      "tools": {
+        "listChanged": true
+      }
+    },
+    "serverInfo": {
+      "name": "ApiTester.McpServer",
+      "version": "0.1.0.0"
+    }
+  },
+  "id": 1,
+  "jsonrpc": "2.0"
+}
