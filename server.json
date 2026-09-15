@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.pauljmaddison/dotnet-mcp-api-tester",
+  "title": "Dotnet MCP API Tester",
+  "description": "Local OpenAPI API-testing MCP server for coding agents, with Azure AI reasoning and safe HTTP execution.",
+  "repository": {
+    "url": "https://github.com/PaulJMaddison/dotnet-mcp-api-tester",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "nuget",
+      "identifier": "PaulJMaddison.DotnetMcpApiTester",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        { "name": "AZURE_OPENAI_ENDPOINT", "description": "Azure OpenAI endpoint.", "isRequired": true, "format": "string" },
+        { "name": "AZURE_OPENAI_CHAT_DEPLOYMENT", "description": "Azure OpenAI chat deployment name.", "isRequired": true, "format": "string" },
+        { "name": "AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "description": "Azure OpenAI embedding deployment name.", "isRequired": true, "format": "string" },
+        { "name": "AZURE_OPENAI_AUTHENTICATION", "description": "Authentication mode, such as DefaultAzureCredential or ApiKey.", "isRequired": true, "format": "string" },
+        { "name": "AZURE_OPENAI_CREDENTIAL_SOURCE", "description": "Credential source, such as AzureCli or ManagedIdentity.", "isRequired": true, "format": "string" },
+        { "name": "AZURE_OPENAI_API_KEY", "description": "Optional Azure OpenAI API key when ApiKey authentication is selected.", "isRequired": false, "format": "string", "isSecret": true }
+      ]
+    }
+  ]
+}

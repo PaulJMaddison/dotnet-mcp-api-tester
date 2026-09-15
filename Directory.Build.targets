@@ -1,0 +1,20 @@
+<Project>
+  <PropertyGroup Condition="'$(PackAsTool)' == 'true'">
+    <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
+  </PropertyGroup>
+
+  <Target Name="EnableToolProjectPackageDependencies" BeforeTargets="GenerateNuspec" Condition="'$(PackAsTool)' == 'true'">
+    <PropertyGroup>
+      <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
+    </PropertyGroup>
+    <ItemGroup>
+      <_FrameworksWithSuppressedDependencies Remove="$(TargetFramework)" />
+      <_ProjectReferencesWithVersions Include="$(MSBuildProjectDirectory)\..\ApiTester.AI\ApiTester.AI.csproj">
+        <ProjectVersion>$(PackageVersion)</ProjectVersion>
+      </_ProjectReferencesWithVersions>
+      <_ProjectReferencesWithVersions Include="$(MSBuildProjectDirectory)\..\ApiTester.Rag\ApiTester.Rag.csproj">
+        <ProjectVersion>$(PackageVersion)</ProjectVersion>
+      </_ProjectReferencesWithVersions>
+    </ItemGroup>
+  </Target>
+</Project>

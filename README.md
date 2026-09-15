@@ -2,7 +2,7 @@
 
 **Give your coding agent an API test engineer.**
 
-`dotnet-mcp-api-tester` is a local .NET MCP server for Claude Code and Codex. Point it at an OpenAPI / Swagger definition and it turns the contract into meaningful **operation, schema and security evidence**, embeds that evidence into an **in-memory vector index using Azure OpenAI**, and exposes MCP tools that let a coding agent understand, reason about and safely test the API.
+`dotnet-mcp-api-tester` is a local .NET MCP server for Claude Code and Codex. Point it at an OpenAPI / Swagger contract and your coding agent can ask free-text API questions, find operations, inspect parameters and schemas, generate parameter tests and edge cases, safely execute requests, and analyse the results.
 
 The MCP server itself makes the HTTP calls, so it can test localhost, internal, staging or public APIs that you are authorised to test. **Nothing is persisted.** There is no database, web UI, SaaS backend or stored test-run history. Restart the MCP process and the loaded API definition, vector index, target-API auth and execution-policy state disappear.
 
@@ -26,7 +26,7 @@ The first release is deliberately small:
 
 OpenAI direct, Gemini, Claude reasoning providers and other model backends are intentionally outside the v1 scope.
 
-The NuGet / .NET Tool package is the next release step. Until that package is published, run the MCP server directly from source as shown below.
+The MCP server owns its Azure credential locally; Claude and Codex never receive it as model-visible data.
 
 ## How it works
 
@@ -79,7 +79,7 @@ The vector store is intentionally in-process. OpenAPI is the source of truth; ve
 
 ## Requirements
 
-- .NET 8 SDK
+- .NET 8 runtime (the SDK is needed only when building from source)
 - Codex CLI or Claude Code
 - Azure OpenAI chat deployment
 - Azure OpenAI embedding deployment
@@ -89,7 +89,22 @@ Azure AI is required. v1 intentionally has no local, mock or deterministic AI fa
 
 ## Quick start
 
-Clone the repository, configure Azure OpenAI, build it, then register the MCP server with Codex or Claude Code.
+Install the .NET global tool, configure Azure OpenAI, then register the command with Codex or Claude Code:
+
+```bash
+dotnet tool install --global PaulJMaddison.DotnetMcpApiTester
+```
+
+```bash
+claude mcp add --scope user api-tester -- mcp-api-tester
+codex mcp add api-tester -- mcp-api-tester
+```
+
+Check registration with `claude mcp list` or `codex mcp list`. The first agent prompt can be:
+
+> Load `https://petstore3.swagger.io/api/v3/openapi.json`, find the operation that retrieves a pet by ID, and generate edge cases for its `petId` parameter.
+
+The packaged tool requires the .NET 8 runtime. To build from source instead:
 
 ```bash
 dotnet restore DotnetMcpApiTester.sln
@@ -163,10 +178,10 @@ If configuration is missing or invalid, the MCP process exits before starting st
 
 ## Connect to Codex
 
-From the repository root:
+After installing the global tool:
 
 ```bash
-codex mcp add api-tester -- dotnet run --project ./ApiTester.McpServer/ApiTester.McpServer.csproj
+codex mcp add api-tester -- mcp-api-tester
 ```
 
 Check the registration:
@@ -187,10 +202,10 @@ If your MCP client does not inherit the shell environment, configure the Azure s
 
 ## Connect to Claude Code
 
-From the repository root:
+After installing the global tool:
 
 ```bash
-claude mcp add api-tester -- dotnet run --project ./ApiTester.McpServer/ApiTester.McpServer.csproj
+claude mcp add --scope user api-tester -- mcp-api-tester
 ```
 
 Check it:

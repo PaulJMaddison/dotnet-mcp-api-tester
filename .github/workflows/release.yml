@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+    steps:
+      - name: Check out exact tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore DotnetMcpApiTester.sln
+
+      - name: Build Release
+        run: dotnet build DotnetMcpApiTester.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test DotnetMcpApiTester.sln -c Release --no-build
+
+      - name: Require NuGet credential
+        shell: bash
+        run: test -n "$NUGET_API_KEY" || { echo 'NUGET_API_KEY secret is required for tagged releases.' >&2; exit 1; }
+
+      - name: Pack libraries
+        run: dotnet pack ApiTester.Rag/ApiTester.Rag.csproj -c Release --no-build -o artifacts/packages
+
+      - name: Pack AI library
+        run: dotnet pack ApiTester.AI/ApiTester.AI.csproj -c Release --no-build -o artifacts/packages
+
+      - name: Pack MCP tool
+        run: dotnet pack ApiTester.McpServer/ApiTester.McpServer.csproj -c Release --no-build -o artifacts/packages
+
+      - name: Publish packages
+        run: dotnet nuget push "artifacts/packages/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/packages/*.nupkg

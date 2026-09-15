@@ -2,11 +2,25 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
+    <PackAsTool>true</PackAsTool>
+    <SuppressDependenciesWhenPacking>false</SuppressDependenciesWhenPacking>
+    <NoPackageAnalysis>true</NoPackageAnalysis>
+    <ToolCommandName>mcp-api-tester</ToolCommandName>
+    <PackageId>PaulJMaddison.DotnetMcpApiTester</PackageId>
+    <Authors>Paul Maddison</Authors>
+    <Description>Local OpenAPI API-testing MCP server for coding agents.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/PaulJMaddison/dotnet-mcp-api-tester</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/PaulJMaddison/dotnet-mcp-api-tester</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>mcp;openapi;swagger;api-testing;coding-agents;claude;codex;azure-openai</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.1" />
     <PackageReference Include="Microsoft.OpenApi" Version="1.6.28" />

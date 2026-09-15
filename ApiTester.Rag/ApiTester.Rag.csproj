@@ -2,8 +2,20 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <PackageId>PaulJMaddison.DotnetMcpApiTester.Rag</PackageId>
+    <Authors>Paul Maddison</Authors>
+    <Description>OpenAPI semantic evidence and in-memory retrieval library for the Dotnet MCP API Tester.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/PaulJMaddison/dotnet-mcp-api-tester</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/PaulJMaddison/dotnet-mcp-api-tester</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
 </Project>
