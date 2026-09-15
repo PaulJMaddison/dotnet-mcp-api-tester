@@ -50,8 +50,8 @@ $report=@"
 
 - Authentication: DefaultAzureCredential
 - Credential source: AzureCli
-- Chat deployment: gpt-41-mini-demo
-- Embedding deployment: text-embedding-3-small-demo
+- Chat deployment: $env:AZURE_OPENAI_CHAT_DEPLOYMENT
+- Embedding deployment: $env:AZURE_OPENAI_EMBEDDING_DEPLOYMENT
 - Real embedding calls confirmed: yes; 1 indexing batch of 27 plus 5 query batches, HTTP 200.
 - Real chat/reasoning calls confirmed: yes; 5 HTTP 200 calls.
 - Retries: 0 observed. Token usage was returned for reasoning calls.

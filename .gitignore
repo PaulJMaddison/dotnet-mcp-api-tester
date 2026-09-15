@@ -27,3 +27,6 @@ Thumbs.db
 # Local application data
 /ApiTester.McpServer/run-history/default/
 /ApiTester.Site/Properties/launchSettings.json
+
+# Generated qualification evidence
+qualification/final-run/
